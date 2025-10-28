@@ -67,7 +67,6 @@ The dataset represents 10 years (1999-2008) of clinical care at 130 US hospitals
   - **Gradient Boosting**: XGBoost/LightGBM with early stopping, DART/GOSS sampling
   - **Neural Networks**: Dense layers with dropout, batch normalization
 - 🔲 **Cross-validation and hyperparameter tuning**
-  - **Temporal validation**: Train on 1999-2005, validate on 2006-2007, test on 2008
   - **Stratified K-fold** (k=5) for readmission classes
   - **Grid/Random search** for hyperparameters
   - **Early stopping** to prevent overfitting
