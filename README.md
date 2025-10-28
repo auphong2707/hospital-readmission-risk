@@ -71,10 +71,6 @@ The dataset represents 10 years (1999-2008) of clinical care at 130 US hospitals
   - **Stratified K-fold** (k=5) for readmission classes
   - **Grid/Random search** for hyperparameters
   - **Early stopping** to prevent overfitting
-- 🔲 **Address class imbalance**
-  - SMOTE/ADASYN for oversampling
-  - Class weights adjustment
-  - Threshold tuning for optimal precision/recall
 
 #### 3. Model Calibration
 - 🔲 **Calibrate probability predictions for reliable risk scores**
