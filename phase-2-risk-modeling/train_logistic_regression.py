@@ -118,7 +118,7 @@ class LogisticRegressionTrainer:
         self.feature_names = None
         self.scaler = StandardScaler()
         
-    def load_data(self, data_dir="../data/processed"):
+    def load_data(self, data_dir="./data/processed"):
         """Load preprocessed features and target."""
         print(f"\n{'='*70}")
         print("Loading Preprocessed Data")
