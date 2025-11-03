@@ -151,29 +151,24 @@ class LogisticRegressionTrainer:
         
         Includes:
         - Regularization strength (C): controls overfitting
-        - Penalty type: L1 (Lasso), L2 (Ridge), Elastic Net
+        - Penalty type: L1 (Lasso), L2 (Ridge)
         - Class weights: balanced vs custom ratios
         """
         param_grid = {
             # Regularization strength (inverse of regularization: smaller = more regularization)
             'C': [0.001, 0.01, 0.1, 1.0, 10.0, 100.0],
             
-            # Penalty type: L1, L2, or Elastic Net (l1_ratio when penalty='elasticnet')
-            'penalty': ['l1', 'l2', 'elasticnet'],
+            # Penalty type: L1 or L2
+            'penalty': ['l1', 'l2'],
             
-            # Solver compatibility:
-            # - 'liblinear': works with L1 and L2
-            # - 'saga': works with L1, L2, and Elastic Net
-            'solver': ['saga'],  # Most versatile solver
+            # Solver compatibility: 'liblinear'
+            'solver': ['liblinear'],
             
             # Class weight balancing
-            'class_weight': ['balanced', {0: 1, 1: 2}, {0: 1, 1: 3}],
-            
-            # L1 ratio for elastic net (only used when penalty='elasticnet')
-            'l1_ratio': [0.1, 0.5, 0.9],
+            'class_weight': ['balanced', {0: 1, 1: 8}],
             
             # Maximum iterations
-            'max_iter': [1000, 2000]
+            'max_iter': 2000
         }
         
         return param_grid
