@@ -169,7 +169,7 @@ class LogisticRegressionTrainer:
             'class_weight': ['balanced', {0: 1, 1: 8}],
             
             # Maximum iterations
-            'max_iter': 2000
+            'max_iter': [2000]
         }
         
         return param_grid
@@ -316,7 +316,7 @@ class LogisticRegressionTrainer:
         os.makedirs(output_dir, exist_ok=True)
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        model_filename = f"logistic_regression_{timestamp}.pkl"
+        model_filename = f"logistic_regression.pkl"
         model_path = os.path.join(output_dir, model_filename)
         
         # Save model
@@ -337,7 +337,7 @@ class LogisticRegressionTrainer:
                 'random_state': self.random_state
             }
             
-            metadata_path = os.path.join(output_dir, f"logistic_regression_metadata_{timestamp}.pkl")
+            metadata_path = os.path.join(output_dir, f"logistic_regression_metadata.pkl")
             with open(metadata_path, 'wb') as f:
                 pickle.dump(metadata, f)
             
