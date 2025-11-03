@@ -119,9 +119,21 @@ class Trainer:
         fit_args = fit_kwargs.copy()
         if self.X_val is not None and early_stopping_rounds:
             fit_args.setdefault("eval_set", [(self.X_val, self.y_val)])
-            fit_args.setdefault("early_stopping_rounds", early_stopping_rounds)
             # prefer AUC for evaluation
             fit_args.setdefault("eval_metric", "auc")
+            
+            # Handle both old and new LightGBM API for early stopping
+            try:
+                # Try new API first (LightGBM >= 4.0)
+                import lightgbm as lgb
+                if hasattr(lgb, 'early_stopping'):
+                    fit_args.setdefault("callbacks", [lgb.early_stopping(stopping_rounds=early_stopping_rounds, verbose=False)])
+                else:
+                    # Fall back to old API (LightGBM < 4.0)
+                    fit_args.setdefault("early_stopping_rounds", early_stopping_rounds)
+            except:
+                # If all else fails, use old API
+                fit_args.setdefault("early_stopping_rounds", early_stopping_rounds)
 
         # Some sklearn-style estimators accept verbose; allow user to pass via fit_kwargs
         self.model.fit(self.X_train, self.y_train, **fit_args)
