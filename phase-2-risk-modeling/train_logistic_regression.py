@@ -20,6 +20,7 @@ import pandas as pd
 import pickle
 import os
 import warnings
+import time
 from datetime import datetime
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
@@ -219,15 +220,30 @@ class LogisticRegressionTrainer:
             cv=cv_splitter,
             scoring='roc_auc',
             n_jobs=-1,
-            verbose=2,
+            verbose=3,  # Increased verbosity for better progress tracking
             refit=True,
             return_train_score=True
         )
         
-        print(f"\n🔄 Starting grid search (this may take several minutes)...\n")
+        # Calculate total number of fits
+        total_combinations = len(param_grid['C']) * len(param_grid['penalty']) * len(param_grid['class_weight'])
+        total_fits = total_combinations * n_folds
         
-        # Fit grid search
+        print(f"\n🔄 Starting grid search...")
+        print(f"📊 Training {total_combinations} hyperparameter combinations with {n_folds}-fold CV")
+        print(f"📈 Total model fits: {total_fits}")
+        print(f"⏱️  Progress will be displayed below with timing for each fit...\n")
+        print(f"{'='*70}")
+        
+        # Fit grid search with timing
+        start_time = time.time()
         self.grid_search.fit(X_train, y_train)
+        elapsed_time = time.time() - start_time
+        
+        print(f"\n{'='*70}")
+        print(f"✅ Grid search completed in {elapsed_time/60:.1f} minutes ({elapsed_time:.0f} seconds)")
+        print(f"⚡ Average time per fit: {elapsed_time/total_fits:.1f} seconds")
+        print(f"{'='*70}")
         
         # Extract best model
         self.best_model = self.grid_search.best_estimator_
