@@ -163,10 +163,10 @@ class RandomForestTrainer:
         """
         param_grid = {
             # Number of trees in the forest
-            'n_estimators': [100, 200, 300, 500],
+            'n_estimators': [100, 250, 500],
             
             # Maximum depth of trees
-            'max_depth': [10, 20, 30, None],
+            'max_depth': [10, 25, None],
             
             # Minimum samples required to split an internal node
             'min_samples_split': [2, 5, 10],
@@ -175,10 +175,10 @@ class RandomForestTrainer:
             'min_samples_leaf': [1, 2, 4],
             
             # Number of features to consider at each split
-            'max_features': ['sqrt', 'log2', 0.3],
+            'max_features': ['sqrt', 'log2'],
             
             # Class weight balancing
-            'class_weight': ['balanced', 'balanced_subsample'],
+            'class_weight': ['balanced', {0: 1, 1: 8}],
             
             # Bootstrap sampling
             'bootstrap': [True],
