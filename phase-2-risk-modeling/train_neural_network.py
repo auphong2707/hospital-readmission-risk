@@ -6,10 +6,10 @@ This script will:
 - invoke `neural_network_model.py` with sensible defaults or forwarded args
 
 Usage (from repository root):
-    python phase-2-risk-modeling/train_nn_model.py
+    python phase-2-risk-modeling/train_neural_network.py
 
 Example:
-    python phase-2-risk-modeling/train_nn_model.py --skip-preprocess --fast-mode --use-gpu
+    python phase-2-risk-modeling/train_neural_network.py --skip-preprocess --fast-mode --use-gpu
 """
 from __future__ import annotations
 
