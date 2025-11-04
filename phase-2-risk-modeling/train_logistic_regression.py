@@ -22,14 +22,15 @@ import os
 import warnings
 import time
 from datetime import datetime
+from typing import Dict, Optional
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import make_scorer, roc_auc_score
 import matplotlib.pyplot as plt
 
-# Import our custom evaluation utilities
-from evaluation_utils import ModelEvaluator
+# Import our custom utilities
+from utils import ModelEvaluator, HuggingFaceUploader
 
 warnings.filterwarnings('ignore')
 
@@ -152,18 +153,23 @@ class LogisticRegressionTrainer:
         
         Includes:
         - Regularization strength (C): controls overfitting
-        - Penalty type: L1 (Lasso), L2 (Ridge)
+        - Penalty type: L1 (Lasso), L2 (Ridge), Elastic Net
+        - L1 ratio: mixing parameter for Elastic Net (only used when penalty='elasticnet')
         - Class weights: balanced vs custom ratios
         """
         param_grid = {
             # Regularization strength (inverse of regularization: smaller = more regularization)
             'C': [0.001, 0.01, 0.1, 1.0, 10.0, 100.0],
             
-            # Penalty type: L1 or L2
-            'penalty': ['l1', 'l2'],
+            # Penalty type: L1, L2, or Elastic Net
+            'penalty': ['l1', 'l2', 'elasticnet'],
             
-            # Solver compatibility: 'liblinear'
-            'solver': ['liblinear'],
+            # Solver compatibility: 'saga' supports all penalty types including elasticnet
+            'solver': ['saga'],
+            
+            # L1 ratio for Elastic Net (0 = L2, 1 = L1, 0.5 = equal mix)
+            # Only used when penalty='elasticnet'
+            'l1_ratio': [0.25, 0.5, 0.75],
             
             # Class weight balancing
             'class_weight': ['balanced', {0: 1, 1: 8}],
@@ -197,7 +203,14 @@ class LogisticRegressionTrainer:
         print(f"  Number of CV folds: {n_folds}")
         print(f"  Stratification: Yes (balanced across readmission classes)")
         print(f"  Scoring metric: AUC-ROC")
-        print(f"  Total combinations: ~{len(param_grid['C']) * len(param_grid['penalty']) * len(param_grid['class_weight'])}")
+        
+        # Calculate total combinations (considering l1_ratio is only used with elasticnet)
+        # For L1 and L2: C * class_weight combinations each
+        # For elasticnet: C * l1_ratio * class_weight combinations
+        base_combos = len(param_grid['C']) * len(param_grid['class_weight'])
+        elasticnet_combos = base_combos * len(param_grid['l1_ratio'])
+        total_combos = 2 * base_combos + elasticnet_combos  # 2 for L1 and L2
+        print(f"  Total combinations: ~{total_combos}")
         
         # Create stratified K-fold splitter
         cv_splitter = StratifiedKFold(
@@ -226,7 +239,11 @@ class LogisticRegressionTrainer:
         )
         
         # Calculate total number of fits
-        total_combinations = len(param_grid['C']) * len(param_grid['penalty']) * len(param_grid['class_weight'])
+        # L1 and L2 each: C * class_weight combinations
+        # Elasticnet: C * l1_ratio * class_weight combinations
+        base_combos = len(param_grid['C']) * len(param_grid['class_weight'])
+        elasticnet_combos = base_combos * len(param_grid['l1_ratio'])
+        total_combinations = 2 * base_combos + elasticnet_combos
         total_fits = total_combinations * n_folds
         
         print(f"\n🔄 Starting grid search...")
@@ -393,17 +410,79 @@ class LogisticRegressionTrainer:
             print(f"✅ CV results plot saved to: {save_path}")
         
         plt.close()
+    
+    def upload_to_huggingface(self, 
+                             model_path: str,
+                             metadata_path: str,
+                             metrics: Dict[str, Dict[str, float]],
+                             repo_id: str,
+                             hf_token: Optional[str] = None,
+                             private: bool = False) -> Optional[str]:
+        """
+        Upload trained model to HuggingFace Hub.
+        
+        Args:
+            model_path: Path to the saved model
+            metadata_path: Path to the metadata file
+            metrics: Dictionary containing train/val/test metrics
+            repo_id: HuggingFace repository ID (username/model-name)
+            hf_token: HuggingFace API token (if None, uses environment variable)
+            private: Whether to make the repository private
+            
+        Returns:
+            URL to the uploaded model, or None if upload fails
+        """
+        try:
+            uploader = HuggingFaceUploader(hf_token=hf_token)
+            
+            description = """
+This Logistic Regression model serves as a baseline for hospital readmission prediction.
+It uses L1/L2 regularization with class weight balancing to handle imbalanced data.
+
+**Key Features:**
+- Interpretable coefficients for clinical insights
+- Fast inference for real-time predictions
+- Regularized to prevent overfitting
+- Optimized via 5-fold cross-validation with grid search
+"""
+            
+            repo_url = uploader.upload_model(
+                model_path=model_path,
+                metadata_path=metadata_path,
+                repo_id=repo_id,
+                metrics=metrics,
+                model_type="Logistic Regression",
+                description=description,
+                private=private,
+                commit_message="Upload Logistic Regression model for hospital readmission prediction"
+            )
+            
+            return repo_url
+            
+        except Exception as e:
+            print(f"\n⚠️  Failed to upload to HuggingFace: {str(e)}")
+            print("You can manually upload later using the saved model files.")
+            return None
 
 
-def main():
+def main(upload_to_hf: bool = False, 
+         hf_repo_id: Optional[str] = None,
+         hf_token: Optional[str] = None,
+         hf_private: bool = False):
     """
     Main training pipeline for Logistic Regression baseline model.
+    
+    Args:
+        upload_to_hf: Whether to upload the model to HuggingFace Hub
+        hf_repo_id: HuggingFace repository ID (e.g., "username/model-name")
+        hf_token: HuggingFace API token (if None, uses HF_TOKEN env variable)
+        hf_private: Whether to make the HuggingFace repository private
     """
     print(f"\n{'='*70}")
     print("LOGISTIC REGRESSION TRAINING - HOSPITAL READMISSION RISK")
     print(f"{'='*70}")
     print(f"Configuration:")
-    print(f"  - L1/L2/Elastic Net regularization")
+    print(f"  - L1/L2/Elastic Net regularization (with l1_ratio tuning)")
     print(f"  - Class weight balancing")
     print(f"  - Temporal validation (1999-2005 train, 2006-2007 val, 2008 test)")
     print(f"  - Stratified 5-fold cross-validation")
@@ -439,6 +518,30 @@ def main():
     # Save model
     model_path = trainer.save_model(output_dir="../models")
     
+    # Collect all metrics for HuggingFace upload
+    all_metrics = {
+        'train': train_metrics,
+        'val': val_metrics,
+        'test': test_metrics
+    }
+    
+    # Upload to HuggingFace if requested
+    hf_url = None
+    if upload_to_hf:
+        if hf_repo_id is None:
+            print("\n⚠️  HuggingFace upload requested but no repo_id provided.")
+            print("Please provide hf_repo_id parameter (e.g., 'username/hospital-readmission-lr')")
+        else:
+            metadata_path = "../models/logistic_regression_metadata.pkl"
+            hf_url = trainer.upload_to_huggingface(
+                model_path=model_path,
+                metadata_path=metadata_path,
+                metrics=all_metrics,
+                repo_id=hf_repo_id,
+                hf_token=hf_token,
+                private=hf_private
+            )
+    
     # Final summary
     print(f"\n{'='*70}")
     print("TRAINING COMPLETE!")
@@ -450,6 +553,8 @@ def main():
     print(f"\n📁 Outputs saved to:")
     print(f"  Model: {model_path}")
     print(f"  Reports: {output_dir}")
+    if hf_url:
+        print(f"  HuggingFace: {hf_url}")
     print(f"{'='*70}\n")
     
     return trainer, train_metrics, val_metrics, test_metrics
