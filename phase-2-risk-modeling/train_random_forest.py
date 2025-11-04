@@ -25,14 +25,15 @@ import os
 import warnings
 import time
 from datetime import datetime
+from typing import Dict, Optional
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import make_scorer, roc_auc_score
 import matplotlib.pyplot as plt
 
-# Import our custom evaluation utilities
-from evaluation_utils import ModelEvaluator
+# Import our custom utilities
+from utils import ModelEvaluator, HuggingFaceUploader
 
 warnings.filterwarnings('ignore')
 
@@ -175,7 +176,7 @@ class RandomForestTrainer:
             'min_samples_leaf': [1, 2, 4],
             
             # Number of features to consider at each split
-            'max_features': ['sqrt', 'log2'],
+            'max_features': ['sqrt'],
             
             # Class weight balancing
             'class_weight': ['balanced', {0: 1, 1: 8}],
@@ -496,11 +497,74 @@ class RandomForestTrainer:
         plt.close()
         
         return importance_df
+    
+    def upload_to_huggingface(self, 
+                             model_path: str,
+                             metadata_path: str,
+                             metrics: Dict[str, Dict[str, float]],
+                             repo_id: str,
+                             hf_token: Optional[str] = None,
+                             private: bool = False) -> Optional[str]:
+        """
+        Upload trained model to HuggingFace Hub.
+        
+        Args:
+            model_path: Path to the saved model
+            metadata_path: Path to the metadata file
+            metrics: Dictionary containing train/val/test metrics
+            repo_id: HuggingFace repository ID (username/model-name)
+            hf_token: HuggingFace API token (if None, uses environment variable)
+            private: Whether to make the repository private
+            
+        Returns:
+            URL to the uploaded model, or None if upload fails
+        """
+        try:
+            uploader = HuggingFaceUploader(hf_token=hf_token)
+            
+            description = """
+This Random Forest ensemble model provides robust predictions for hospital readmission risk.
+It uses 100-500 decision trees with optimized depth tuning and feature selection.
+
+**Key Features:**
+- Ensemble of decision trees for robust predictions
+- Feature importance analysis for interpretability
+- Out-of-bag error estimation for additional validation
+- Handles non-linear relationships and feature interactions
+- Optimized via 5-fold cross-validation with grid search
+"""
+            
+            repo_url = uploader.upload_model(
+                model_path=model_path,
+                metadata_path=metadata_path,
+                repo_id=repo_id,
+                metrics=metrics,
+                model_type="Random Forest",
+                description=description,
+                private=private,
+                commit_message="Upload Random Forest model for hospital readmission prediction"
+            )
+            
+            return repo_url
+            
+        except Exception as e:
+            print(f"\n⚠️  Failed to upload to HuggingFace: {str(e)}")
+            print("You can manually upload later using the saved model files.")
+            return None
 
 
-def main():
+def main(upload_to_hf: bool = False, 
+         hf_repo_id: Optional[str] = None,
+         hf_token: Optional[str] = None,
+         hf_private: bool = False):
     """
     Main training pipeline for Random Forest ensemble model.
+    
+    Args:
+        upload_to_hf: Whether to upload the model to HuggingFace Hub
+        hf_repo_id: HuggingFace repository ID (e.g., "username/model-name")
+        hf_token: HuggingFace API token (if None, uses HF_TOKEN env variable)
+        hf_private: Whether to make the HuggingFace repository private
     """
     print(f"\n{'='*70}")
     print("RANDOM FOREST TRAINING - HOSPITAL READMISSION RISK")
@@ -546,6 +610,30 @@ def main():
     # Save model
     model_path = trainer.save_model(output_dir="../models")
     
+    # Collect all metrics for HuggingFace upload
+    all_metrics = {
+        'train': train_metrics,
+        'val': val_metrics,
+        'test': test_metrics
+    }
+    
+    # Upload to HuggingFace if requested
+    hf_url = None
+    if upload_to_hf:
+        if hf_repo_id is None:
+            print("\n⚠️  HuggingFace upload requested but no repo_id provided.")
+            print("Please provide hf_repo_id parameter (e.g., 'username/hospital-readmission-rf')")
+        else:
+            metadata_path = "../models/random_forest_metadata.pkl"
+            hf_url = trainer.upload_to_huggingface(
+                model_path=model_path,
+                metadata_path=metadata_path,
+                metrics=all_metrics,
+                repo_id=hf_repo_id,
+                hf_token=hf_token,
+                private=hf_private
+            )
+    
     # Final summary
     print(f"\n{'='*70}")
     print("TRAINING COMPLETE!")
@@ -561,6 +649,8 @@ def main():
     print(f"\n📁 Outputs saved to:")
     print(f"  Model: {model_path}")
     print(f"  Reports: {output_dir}")
+    if hf_url:
+        print(f"  HuggingFace: {hf_url}")
     print(f"{'='*70}\n")
     
     return trainer, train_metrics, val_metrics, test_metrics
