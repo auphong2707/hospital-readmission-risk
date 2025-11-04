@@ -633,7 +633,7 @@ def main(args: argparse.Namespace):
         "total_time_seconds": total_time
     }
     
-    summary_path = out_dir / "neural_network_summary.json"
+    summary_path = out_dir / "training_summary.json"
     with open(summary_path, "w") as f:
         json.dump(summary, f, indent=2)
     print(f"✅ Summary saved: {summary_path}")
