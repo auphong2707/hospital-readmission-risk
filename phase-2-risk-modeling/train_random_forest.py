@@ -553,16 +553,17 @@ It uses 100-500 decision trees with optimized depth tuning and feature selection
             return None
 
 
-def main(upload_to_hf: bool = False, 
-         hf_repo_id: Optional[str] = None,
+def main(hf_repo_id: Optional[str] = None,
          hf_token: Optional[str] = None,
          hf_private: bool = False):
     """
     Main training pipeline for Random Forest ensemble model.
     
+    Automatically uploads to HuggingFace if HF_TOKEN is available in environment.
+    
     Args:
-        upload_to_hf: Whether to upload the model to HuggingFace Hub
-        hf_repo_id: HuggingFace repository ID (e.g., "username/model-name")
+        hf_repo_id: HuggingFace repository ID (e.g., "username/hospital-readmission-rf")
+                   If None and HF_TOKEN exists, will use "username/hospital-readmission-rf"
         hf_token: HuggingFace API token (if None, uses HF_TOKEN env variable)
         hf_private: Whether to make the HuggingFace repository private
     """
@@ -617,22 +618,35 @@ def main(upload_to_hf: bool = False,
         'test': test_metrics
     }
     
-    # Upload to HuggingFace if requested
+    # Auto-upload to HuggingFace if token is available
     hf_url = None
-    if upload_to_hf:
+    if HuggingFaceUploader.is_token_available() or hf_token:
+        print(f"\n{'='*70}")
+        print("🚀 HuggingFace Token Detected - Preparing Upload")
+        print(f"{'='*70}")
+        
+        # Use default repo_id if not provided
         if hf_repo_id is None:
-            print("\n⚠️  HuggingFace upload requested but no repo_id provided.")
-            print("Please provide hf_repo_id parameter (e.g., 'username/hospital-readmission-rf')")
-        else:
-            metadata_path = "../models/random_forest_metadata.pkl"
-            hf_url = trainer.upload_to_huggingface(
-                model_path=model_path,
-                metadata_path=metadata_path,
-                metrics=all_metrics,
-                repo_id=hf_repo_id,
-                hf_token=hf_token,
-                private=hf_private
-            )
+            hf_repo_id = "hospital-readmission-rf"
+            print(f"⚠️  No repo_id provided. Using default: {hf_repo_id}")
+            print(f"💡 To specify your own repo, pass: hf_repo_id='username/model-name'")
+        
+        metadata_path = "../models/random_forest_metadata.pkl"
+        hf_url = trainer.upload_to_huggingface(
+            model_path=model_path,
+            metadata_path=metadata_path,
+            metrics=all_metrics,
+            repo_id=hf_repo_id,
+            hf_token=hf_token,
+            private=hf_private
+        )
+    else:
+        print(f"\n{'='*70}")
+        print("ℹ️  No HuggingFace Token Found - Skipping Upload")
+        print(f"{'='*70}")
+        print("To enable auto-upload, set HF_TOKEN environment variable.")
+        print("Get your token from: https://huggingface.co/settings/tokens")
+        print(f"{'='*70}")
     
     # Final summary
     print(f"\n{'='*70}")

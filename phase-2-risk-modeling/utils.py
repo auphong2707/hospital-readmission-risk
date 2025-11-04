@@ -29,6 +29,14 @@ from sklearn.metrics import (
 from sklearn.calibration import calibration_curve
 from huggingface_hub import HfApi, create_repo
 import warnings
+
+# Load environment variables from .env file if it exists
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # Load .env file automatically
+except ImportError:
+    pass  # dotenv not installed, will rely on system environment variables
+
 warnings.filterwarnings('ignore')
 
 
@@ -354,8 +362,19 @@ class HuggingFaceUploader:
             hf_token: HuggingFace API token. If None, will use token from environment
                      variable HF_TOKEN or from cached credentials.
         """
+        # If no token provided, try to get from environment variable
+        if hf_token is None:
+            hf_token = os.environ.get('HF_TOKEN')
+            if hf_token:
+                print(f"✅ Using HF_TOKEN from environment variable")
+        
         self.api = HfApi(token=hf_token)
         self.token = hf_token
+    
+    @staticmethod
+    def is_token_available() -> bool:
+        """Check if HuggingFace token is available in environment."""
+        return os.environ.get('HF_TOKEN') is not None
         
     def create_model_card(self, 
                          model_name: str,
