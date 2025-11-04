@@ -24,6 +24,7 @@ import pickle
 import os
 import warnings
 import time
+import json
 from datetime import datetime
 from typing import Dict, Optional
 from sklearn.ensemble import RandomForestClassifier
@@ -618,6 +619,47 @@ def main(hf_repo_id: Optional[str] = None,
         'test': test_metrics
     }
     
+    # Save metrics as JSON
+    metrics_json_path = "../models/random_forest_metrics.json"
+    with open(metrics_json_path, 'w') as f:
+        # Convert numpy types to native Python types for JSON serialization
+        json_metrics = {}
+        for set_name, metrics in all_metrics.items():
+            json_metrics[set_name] = {k: float(v) if isinstance(v, (np.integer, np.floating)) else int(v) if isinstance(v, (int, np.integer)) else v 
+                                      for k, v in metrics.items()}
+        json.dump(json_metrics, f, indent=4)
+    print(f"✅ Metrics saved to: {metrics_json_path}")
+    
+    # Save training summary with best config
+    training_summary = {
+        'model_type': 'Random Forest',
+        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'best_hyperparameters': trainer.grid_search.best_params_,
+        'best_cv_score': float(trainer.grid_search.best_score_),
+        'oob_score': float(trainer.best_model.oob_score_) if hasattr(trainer.best_model, 'oob_score_') else None,
+        'n_features': len(trainer.feature_names),
+        'data_split': {
+            'train_size': len(X_train),
+            'val_size': len(X_val),
+            'test_size': len(X_test),
+            'train_ratio': 0.70,
+            'val_ratio': 0.15,
+            'test_ratio': 0.15
+        },
+        'cross_validation': {
+            'n_folds': 5,
+            'strategy': 'StratifiedKFold',
+            'scoring_metric': 'AUC-ROC'
+        },
+        'final_metrics': json_metrics,
+        'random_state': trainer.random_state
+    }
+    
+    summary_json_path = "../models/random_forest_training_summary.json"
+    with open(summary_json_path, 'w') as f:
+        json.dump(training_summary, f, indent=4)
+    print(f"✅ Training summary saved to: {summary_json_path}")
+    
     # Auto-upload to HuggingFace if token is available
     hf_url = None
     if HuggingFaceUploader.is_token_available() or hf_token:
@@ -627,7 +669,7 @@ def main(hf_repo_id: Optional[str] = None,
         
         # Use default repo_id if not provided
         if hf_repo_id is None:
-            hf_repo_id = "hospital-readmission-rf"
+            hf_repo_id = "auphong2707/random-forest"
             print(f"⚠️  No repo_id provided. Using default: {hf_repo_id}")
             print(f"💡 To specify your own repo, pass: hf_repo_id='username/model-name'")
         
@@ -662,6 +704,8 @@ def main(hf_repo_id: Optional[str] = None,
     
     print(f"\n📁 Outputs saved to:")
     print(f"  Model: {model_path}")
+    print(f"  Metrics JSON: {metrics_json_path}")
+    print(f"  Training Summary JSON: {summary_json_path}")
     print(f"  Reports: {output_dir}")
     if hf_url:
         print(f"  HuggingFace: {hf_url}")
