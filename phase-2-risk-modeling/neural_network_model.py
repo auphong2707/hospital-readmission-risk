@@ -558,7 +558,13 @@ def main(args: argparse.Namespace):
     
     model = trainer.build_model()
     print("\n📊 Model Summary:")
-    model.summary()
+    print(model)
+    
+    # Count parameters
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"\nTotal parameters: {total_params:,}")
+    print(f"Trainable parameters: {trainable_params:,}")
 
     print_section("🏋️  Training Neural Network", "-")
     train_start = time.time()
