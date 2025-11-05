@@ -592,7 +592,9 @@ MIT License
                     model_type: str,
                     description: str = "",
                     private: bool = False,
-                    commit_message: str = "Upload trained model") -> str:
+                    commit_message: str = "Upload trained model",
+                    metrics_json_path: str = None,
+                    summary_json_path: str = None) -> str:
         """
         Upload model to HuggingFace Hub.
         
@@ -605,6 +607,8 @@ MIT License
             description: Additional description for the model card
             private: Whether to make the repository private
             commit_message: Commit message for the upload
+            metrics_json_path: Path to metrics JSON file (optional)
+            summary_json_path: Path to training summary JSON file (optional)
             
         Returns:
             URL to the uploaded model repository
@@ -680,6 +684,30 @@ MIT License
                 commit_message="Upload model card"
             )
             print(f"✅ Model card uploaded")
+            
+            # Upload metrics JSON if provided
+            if metrics_json_path and os.path.exists(metrics_json_path):
+                print(f"\n⬆️  Uploading metrics JSON...")
+                self.api.upload_file(
+                    path_or_fileobj=metrics_json_path,
+                    path_in_repo="metrics.json",
+                    repo_id=repo_id,
+                    repo_type="model",
+                    commit_message="Upload metrics JSON"
+                )
+                print(f"✅ Metrics JSON uploaded")
+            
+            # Upload training summary JSON if provided
+            if summary_json_path and os.path.exists(summary_json_path):
+                print(f"\n⬆️  Uploading training summary JSON...")
+                self.api.upload_file(
+                    path_or_fileobj=summary_json_path,
+                    path_in_repo="training_summary.json",
+                    repo_id=repo_id,
+                    repo_type="model",
+                    commit_message="Upload training summary JSON"
+                )
+                print(f"✅ Training summary JSON uploaded")
             
             # Clean up temporary README
             if os.path.exists(card_path):

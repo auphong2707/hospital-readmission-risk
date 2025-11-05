@@ -425,7 +425,9 @@ class LogisticRegressionTrainer:
                              metrics: Dict[str, Dict[str, float]],
                              repo_id: str,
                              hf_token: Optional[str] = None,
-                             private: bool = False) -> Optional[str]:
+                             private: bool = False,
+                             metrics_json_path: Optional[str] = None,
+                             summary_json_path: Optional[str] = None) -> Optional[str]:
         """
         Upload trained model to HuggingFace Hub.
         
@@ -436,6 +438,8 @@ class LogisticRegressionTrainer:
             repo_id: HuggingFace repository ID (username/model-name)
             hf_token: HuggingFace API token (if None, uses environment variable)
             private: Whether to make the repository private
+            metrics_json_path: Path to metrics JSON file (optional)
+            summary_json_path: Path to training summary JSON file (optional)
             
         Returns:
             URL to the uploaded model, or None if upload fails
@@ -462,7 +466,9 @@ It uses L1/L2 regularization with class weight balancing to handle imbalanced da
                 model_type="Logistic Regression",
                 description=description,
                 private=private,
-                commit_message="Upload Logistic Regression model for hospital readmission prediction"
+                commit_message="Upload Logistic Regression model for hospital readmission prediction",
+                metrics_json_path=metrics_json_path,
+                summary_json_path=summary_json_path
             )
             
             return repo_url
@@ -594,7 +600,9 @@ def main(hf_repo_id: Optional[str] = None,
             metrics=all_metrics,
             repo_id=hf_repo_id,
             hf_token=hf_token,
-            private=hf_private
+            private=hf_private,
+            metrics_json_path=metrics_json_path,
+            summary_json_path=summary_json_path
         )
     else:
         print(f"\n{'='*70}")
