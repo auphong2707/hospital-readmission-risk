@@ -334,7 +334,7 @@ def train_model(args: argparse.Namespace):
             
             # Train with early stopping
             if args.early_stopping_rounds > 0:
-                combo_trainer.fit(early_stopping_rounds=args.early_stopping_rounds, verbose=False)
+                combo_trainer.fit(early_stopping_rounds=args.early_stopping_rounds)
             else:
                 combo_trainer.fit()
             
@@ -432,8 +432,7 @@ def train_model(args: argparse.Namespace):
         # Train with early stopping
         if args.early_stopping_rounds > 0:
             trainer.fit(
-                early_stopping_rounds=args.early_stopping_rounds,
-                verbose=False
+                early_stopping_rounds=args.early_stopping_rounds
             )
             print(f"      ✅ Training complete (with early stopping)")
         else:
@@ -502,7 +501,7 @@ def train_model(args: argparse.Namespace):
     )
     
     if args.early_stopping_rounds > 0:
-        final_trainer.fit(early_stopping_rounds=args.early_stopping_rounds, verbose=False)
+        final_trainer.fit(early_stopping_rounds=args.early_stopping_rounds)
     else:
         final_trainer.fit()
     
