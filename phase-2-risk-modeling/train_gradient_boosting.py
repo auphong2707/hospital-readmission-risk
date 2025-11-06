@@ -158,6 +158,11 @@ class Trainer:
             **fit_kwargs: Additional arguments to pass to model.fit()
         """
         fit_args = fit_kwargs.copy()
+        
+        # Remove 'verbose' from fit_args as it's not a valid parameter for LGBMClassifier.fit()
+        # Verbosity is controlled through callbacks instead
+        fit_args.pop('verbose', None)
+        
         if self.X_val is not None and early_stopping_rounds:
             fit_args.setdefault("eval_set", [(self.X_val, self.y_val)])
             # prefer AUC for evaluation
@@ -176,7 +181,7 @@ class Trainer:
                 # If all else fails, use old API
                 fit_args.setdefault("early_stopping_rounds", early_stopping_rounds)
 
-        # Some sklearn-style estimators accept verbose; allow user to pass via fit_kwargs
+        # Fit the model with cleaned arguments
         self.model.fit(self.X_train, self.y_train, **fit_args)
 
     def evaluate(self, X, y, threshold: float = 0.5):
