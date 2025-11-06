@@ -42,10 +42,10 @@ Features:
   * Calibration: Brier score
 
 Usage (from project root):
-    python phase-2-risk-modeling/train_gradient_boosting.py
+    python ./phase-2-risk-modeling/train_gradient_boosting.py
     
 Kaggle usage:
-    !python phase-2-risk-modeling/train_gradient_boosting.py --verbose
+    !python ./phase-2-risk-modeling/train_gradient_boosting.py --verbose
 
 Examples:
     # Full hyperparameter search with 5-fold CV and early stopping
