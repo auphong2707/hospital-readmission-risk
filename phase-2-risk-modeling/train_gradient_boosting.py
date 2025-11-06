@@ -60,6 +60,13 @@ Examples:
 
 Requirements:
     pip install lightgbm scikit-learn pandas joblib matplotlib seaborn tqdm
+    
+HuggingFace Upload:
+    Results are automatically uploaded to HuggingFace Hub after training.
+    Set HF_TOKEN and HF_USERNAME in .env file to enable:
+        HF_TOKEN=your_token_here
+        HF_USERNAME=your_username
+    Get token from: https://huggingface.co/settings/tokens
 """
 from __future__ import annotations
 
@@ -88,10 +95,10 @@ from utilities import (
     detect_gpu,
     is_kaggle_environment,
     print_section,
-    Trainer,
     load_data,
     run_preprocessing,
-    get_lgbm_param_grid
+    get_lgbm_param_grid,
+    upload_results_to_hf
 )
 
 try:
@@ -103,6 +110,103 @@ except ImportError:
 
 warnings.filterwarnings("ignore")
 
+
+class Trainer:
+    """Simple trainer abstraction for sklearn/LightGBM estimators.
+
+    Responsibilities:
+    - Hold model and train/val data
+    - Fit with optional early stopping
+    - Evaluate and return comprehensive metrics
+    - Save model artifact
+    
+    Attributes:
+        model: The sklearn-compatible model to train
+        X_train: Training features
+        y_train: Training labels
+        X_val: Optional validation features for early stopping
+        y_val: Optional validation labels for early stopping
+        output_dir: Directory for saving model artifacts
+    """
+
+    def __init__(self, model, X_train, y_train, X_val=None, y_val=None, output_dir="models"):
+        """Initialize the Trainer.
+        
+        Args:
+            model: sklearn-compatible model instance
+            X_train: Training features
+            y_train: Training labels
+            X_val: Optional validation features
+            y_val: Optional validation labels
+            output_dir: Directory to save models (default: "models")
+        """
+        self.model = model
+        self.X_train = X_train
+        self.y_train = y_train
+        self.X_val = X_val
+        self.y_val = y_val
+        self.output_dir = Path(output_dir)
+
+    def fit(self, early_stopping_rounds: int | None = None, **fit_kwargs):
+        """Fit the underlying model with optional early stopping.
+        
+        For LightGBM sklearn API, passes eval_set and early_stopping_rounds 
+        when validation data is provided.
+        
+        Args:
+            early_stopping_rounds: Number of rounds for early stopping (None to disable)
+            **fit_kwargs: Additional arguments to pass to model.fit()
+        """
+        fit_args = fit_kwargs.copy()
+        if self.X_val is not None and early_stopping_rounds:
+            fit_args.setdefault("eval_set", [(self.X_val, self.y_val)])
+            # prefer AUC for evaluation
+            fit_args.setdefault("eval_metric", "auc")
+            
+            # Handle both old and new LightGBM API for early stopping
+            try:
+                # Try new API first (LightGBM >= 4.0)
+                import lightgbm as lgb
+                if hasattr(lgb, 'early_stopping'):
+                    fit_args.setdefault("callbacks", [lgb.early_stopping(stopping_rounds=early_stopping_rounds, verbose=False)])
+                else:
+                    # Fall back to old API (LightGBM < 4.0)
+                    fit_args.setdefault("early_stopping_rounds", early_stopping_rounds)
+            except:
+                # If all else fails, use old API
+                fit_args.setdefault("early_stopping_rounds", early_stopping_rounds)
+
+        # Some sklearn-style estimators accept verbose; allow user to pass via fit_kwargs
+        self.model.fit(self.X_train, self.y_train, **fit_args)
+
+    def evaluate(self, X, y, threshold: float = 0.5):
+        """Evaluate model with comprehensive metrics.
+        
+        Args:
+            X: Features to evaluate on
+            y: True labels
+            threshold: Classification threshold (default: 0.5)
+            
+        Returns:
+            tuple: (metrics_dict, probabilities, predictions)
+        """
+        proba = self.model.predict_proba(X)[:, 1]
+        pred = (proba >= threshold).astype(int)
+        
+        # Use the comprehensive metrics calculation function
+        metrics = calculate_comprehensive_metrics(y, proba, threshold)
+        
+        return metrics, proba, pred
+
+    def save(self, path: str | Path):
+        """Save the trained model to disk.
+        
+        Args:
+            path: File path to save the model
+        """
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(self.model, path)
 
 def train_model(args: argparse.Namespace):
     """Main training function with robust evaluation pipeline.
@@ -499,6 +603,16 @@ def train_model(args: argparse.Namespace):
     with open(summary_path, "w") as f:
         json.dump(summary, f, indent=2)
     print(f"✅ Summary saved: {summary_path}")
+
+    # Upload to HuggingFace Hub (automatically)
+    print_section("📤 Uploading to HuggingFace Hub", "-")
+    upload_success = upload_results_to_hf(
+        summary=summary,
+        output_dir=out_dir,
+        model_name="hospital-readmission-lgbm"
+    )
+    if not upload_success:
+        print("⚠️  Upload to HuggingFace Hub was skipped (set HF_TOKEN in .env to enable)")
 
     # Final summary
     print_section("✨ Training Complete!", "=")

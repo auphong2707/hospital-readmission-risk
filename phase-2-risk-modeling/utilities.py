@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -152,108 +153,6 @@ def get_lgbm_param_grid():
         "reg_alpha": [0.0, 0.1],      # L1 regularization
         "reg_lambda": [0.0, 0.1],     # L2 regularization
     }
-
-
-# ============================================================================
-# MODEL TRAINING UTILITIES
-# ============================================================================
-
-class Trainer:
-    """Simple trainer abstraction for sklearn/LightGBM estimators.
-
-    Responsibilities:
-    - Hold model and train/val data
-    - Fit with optional early stopping
-    - Evaluate and return comprehensive metrics
-    - Save model artifact
-    
-    Attributes:
-        model: The sklearn-compatible model to train
-        X_train: Training features
-        y_train: Training labels
-        X_val: Optional validation features for early stopping
-        y_val: Optional validation labels for early stopping
-        output_dir: Directory for saving model artifacts
-    """
-
-    def __init__(self, model, X_train, y_train, X_val=None, y_val=None, output_dir="models"):
-        """Initialize the Trainer.
-        
-        Args:
-            model: sklearn-compatible model instance
-            X_train: Training features
-            y_train: Training labels
-            X_val: Optional validation features
-            y_val: Optional validation labels
-            output_dir: Directory to save models (default: "models")
-        """
-        self.model = model
-        self.X_train = X_train
-        self.y_train = y_train
-        self.X_val = X_val
-        self.y_val = y_val
-        self.output_dir = Path(output_dir)
-
-    def fit(self, early_stopping_rounds: int | None = None, **fit_kwargs):
-        """Fit the underlying model with optional early stopping.
-        
-        For LightGBM sklearn API, passes eval_set and early_stopping_rounds 
-        when validation data is provided.
-        
-        Args:
-            early_stopping_rounds: Number of rounds for early stopping (None to disable)
-            **fit_kwargs: Additional arguments to pass to model.fit()
-        """
-        fit_args = fit_kwargs.copy()
-        if self.X_val is not None and early_stopping_rounds:
-            fit_args.setdefault("eval_set", [(self.X_val, self.y_val)])
-            # prefer AUC for evaluation
-            fit_args.setdefault("eval_metric", "auc")
-            
-            # Handle both old and new LightGBM API for early stopping
-            try:
-                # Try new API first (LightGBM >= 4.0)
-                import lightgbm as lgb
-                if hasattr(lgb, 'early_stopping'):
-                    fit_args.setdefault("callbacks", [lgb.early_stopping(stopping_rounds=early_stopping_rounds, verbose=False)])
-                else:
-                    # Fall back to old API (LightGBM < 4.0)
-                    fit_args.setdefault("early_stopping_rounds", early_stopping_rounds)
-            except:
-                # If all else fails, use old API
-                fit_args.setdefault("early_stopping_rounds", early_stopping_rounds)
-
-        # Some sklearn-style estimators accept verbose; allow user to pass via fit_kwargs
-        self.model.fit(self.X_train, self.y_train, **fit_args)
-
-    def evaluate(self, X, y, threshold: float = 0.5):
-        """Evaluate model with comprehensive metrics.
-        
-        Args:
-            X: Features to evaluate on
-            y: True labels
-            threshold: Classification threshold (default: 0.5)
-            
-        Returns:
-            tuple: (metrics_dict, probabilities, predictions)
-        """
-        proba = self.model.predict_proba(X)[:, 1]
-        pred = (proba >= threshold).astype(int)
-        
-        # Use the comprehensive metrics calculation function
-        metrics = calculate_comprehensive_metrics(y, proba, threshold)
-        
-        return metrics, proba, pred
-
-    def save(self, path: str | Path):
-        """Save the trained model to disk.
-        
-        Args:
-            path: File path to save the model
-        """
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        joblib.dump(self.model, path)
 
 
 # ============================================================================
@@ -714,4 +613,392 @@ def save_metrics_comparison(fold_details, output_dir: Path):
             
     except Exception as e:
         print(f"   ⚠️  Could not generate metrics comparison: {e}")
+
+
+# ============================================================================
+# HUGGINGFACE HUB INTEGRATION
+# ============================================================================
+
+def generate_model_card(summary: dict, model_name: str = "LightGBM") -> str:
+    """
+    Generate a comprehensive HuggingFace model card with training results.
+    
+    Args:
+        summary: Training summary dictionary with metrics, params, etc.
+        model_name: Name of the model (default: "LightGBM")
+        
+    Returns:
+        str: Markdown-formatted model card content
+    """
+    # Extract key information
+    task = summary.get('task', 'Hospital 30-Day Readmission Risk Prediction')
+    timestamp = summary.get('timestamp', 'N/A')
+    environment = summary.get('environment', 'unknown')
+    device = summary.get('device', 'cpu')
+    
+    # Data info
+    data_info = summary.get('data', {})
+    total_samples = data_info.get('total_samples', 'N/A')
+    n_features = data_info.get('n_features', 'N/A')
+    dev_size = data_info.get('development_size', 'N/A')
+    test_size = data_info.get('final_test_size', 'N/A')
+    
+    # Training info
+    eval_pipeline = summary.get('evaluation_pipeline', {})
+    k_folds = eval_pipeline.get('k_folds', 'N/A')
+    
+    # Cross-validation results
+    cv_results = summary.get('cross_validation', {})
+    mean_cv_auc = cv_results.get('mean_roc_auc', 0)
+    std_cv_auc = cv_results.get('std_roc_auc', 0)
+    
+    # Final test metrics
+    test_metrics = summary.get('final_test_metrics', {})
+    test_auc = test_metrics.get('roc_auc', 0)
+    test_pr_auc = test_metrics.get('pr_auc', 0)
+    test_f1 = test_metrics.get('f1', 0)
+    test_precision = test_metrics.get('precision', 0)
+    test_recall = test_metrics.get('recall', 0)
+    test_sensitivity = test_metrics.get('sensitivity', 0)
+    test_specificity = test_metrics.get('specificity', 0)
+    
+    # Best parameters
+    best_params = summary.get('best_params', {})
+    
+    # Training time
+    total_time = summary.get('total_time_seconds', 0)
+    search_time = summary.get('hyperparameter_search_time_seconds', 0)
+    
+    # Generate model card
+    card = f"""---
+tags:
+- healthcare
+- clinical-ml
+- diabetes
+- readmission-prediction
+- lightgbm
+- gradient-boosting
+library_name: lightgbm
+pipeline_tag: tabular-classification
+---
+
+# {model_name} - Hospital Readmission Risk Prediction
+
+## Model Description
+
+This {model_name} model predicts the risk of 30-day hospital readmission for diabetic patients. The model was trained on the UCI Diabetes 130-US Hospitals dataset with robust cross-validation and comprehensive evaluation.
+
+**Task:** {task}  
+**Model Type:** Gradient Boosting Machine (LightGBM)  
+**Training Date:** {timestamp}  
+**Environment:** {environment} ({device.upper()})
+
+## Performance Metrics
+
+### Cross-Validation Results ({k_folds}-Fold CV)
+
+| Metric | Value |
+|--------|-------|
+| Mean ROC-AUC | {mean_cv_auc:.4f} ± {std_cv_auc:.4f} |
+
+### Final Test Set Results
+
+#### Primary Metrics
+| Metric | Value |
+|--------|-------|
+| ROC-AUC | {test_auc:.4f} |
+| PR-AUC | {test_pr_auc:.4f} |
+| F1 Score | {test_f1:.4f} |
+
+#### Classification Metrics
+| Metric | Value |
+|--------|-------|
+| Precision | {test_precision:.4f} |
+| Recall | {test_recall:.4f} |
+
+#### Clinical Metrics
+| Metric | Value |
+|--------|-------|
+| Sensitivity (TPR) | {test_sensitivity:.4f} |
+| Specificity (TNR) | {test_specificity:.4f} |
+
+## Model Visualizations
+
+### ROC Curve
+![ROC Curve](./roc_curve.png)
+
+### Precision-Recall Curve
+![Precision-Recall Curve](./precision_recall_curve.png)
+
+### Confusion Matrix
+![Confusion Matrix](./confusion_matrix.png)
+
+### Calibration Curve
+![Calibration Curve](./calibration_curve.png)
+
+### Feature Importance
+![Feature Importance](./feature_importance.png)
+
+### Learning Curves
+![Learning Curves](./learning_curves.png)
+
+### Validation Curves
+![Validation Curves](./validation_curves.png)
+
+### Cross-Fold Metrics Comparison
+![Metrics Comparison](./metrics_comparison_across_folds.png)
+
+## Dataset Information
+
+| Property | Value |
+|----------|-------|
+| Total Samples | {total_samples:,} |
+| Features | {n_features} |
+| Development Set | {dev_size:,} |
+| Final Test Set | {test_size:,} |
+
+## Training Configuration
+
+### Evaluation Pipeline
+- **Final Holdout Split:** Stratified split into development and test sets
+- **Hyperparameter Search:** Grid search with {k_folds}-fold cross-validation
+- **Nested Early Stopping:** Inner validation split within each fold
+- **Final Evaluation:** Untouched holdout test set
+
+### Best Hyperparameters
+
+```python
+{json.dumps(best_params, indent=2)}
+```
+
+## Training Details
+
+- **Total Training Time:** {total_time/60:.2f} minutes
+- **Hyperparameter Search Time:** {search_time/60:.2f} minutes
+- **Cross-Validation Folds:** {k_folds}
+- **Early Stopping:** Yes
+- **Device:** {device.upper()}
+
+## Usage
+
+### Loading the Model
+
+```python
+import joblib
+import pandas as pd
+
+# Load the trained model
+model = joblib.load('gradient_boosting_model.joblib')
+
+# Load your preprocessed features
+X_new = pd.read_csv('your_features.csv')
+
+# Make predictions
+predictions = model.predict(X_new)
+probabilities = model.predict_proba(X_new)[:, 1]
+```
+
+### Feature Requirements
+
+The model expects preprocessed features from the UCI Diabetes 130-US Hospitals dataset. Features include:
+- Patient demographics (age, gender, race)
+- Admission details (admission type, source, length of stay)
+- Medical history (number of diagnoses, procedures)
+- Medication information
+- Lab results (A1c test results, glucose serum test)
+- Previous utilization (outpatient, inpatient, emergency visits)
+
+See `feature_importance.csv` for complete feature list and importance scores.
+
+## Limitations and Biases
+
+- **Domain-Specific:** Model is trained specifically for diabetic patient readmissions
+- **Dataset Bias:** Training data from 130 US hospitals (1999-2008) may not generalize to all healthcare settings
+- **Class Imbalance:** Dataset may have imbalanced readmission rates
+- **Temporal Drift:** Healthcare practices have evolved since data collection
+- **Geographic Limitation:** US-based dataset may not apply to other healthcare systems
+
+## Ethical Considerations
+
+This model is intended to assist healthcare providers in identifying patients at risk of readmission. It should:
+- **NOT** be used as the sole basis for treatment decisions
+- Be validated on your specific patient population before deployment
+- Be monitored for fairness across different demographic groups
+- Be regularly retrained with recent data to account for changing patterns
+
+## Citation
+
+```bibtex
+@misc{{hospital-readmission-lgbm,
+  author = {{Your Name}},
+  title = {{LightGBM Model for Hospital Readmission Prediction}},
+  year = {{2025}},
+  url = {{https://huggingface.co/your-repo}}
+}}
+```
+
+## Dataset Citation
+
+```bibtex
+@misc{{strack2014impact,
+  title={{Impact of HbA1c Measurement on Hospital Readmission Rates: Analysis of 70,000 Clinical Database Patient Records}},
+  author={{Strack, Beata and DeShazo, Jonathan P and Gennings, Chris and Olmo, Juan L and Ventura, Sebastian and Cios, Krzysztof J and Clore, John N}},
+  journal={{BioMed Research International}},
+  volume={{2014}},
+  year={{2014}},
+  publisher={{Hindawi}}
+}}
+```
+
+## License
+
+This model is released under the MIT License. The underlying dataset has its own license terms.
+
+## Contact
+
+For questions or issues, please open an issue in the repository.
+
+---
+
+**Disclaimer:** This model is for research and educational purposes. Always consult healthcare professionals for medical decisions.
+"""
+    
+    return card
+
+
+def upload_results_to_hf(
+    summary: dict,
+    output_dir: str | Path,
+    model_name: str = "hospital-readmission-lgbm",
+    hf_repo_name: str | None = None,
+    hf_token: str | None = None
+) -> bool:
+    """
+    Upload training results, visualizations, and model artifacts to HuggingFace Hub.
+    
+    Automatically loads credentials from .env file and generates repo name.
+    
+    Args:
+        summary: Training summary dictionary (from training_summary.json)
+        output_dir: Directory containing model files and visualizations
+        model_name: Name/identifier for the model (default: "hospital-readmission-lgbm")
+        hf_repo_name: Optional HuggingFace repo name (auto-generated if None)
+        hf_token: Optional HuggingFace API token (loads from .env if None)
+    
+    Returns:
+        bool: True if upload was successful, False otherwise
+        
+    Example:
+        >>> import json
+        >>> with open('models/training_summary.json') as f:
+        ...     summary = json.load(f)
+        >>> upload_results_to_hf(summary=summary, output_dir='models')
+    """
+    try:
+        from huggingface_hub import HfApi, create_repo
+        
+        # Try to load from .env file
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+        except ImportError:
+            pass  # python-dotenv not installed, will use environment variables directly
+        
+        # Get token from .env or environment if not provided
+        if hf_token is None:
+            hf_token = os.getenv('HF_TOKEN')
+        
+        if not hf_token:
+            print("⚠️  HF_TOKEN not found in .env file or environment variables.")
+            print("   Skipping upload to HuggingFace Hub.")
+            print("   To enable automatic upload:")
+            print("   1. Create a .env file in your project root")
+            print("   2. Add: HF_TOKEN=your_token_here")
+            print("   3. Add: HF_USERNAME=your_username")
+            print("   4. Get token from: https://huggingface.co/settings/tokens")
+            return False
+        
+        # Auto-generate repo name if not provided
+        if hf_repo_name is None:
+            username = os.getenv('HF_USERNAME')
+            if not username:
+                print("⚠️  HF_USERNAME not found in .env file.")
+                print("   Add HF_USERNAME=your_username to .env file")
+                return False
+            
+            # Generate repo name: username/hospital-readmission-lgbm
+            hf_repo_name = f"{username}/{model_name}"
+        
+        print(f"\n{'='*70}")
+        print("📤 Uploading Results to HuggingFace Hub")
+        print(f"{'='*70}")
+        print(f"Repository: {hf_repo_name}")
+        print(f"Model: {model_name}")
+        
+        # Initialize HF API
+        api = HfApi()
+        
+        # Create repo if it doesn't exist
+        try:
+            repo_url = create_repo(
+                repo_id=hf_repo_name,
+                token=hf_token,
+                repo_type="model",
+                exist_ok=True,
+                private=False
+            )
+            print(f"✅ Repository ready: {hf_repo_name}")
+        except Exception as e:
+            print(f"⚠️  Could not create/access repository: {e}")
+            return False
+        
+        output_dir = Path(output_dir)
+        
+        # Generate and save model card
+        print("📝 Generating model card...")
+        readme_content = generate_model_card(summary, model_name)
+        readme_path = output_dir / "README.md"
+        with open(readme_path, 'w', encoding='utf-8') as f:
+            f.write(readme_content)
+        print(f"   ✅ Model card saved: {readme_path}")
+        
+        # List files to upload
+        print("\n📂 Files to upload:")
+        files_to_upload = []
+        for file_path in output_dir.glob('*'):
+            if file_path.is_file():
+                files_to_upload.append(file_path.name)
+                print(f"   - {file_path.name}")
+        
+        if not files_to_upload:
+            print("⚠️  No files found in output directory!")
+            return False
+        
+        # Upload all files from output directory
+        print("\n⏳ Uploading files to HuggingFace Hub...")
+        api.upload_folder(
+            folder_path=str(output_dir),
+            repo_id=hf_repo_name,
+            repo_type="model",
+            token=hf_token,
+            commit_message=f"Upload {model_name} training results and visualizations"
+        )
+        
+        print(f"\n{'='*70}")
+        print("✅ Results uploaded successfully!")
+        print(f"{'='*70}")
+        print(f"🌐 View at: https://huggingface.co/{hf_repo_name}")
+        print(f"{'='*70}\n")
+        
+        return True
+        
+    except ImportError:
+        print("⚠️  huggingface_hub not installed.")
+        print("   Install with: pip install huggingface_hub")
+        return False
+    except Exception as e:
+        print(f"⚠️  Error uploading to HuggingFace: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
