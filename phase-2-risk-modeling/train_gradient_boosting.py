@@ -45,7 +45,7 @@ Usage (from project root):
     python ./phase-2-risk-modeling/train_gradient_boosting.py
     
 Kaggle usage:
-    !python ./phase-2-risk-modeling/train_gradient_boosting.py --verbose
+    !python ./phase-2-risk-modeling/train_gradient_boosting.py
 
 Examples:
     # Full hyperparameter search with 5-fold CV and early stopping
@@ -54,9 +54,6 @@ Examples:
     
     # Custom K-fold splits and validation size
     python train_gradient_boosting.py --n-splits 10 --val-size 0.15
-    
-    # With verbose output
-    python train_gradient_boosting.py --verbose
 
 Requirements:
     pip install lightgbm scikit-learn pandas joblib matplotlib seaborn tqdm
@@ -159,10 +156,6 @@ class Trainer:
         """
         fit_args = fit_kwargs.copy()
         
-        # Remove 'verbose' from fit_args as it's not a valid parameter for LGBMClassifier.fit()
-        # Verbosity is controlled through callbacks instead
-        fit_args.pop('verbose', None)
-        
         if self.X_val is not None and early_stopping_rounds:
             fit_args.setdefault("eval_set", [(self.X_val, self.y_val)])
             # prefer AUC for evaluation
@@ -173,7 +166,7 @@ class Trainer:
                 # Try new API first (LightGBM >= 4.0)
                 import lightgbm as lgb
                 if hasattr(lgb, 'early_stopping'):
-                    fit_args.setdefault("callbacks", [lgb.early_stopping(stopping_rounds=early_stopping_rounds, verbose=False)])
+                    fit_args.setdefault("callbacks", [lgb.early_stopping(stopping_rounds=early_stopping_rounds)])
                 else:
                     # Fall back to old API (LightGBM < 4.0)
                     fit_args.setdefault("early_stopping_rounds", early_stopping_rounds)
@@ -181,7 +174,7 @@ class Trainer:
                 # If all else fails, use old API
                 fit_args.setdefault("early_stopping_rounds", early_stopping_rounds)
 
-        # Fit the model with cleaned arguments
+        # Fit the model
         self.model.fit(self.X_train, self.y_train, **fit_args)
 
     def evaluate(self, X, y, threshold: float = 0.5):
@@ -637,7 +630,7 @@ def main():
             Examples:
             # Default: Full hyperparameter search with 5-fold CV, early stopping, and final holdout
             # Performance settings (CPU cores, GPU) are auto-detected
-            python train_gradient_boosting.py --verbose
+            python train_gradient_boosting.py
             
             # Custom K-fold splits and larger validation set for early stopping
             python train_gradient_boosting.py --n-splits 10 --val-size 0.15
@@ -649,7 +642,7 @@ def main():
             python train_gradient_boosting.py --early-stopping-rounds 0
             
             # Kaggle usage (auto-detects GPU and uses all cores)
-            !python phase-2-risk-modeling/train_gradient_boosting.py --verbose
+            !python phase-2-risk-modeling/train_gradient_boosting.py
         """
     )
     
@@ -670,10 +663,6 @@ def main():
                         help="Early stopping rounds (0 to disable, default: 50)")
     parser.add_argument("--random-state", type=int, default=42,
                         help="Random seed (default: 42)")
-    
-    # Output arguments
-    parser.add_argument("--verbose", action="store_true",
-                        help="Verbose output from training/search")
 
     args = parser.parse_args()
     
@@ -698,7 +687,7 @@ def main():
         args.n_jobs = max(1, cpu_count - 1) if cpu_count > 2 else 1
         print(f"   ✅ Local environment: using {args.n_jobs} CPU cores (leaving 1 free)")
     
-    # Auto-detect and enable GPU if available (verbose=True to show detailed info)
+    # Auto-detect and enable GPU if available
     gpu_available = detect_gpu(verbose=True)
     args.use_gpu = gpu_available
     
