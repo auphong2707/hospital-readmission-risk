@@ -84,7 +84,14 @@ from utilities import (
     save_visualizations,
     save_learning_curves,
     save_validation_curves,
-    save_metrics_comparison
+    save_metrics_comparison,
+    detect_gpu,
+    is_kaggle_environment,
+    print_section,
+    Trainer,
+    load_data,
+    run_preprocessing,
+    get_lgbm_param_grid
 )
 
 try:
@@ -95,146 +102,6 @@ except ImportError:
     print("⚠️  tqdm not available. Install with: pip install tqdm")
 
 warnings.filterwarnings("ignore")
-
-
-def detect_gpu():
-    """Detect if GPU is available for LightGBM."""
-    try:
-        import lightgbm as lgb
-        # Try to create a simple dataset and train with GPU
-        import numpy as np
-        X_test = np.random.rand(10, 5)
-        y_test = np.random.randint(0, 2, 10)
-        lgb_train = lgb.Dataset(X_test, y_test)
-        params = {'device': 'gpu', 'verbose': -1}
-        lgb.train(params, lgb_train, num_boost_round=1, verbose_eval=False)
-        return True
-    except Exception:
-        return False
-
-
-def is_kaggle_environment():
-    """Detect if running in Kaggle environment."""
-    return os.path.exists('/kaggle/working')
-
-
-def print_section(title: str, char: str = "="):
-    """Print a formatted section header."""
-    print(f"\n{char * 70}")
-    print(f"  {title}")
-    print(f"{char * 70}\n")
-
-
-class Trainer:
-    """Simple in-file Trainer abstraction for sklearn/LightGBM estimators.
-
-    Responsibilities:
-    - hold model and train/val data
-    - fit with optional early stopping
-    - evaluate and return metrics
-    - save model artifact
-    """
-
-    def __init__(self, model, X_train, y_train, X_val=None, y_val=None, output_dir="models"):
-        self.model = model
-        self.X_train = X_train
-        self.y_train = y_train
-        self.X_val = X_val
-        self.y_val = y_val
-        self.output_dir = Path(output_dir)
-
-    def fit(self, early_stopping_rounds: int | None = None, **fit_kwargs):
-        """Fit the underlying model. For LightGBM sklearn API we pass eval_set/early_stopping_rounds when val provided."""
-        fit_args = fit_kwargs.copy()
-        if self.X_val is not None and early_stopping_rounds:
-            fit_args.setdefault("eval_set", [(self.X_val, self.y_val)])
-            # prefer AUC for evaluation
-            fit_args.setdefault("eval_metric", "auc")
-            
-            # Handle both old and new LightGBM API for early stopping
-            try:
-                # Try new API first (LightGBM >= 4.0)
-                import lightgbm as lgb
-                if hasattr(lgb, 'early_stopping'):
-                    fit_args.setdefault("callbacks", [lgb.early_stopping(stopping_rounds=early_stopping_rounds, verbose=False)])
-                else:
-                    # Fall back to old API (LightGBM < 4.0)
-                    fit_args.setdefault("early_stopping_rounds", early_stopping_rounds)
-            except:
-                # If all else fails, use old API
-                fit_args.setdefault("early_stopping_rounds", early_stopping_rounds)
-
-        # Some sklearn-style estimators accept verbose; allow user to pass via fit_kwargs
-        self.model.fit(self.X_train, self.y_train, **fit_args)
-
-    def evaluate(self, X, y, threshold: float = 0.5):
-        """Evaluate model with comprehensive metrics using utilities function."""
-        proba = self.model.predict_proba(X)[:, 1]
-        pred = (proba >= threshold).astype(int)
-        
-        # Use the imported metrics calculation function
-        metrics = calculate_comprehensive_metrics(y, proba, threshold)
-        
-        return metrics, proba, pred
-
-    def save(self, path: str | Path):
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        joblib.dump(self.model, path)
-
-
-def run_preprocessing(preprocess_script: Path) -> None:
-    """Run preprocessing script to generate features and target files."""
-    print_section("🔄 Running Preprocessing", "-")
-    print(f"📂 Running: {preprocess_script}")
-    subprocess.run([sys.executable, str(preprocess_script)], check=True)
-    print("✅ Preprocessing completed")
-
-
-def load_data(data_dir: str = "data/processed"):
-    """Load features and target data."""
-    print("📂 Loading data...")
-    data_dir = Path(data_dir)
-    X_path = data_dir / "features.csv"
-    y_path = data_dir / "target.csv"
-
-    if not X_path.exists() or not y_path.exists():
-        raise FileNotFoundError(
-            f"Processed data not found in {data_dir}. Run phase-1 preprocessing first."
-        )
-
-    X = pd.read_csv(X_path)
-    y = pd.read_csv(y_path)
-    # support both columnar and single-column target files
-    if "target" in y.columns:
-        y = y["target"]
-    else:
-        y = y.iloc[:, 0]
-
-    print(f"✅ Loaded features: {X.shape}, target: {y.shape}")
-    print(f"   Class distribution: {y.value_counts().to_dict()}")
-    return X, y
-
-
-def build_default_param_dist():
-    """Parameter grid for manual hyperparameter search.
-    
-    Balanced grid for thorough but practical search:
-    - 4 × 4 × 3 × 3 × 3 × 3 × 2 × 2 = 2,592 combinations
-    - With 5-fold CV = 12,960 model fits
-    - Estimated time: 2-4 hours on CPU (depends on data size)
-    """
-    return {
-        "n_estimators": [100, 200, 300, 400],      # Added 300
-        "learning_rate": [0.03, 0.05, 0.08, 0.1],  # Added 0.08
-        "num_leaves": [31, 63, 127],               # Keep 3 values (good coverage)
-        "max_depth": [-1, 6, 10],                  # Added 6 and 10 (more tree depth options)
-        "subsample": [0.7, 0.8, 0.9],              # Added 0.7 (more data sampling options)
-        "colsample_bytree": [0.7, 0.8, 1.0],       # Added 0.7 (more feature sampling)
-        # Regularization: Keep simple
-        "reg_alpha": [0.0, 0.1],                   # L1 regularization
-        "reg_lambda": [0.0, 0.1],                  # L2 regularization
-    }
 
 
 def train_model(args: argparse.Namespace):
@@ -301,7 +168,7 @@ def train_model(args: argparse.Namespace):
     # For simplicity, we'll use a single set of parameters and do K-fold evaluation
     # If you want hyperparameter search, it should be done on a smaller subset or with nested CV
     
-    param_dist = build_default_param_dist()
+    param_dist = get_lgbm_param_grid()
     
     # Generate all parameter combinations for manual grid search
     param_combinations = [dict(zip(param_dist.keys(), v)) for v in product(*param_dist.values())]

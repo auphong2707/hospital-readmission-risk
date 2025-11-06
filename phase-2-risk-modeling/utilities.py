@@ -1,6 +1,12 @@
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import Optional, Tuple
 
+import joblib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -21,6 +27,233 @@ from sklearn.metrics import (
 from sklearn.calibration import calibration_curve
 from sklearn.model_selection import learning_curve
 
+
+# ============================================================================
+# ENVIRONMENT AND HARDWARE DETECTION
+# ============================================================================
+
+def detect_gpu():
+    """Detect if GPU is available for LightGBM.
+    
+    Returns:
+        bool: True if GPU is available and functional, False otherwise
+    """
+    try:
+        import lightgbm as lgb
+        # Try to create a simple dataset and train with GPU
+        X_test = np.random.rand(10, 5)
+        y_test = np.random.randint(0, 2, 10)
+        lgb_train = lgb.Dataset(X_test, y_test)
+        params = {'device': 'gpu', 'verbose': -1}
+        lgb.train(params, lgb_train, num_boost_round=1, verbose_eval=False)
+        return True
+    except Exception:
+        return False
+
+
+def is_kaggle_environment():
+    """Detect if running in Kaggle environment.
+    
+    Returns:
+        bool: True if in Kaggle environment, False otherwise
+    """
+    return os.path.exists('/kaggle/working')
+
+
+# ============================================================================
+# OUTPUT FORMATTING
+# ============================================================================
+
+def print_section(title: str, char: str = "="):
+    """Print a formatted section header.
+    
+    Args:
+        title: Section title text
+        char: Character to use for the border (default: "=")
+    """
+    print(f"\n{char * 70}")
+    print(f"  {title}")
+    print(f"{char * 70}\n")
+
+
+# ============================================================================
+# DATA LOADING
+# ============================================================================
+
+def load_data(data_dir: str = "data/processed"):
+    """Load features and target data from processed directory.
+    
+    Args:
+        data_dir: Directory containing features.csv and target.csv
+        
+    Returns:
+        tuple: (X, y) where X is features DataFrame and y is target Series
+        
+    Raises:
+        FileNotFoundError: If processed data files are not found
+    """
+    print("📂 Loading data...")
+    data_dir = Path(data_dir)
+    X_path = data_dir / "features.csv"
+    y_path = data_dir / "target.csv"
+
+    if not X_path.exists() or not y_path.exists():
+        raise FileNotFoundError(
+            f"Processed data not found in {data_dir}. Run phase-1 preprocessing first."
+        )
+
+    X = pd.read_csv(X_path)
+    y = pd.read_csv(y_path)
+    # support both columnar and single-column target files
+    if "target" in y.columns:
+        y = y["target"]
+    else:
+        y = y.iloc[:, 0]
+
+    print(f"✅ Loaded features: {X.shape}, target: {y.shape}")
+    print(f"   Class distribution: {y.value_counts().to_dict()}")
+    return X, y
+
+
+def run_preprocessing(preprocess_script: Path) -> None:
+    """Run preprocessing script to generate features and target files.
+    
+    Args:
+        preprocess_script: Path to the preprocessing script to execute
+    """
+    print_section("🔄 Running Preprocessing", "-")
+    print(f"📂 Running: {preprocess_script}")
+    subprocess.run([sys.executable, str(preprocess_script)], check=True)
+    print("✅ Preprocessing completed")
+
+
+# ============================================================================
+# HYPERPARAMETER GRIDS
+# ============================================================================
+
+def get_lgbm_param_grid():
+    """Get default LightGBM parameter grid for hyperparameter search.
+    
+    Returns a balanced grid for thorough but practical search:
+    - 4 × 4 × 3 × 3 × 3 × 3 × 2 × 2 = 2,592 combinations
+    - With 5-fold CV = 12,960 model fits
+    - Estimated time: 2-4 hours on CPU (depends on data size)
+    
+    Returns:
+        dict: Parameter grid with parameter names as keys and lists of values
+    """
+    return {
+        "n_estimators": [100, 200, 300, 400],
+        "learning_rate": [0.03, 0.05, 0.08, 0.1],
+        "num_leaves": [31, 63, 127],
+        "max_depth": [-1, 6, 10],
+        "subsample": [0.7, 0.8, 0.9],
+        "colsample_bytree": [0.7, 0.8, 1.0],
+        "reg_alpha": [0.0, 0.1],      # L1 regularization
+        "reg_lambda": [0.0, 0.1],     # L2 regularization
+    }
+
+
+# ============================================================================
+# MODEL TRAINING UTILITIES
+# ============================================================================
+
+class Trainer:
+    """Simple trainer abstraction for sklearn/LightGBM estimators.
+
+    Responsibilities:
+    - Hold model and train/val data
+    - Fit with optional early stopping
+    - Evaluate and return comprehensive metrics
+    - Save model artifact
+    
+    Attributes:
+        model: The sklearn-compatible model to train
+        X_train: Training features
+        y_train: Training labels
+        X_val: Optional validation features for early stopping
+        y_val: Optional validation labels for early stopping
+        output_dir: Directory for saving model artifacts
+    """
+
+    def __init__(self, model, X_train, y_train, X_val=None, y_val=None, output_dir="models"):
+        """Initialize the Trainer.
+        
+        Args:
+            model: sklearn-compatible model instance
+            X_train: Training features
+            y_train: Training labels
+            X_val: Optional validation features
+            y_val: Optional validation labels
+            output_dir: Directory to save models (default: "models")
+        """
+        self.model = model
+        self.X_train = X_train
+        self.y_train = y_train
+        self.X_val = X_val
+        self.y_val = y_val
+        self.output_dir = Path(output_dir)
+
+    def fit(self, early_stopping_rounds: int | None = None, **fit_kwargs):
+        """Fit the underlying model with optional early stopping.
+        
+        For LightGBM sklearn API, passes eval_set and early_stopping_rounds 
+        when validation data is provided.
+        
+        Args:
+            early_stopping_rounds: Number of rounds for early stopping (None to disable)
+            **fit_kwargs: Additional arguments to pass to model.fit()
+        """
+        fit_args = fit_kwargs.copy()
+        if self.X_val is not None and early_stopping_rounds:
+            fit_args.setdefault("eval_set", [(self.X_val, self.y_val)])
+            # prefer AUC for evaluation
+            fit_args.setdefault("eval_metric", "auc")
+            
+            # Handle both old and new LightGBM API for early stopping
+            try:
+                # Try new API first (LightGBM >= 4.0)
+                import lightgbm as lgb
+                if hasattr(lgb, 'early_stopping'):
+                    fit_args.setdefault("callbacks", [lgb.early_stopping(stopping_rounds=early_stopping_rounds, verbose=False)])
+                else:
+                    # Fall back to old API (LightGBM < 4.0)
+                    fit_args.setdefault("early_stopping_rounds", early_stopping_rounds)
+            except:
+                # If all else fails, use old API
+                fit_args.setdefault("early_stopping_rounds", early_stopping_rounds)
+
+        # Some sklearn-style estimators accept verbose; allow user to pass via fit_kwargs
+        self.model.fit(self.X_train, self.y_train, **fit_args)
+
+    def evaluate(self, X, y, threshold: float = 0.5):
+        """Evaluate model with comprehensive metrics.
+        
+        Args:
+            X: Features to evaluate on
+            y: True labels
+            threshold: Classification threshold (default: 0.5)
+            
+        Returns:
+            tuple: (metrics_dict, probabilities, predictions)
+        """
+        proba = self.model.predict_proba(X)[:, 1]
+        pred = (proba >= threshold).astype(int)
+        
+        # Use the comprehensive metrics calculation function
+        metrics = calculate_comprehensive_metrics(y, proba, threshold)
+        
+        return metrics, proba, pred
+
+    def save(self, path: str | Path):
+        """Save the trained model to disk.
+        
+        Args:
+            path: File path to save the model
+        """
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(self.model, path)
 
 
 # ============================================================================
