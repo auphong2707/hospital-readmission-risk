@@ -6,9 +6,13 @@ evaluation pipeline:
 Evaluation Pipeline:
 1. Final Holdout Split: Split entire dataset into development_set and final_test_set
    - final_test_set remains untouched until final evaluation
-2. Hyperparameter Search: GridSearchCV on development_set to find best parameters
-3. K-Fold Cross-Validation with Nested Early Stopping:
-   - Perform K-fold CV only on development_set
+2. Hyperparameter Search: Manual grid search with K-fold CV to find best parameters
+   - Each parameter combination evaluated with K-fold CV
+   - Inside each fold: split training data into inner_train and inner_val
+   - Train on inner_train with early stopping monitored on inner_val
+   - Evaluate on fold's holdout set
+3. K-Fold Cross-Validation with best parameters:
+   - Perform K-fold CV only on development_set with best parameters
    - Inside each fold: split training data into inner_train and inner_val
    - Train on inner_train with early stopping monitored on inner_val
    - Evaluate on fold's holdout set
@@ -21,9 +25,21 @@ Features:
 - Early stopping within each fold to prevent overfitting
 - Auto-detects and uses optimal performance settings (GPU, CPU cores)
 - Progress tracking with tqdm
-- Saves visualizations (ROC curve, confusion matrix)
+- Comprehensive visualizations:
+  * ROC curves with AUC
+  * Precision-Recall curves
+  * Confusion matrices
+  * Calibration curves
+  * Feature importance plots
+  * Learning curves
+  * Validation curves for hyperparameters
+  * Cross-fold metrics comparison
 - Exhaustive grid search with K-fold cross-validation
-- Comprehensive metrics and fold statistics
+- Comprehensive metrics:
+  * Primary: ROC-AUC, PR-AUC, Accuracy, Balanced Accuracy, F1
+  * Classification: Precision, Recall, Specificity, FPR, FNR
+  * Clinical: Sensitivity, Specificity, PPV, NPV
+  * Calibration: Brier score
 
 Usage (from project root):
     python phase-2-risk-modeling/train_gradient_boosting.py
@@ -58,18 +74,18 @@ import warnings
 
 import joblib
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.metrics import (
-    roc_auc_score,
-    precision_score,
-    recall_score,
-    f1_score,
-    accuracy_score,
-    confusion_matrix,
-    roc_curve,
+import numpy as np
+from sklearn.model_selection import StratifiedKFold, train_test_split
+from itertools import product
+
+from utilities import (
+    calculate_comprehensive_metrics,
+    print_metrics_table,
+    save_visualizations,
+    save_learning_curves,
+    save_validation_curves,
+    save_metrics_comparison
 )
-from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
 
 try:
     from tqdm import tqdm
@@ -152,15 +168,14 @@ class Trainer:
         self.model.fit(self.X_train, self.y_train, **fit_args)
 
     def evaluate(self, X, y, threshold: float = 0.5):
+        """Evaluate model with comprehensive metrics using utilities function."""
         proba = self.model.predict_proba(X)[:, 1]
         pred = (proba >= threshold).astype(int)
-        return {
-            "roc_auc": float(roc_auc_score(y, proba)),
-            "precision": float(precision_score(y, pred, zero_division=0)),
-            "recall": float(recall_score(y, pred, zero_division=0)),
-            "f1": float(f1_score(y, pred, zero_division=0)),
-            "accuracy": float(accuracy_score(y, pred)),
-        }, proba, pred
+        
+        # Use the imported metrics calculation function
+        metrics = calculate_comprehensive_metrics(y, proba, threshold)
+        
+        return metrics, proba, pred
 
     def save(self, path: str | Path):
         path = Path(path)
@@ -202,7 +217,7 @@ def load_data(data_dir: str = "data/processed"):
 
 
 def build_default_param_dist():
-    """Parameter grid for GridSearchCV.
+    """Parameter grid for manual hyperparameter search.
     
     Balanced grid for thorough but practical search:
     - 4 × 4 × 3 × 3 × 3 × 3 × 2 × 2 = 2,592 combinations
@@ -220,57 +235,6 @@ def build_default_param_dist():
         "reg_alpha": [0.0, 0.1],                   # L1 regularization
         "reg_lambda": [0.0, 0.1],                  # L2 regularization
     }
-
-
-def save_visualizations(y_true, y_proba, y_pred, output_dir: Path):
-    """Save ROC curve and confusion matrix visualizations."""
-    print("📊 Generating visualizations...")
-    
-    # Set style
-    sns.set_style("whitegrid")
-    
-    # 1. ROC Curve
-    fpr, tpr, _ = roc_curve(y_true, y_proba)
-    auc_score = roc_auc_score(y_true, y_proba)
-    
-    plt.figure(figsize=(8, 6))
-    plt.plot(fpr, tpr, label=f'ROC Curve (AUC = {auc_score:.4f})', linewidth=2)
-    plt.plot([0, 1], [0, 1], 'k--', label='Random Classifier', linewidth=1)
-    plt.xlabel('False Positive Rate', fontsize=12)
-    plt.ylabel('True Positive Rate', fontsize=12)
-    plt.title('ROC Curve - Hospital Readmission Prediction', fontsize=14, fontweight='bold')
-    plt.legend(loc='lower right', fontsize=10)
-    plt.grid(alpha=0.3)
-    plt.tight_layout()
-    roc_path = output_dir / "roc_curve.png"
-    plt.savefig(roc_path, dpi=300, bbox_inches='tight')
-    plt.close()
-    print(f"   ✅ ROC curve saved: {roc_path}")
-    
-    # 2. Confusion Matrix
-    cm = confusion_matrix(y_true, y_pred)
-    plt.figure(figsize=(8, 6))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', cbar=True,
-                xticklabels=['No Readmission', 'Readmission'],
-                yticklabels=['No Readmission', 'Readmission'])
-    plt.xlabel('Predicted Label', fontsize=12)
-    plt.ylabel('True Label', fontsize=12)
-    plt.title('Confusion Matrix - Hospital Readmission Prediction', fontsize=14, fontweight='bold')
-    plt.tight_layout()
-    cm_path = output_dir / "confusion_matrix.png"
-    plt.savefig(cm_path, dpi=300, bbox_inches='tight')
-    plt.close()
-    print(f"   ✅ Confusion matrix saved: {cm_path}")
-
-
-def print_metrics_table(metrics: dict, title: str = "Model Performance Metrics"):
-    """Print metrics in a formatted table."""
-    print_section(title, "=")
-    print(f"{'Metric':<20} {'Value':>10}")
-    print("-" * 32)
-    for k, v in metrics.items():
-        print(f"{k.replace('_', ' ').title():<20} {v:>10.4f}")
-    print("-" * 32)
 
 
 def train_model(args: argparse.Namespace):
@@ -339,42 +303,111 @@ def train_model(args: argparse.Namespace):
     
     param_dist = build_default_param_dist()
     
-    # For this implementation, we'll first do hyperparameter search on development set
-    # using traditional GridSearchCV, then retrain with K-fold and early stopping
-    print("\n🔍 Phase 2a: Hyperparameter Search (finding best parameters)...")
-    print(f"   Using GridSearchCV with {args.n_splits}-fold CV on development set")
+    # Generate all parameter combinations for manual grid search
+    param_combinations = [dict(zip(param_dist.keys(), v)) for v in product(*param_dist.values())]
+    total_combinations = len(param_combinations)
     
-    base_model = LGB_CLASS(
-        random_state=args.random_state,
-        n_jobs=args.n_jobs,
-        device_type=device_type
-    )
+    print(f"\n📊 Hyperparameter Search Space:")
+    print(f"   Total parameter combinations: {total_combinations}")
+    print(f"   K-fold splits: {args.n_splits}")
+    print(f"   Total model fits: {total_combinations * args.n_splits}")
+    print(f"   Scoring metric: ROC-AUC\n")
+    
+    # Track best parameters and scores
+    best_score = -np.inf
+    best_params = None
+    all_search_results = []
     
     cv_search = StratifiedKFold(n_splits=args.n_splits, shuffle=True, random_state=args.random_state)
     
-    search = GridSearchCV(
-        estimator=base_model,
-        param_grid=param_dist,
-        scoring="roc_auc",
-        cv=cv_search,
-        verbose=2 if args.verbose else 1,
-        n_jobs=args.n_jobs,
-    )
-    
     search_start = time.time()
-    search.fit(X_development, y_development)
+    
+    # Iterate through all parameter combinations
+    for combo_idx, params in enumerate(param_combinations, 1):
+        if combo_idx % 10 == 0 or combo_idx == 1 or combo_idx == total_combinations:
+            print(f"🔍 Evaluating combination {combo_idx}/{total_combinations}")
+            print(f"   Parameters: {params}")
+        
+        # Evaluate this parameter combination with K-fold CV
+        combo_scores = []
+        
+        for fold_idx, (train_idx, val_idx) in enumerate(cv_search.split(X_development, y_development), 1):
+            X_combo_train = X_development.iloc[train_idx]
+            y_combo_train = y_development.iloc[train_idx]
+            X_combo_val = X_development.iloc[val_idx]
+            y_combo_val = y_development.iloc[val_idx]
+            
+            # Split training data for early stopping
+            X_inner_train, X_inner_val, y_inner_train, y_inner_val = train_test_split(
+                X_combo_train, y_combo_train,
+                test_size=args.val_size,
+                random_state=args.random_state,
+                stratify=y_combo_train
+            )
+            
+            # Train model with current parameters
+            combo_model = LGB_CLASS(
+                **params,
+                random_state=args.random_state,
+                n_jobs=args.n_jobs,
+                device_type=device_type
+            )
+            
+            combo_trainer = Trainer(
+                model=combo_model,
+                X_train=X_inner_train,
+                y_train=y_inner_train,
+                X_val=X_inner_val,
+                y_val=y_inner_val
+            )
+            
+            # Train with early stopping
+            if args.early_stopping_rounds > 0:
+                combo_trainer.fit(early_stopping_rounds=args.early_stopping_rounds, verbose=False)
+            else:
+                combo_trainer.fit()
+            
+            # Evaluate on fold's validation set
+            fold_metrics, _, _ = combo_trainer.evaluate(X_combo_val, y_combo_val)
+            combo_scores.append(fold_metrics['roc_auc'])
+        
+        # Calculate mean score for this parameter combination
+        mean_score_combo = np.mean(combo_scores)
+        std_score_combo = np.std(combo_scores)
+        
+        all_search_results.append({
+            'params': params,
+            'mean_score': mean_score_combo,
+            'std_score': std_score_combo,
+            'fold_scores': combo_scores
+        })
+        
+        if combo_idx % 10 == 0 or combo_idx == 1 or combo_idx == total_combinations:
+            print(f"   Mean ROC-AUC: {mean_score_combo:.4f} ± {std_score_combo:.4f}")
+        
+        # Update best parameters
+        if mean_score_combo > best_score:
+            best_score = mean_score_combo
+            best_params = params
+            print(f"   >>> 🏆 New best score: {best_score:.4f}")
+    
     search_time = time.time() - search_start
     
-    print(f"\n✅ Hyperparameter search completed in {search_time:.2f} seconds")
-    print(f"🏆 Best CV ROC-AUC: {search.best_score_:.4f}")
+    print(f"\n{'='*60}")
+    print("✅ Hyperparameter search completed")
+    print(f"{'='*60}")
+    print(f"⏱️  Search time: {search_time:.2f} seconds")
+    print(f"🏆 Best CV ROC-AUC: {best_score:.4f}")
     print(f"📋 Best parameters:")
-    best_params = search.best_params_
+    best_params = best_params
     for k, v in best_params.items():
         print(f"   {k}: {v}")
     
-    # STEP 3: K-Fold Training with Nested Early Stopping
-    print("\n🔍 Phase 2b: K-Fold Evaluation with Early Stopping...")
-    print(f"Training {args.n_splits} models with best parameters and early stopping\n")
+    # STEP 3: K-Fold Training with Nested Early Stopping using best parameters
+    print("\n" + "="*60)
+    print("� Step 3: Final K-Fold CV with Best Parameters")
+    print("="*60)
+    print(f"Re-training with best parameters to collect detailed metrics across {args.n_splits} folds\n")
     
     cv_kfold = StratifiedKFold(n_splits=args.n_splits, shuffle=True, random_state=args.random_state)
     
@@ -524,9 +557,25 @@ def train_model(args: argparse.Namespace):
     out_dir = Path(args.output_dir)
     os.makedirs(out_dir, exist_ok=True)
 
-    # Save visualizations
-    print_section("📊 Generating Visualizations", "-")
-    save_visualizations(y_final_test, y_final_proba, y_final_pred, out_dir)
+    # Save comprehensive visualizations
+    print_section("📊 Generating Comprehensive Visualizations", "-")
+    
+    # Main visualizations (ROC, PR, Confusion Matrix, Calibration, Feature Importance)
+    save_visualizations(
+        y_final_test, y_final_proba, y_final_pred, out_dir,
+        model=final_model, X=X_final_test, feature_names=X.columns.tolist()
+    )
+    
+    # Learning curves
+    save_learning_curves(
+        final_model, X_development, y_development, out_dir, cv=args.n_splits
+    )
+    
+    # Validation curves from hyperparameter search
+    save_validation_curves(all_search_results, out_dir)
+    
+    # Metrics comparison across folds
+    save_metrics_comparison(fold_details, out_dir)
 
     # Save model and artifacts
     print_section("💾 Saving Results", "-")
