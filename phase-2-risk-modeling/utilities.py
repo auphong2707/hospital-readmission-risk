@@ -33,22 +33,54 @@ from sklearn.model_selection import learning_curve
 # ENVIRONMENT AND HARDWARE DETECTION
 # ============================================================================
 
-def detect_gpu():
+def detect_gpu(verbose: bool = False):
     """Detect if GPU is available for LightGBM.
+    
+    Args:
+        verbose: If True, print detailed error information when GPU is not available
     
     Returns:
         bool: True if GPU is available and functional, False otherwise
     """
     try:
         import lightgbm as lgb
-        # Try to create a simple dataset and train with GPU
-        X_test = np.random.rand(10, 5)
-        y_test = np.random.randint(0, 2, 10)
-        lgb_train = lgb.Dataset(X_test, y_test)
-        params = {'device': 'gpu', 'verbose': -1}
-        lgb.train(params, lgb_train, num_boost_round=1, verbose_eval=False)
+        import warnings
+        
+        # Suppress warnings during GPU detection
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            
+            # Try to create a simple dataset and train with GPU
+            X_test = np.random.rand(10, 5)
+            y_test = np.random.randint(0, 2, 10)
+            lgb_train = lgb.Dataset(X_test, y_test)
+            params = {'device': 'gpu', 'verbose': -1}
+            
+            # Attempt to train - this will fail if GPU is not properly configured
+            lgb.train(params, lgb_train, num_boost_round=1)
+            
+        if verbose:
+            print("   ✅ GPU detected and verified working with LightGBM")
         return True
-    except Exception:
+        
+    except Exception as e:
+        if verbose:
+            error_msg = str(e).lower()
+            print(f"   ❌ GPU not available: {type(e).__name__}")
+            
+            # Provide helpful diagnostics
+            if 'cuda' in error_msg or 'opencl' in error_msg:
+                print(f"      Reason: {e}")
+                print("      💡 Possible fixes:")
+                print("         - Install GPU-enabled LightGBM: pip install lightgbm --config-settings=cmake.define.USE_GPU=ON")
+                print("         - Check CUDA/OpenCL installation")
+                print("         - Verify GPU drivers are up to date")
+            elif 'boost' in error_msg.lower():
+                print("      Reason: LightGBM may not be compiled with GPU support")
+                print("      💡 Install GPU version: pip install lightgbm --config-settings=cmake.define.USE_GPU=ON")
+            else:
+                print(f"      Reason: {e}")
+        
         return False
 
 

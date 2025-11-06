@@ -694,13 +694,9 @@ def main():
         args.n_jobs = max(1, cpu_count - 1) if cpu_count > 2 else 1
         print(f"   ✅ Local environment: using {args.n_jobs} CPU cores (leaving 1 free)")
     
-    # Auto-detect and enable GPU if available
-    gpu_available = detect_gpu()
+    # Auto-detect and enable GPU if available (verbose=True to show detailed info)
+    gpu_available = detect_gpu(verbose=True)
     args.use_gpu = gpu_available
-    if gpu_available:
-        print(f"   ✅ GPU detected and will be used for training")
-    else:
-        print(f"   ℹ️  No GPU detected, using CPU")
     
     # Set output directory
     if args.output_dir is None:
