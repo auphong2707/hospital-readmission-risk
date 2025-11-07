@@ -45,7 +45,6 @@ The risk modeling phase implements multiple machine learning algorithms to predi
 
 ### Hyperparameter Optimization
 - **Grid Search**: Systematic parameter space exploration
-- **Random Search**: Efficient sampling for large parameter spaces
 - **Early Stopping**: Prevents overfitting during training
 
 ## 📊 Expected Deliverables
