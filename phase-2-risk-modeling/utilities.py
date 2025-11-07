@@ -167,21 +167,21 @@ def run_preprocessing(preprocess_script: Path) -> None:
 def get_lgbm_param_grid():
     """Get default LightGBM parameter grid for hyperparameter search.
     
-    Returns a balanced grid for thorough but practical search:
-    - 4 × 4 × 3 × 3 × 3 × 3 × 2 × 2 = 2,592 combinations
-    - With 5-fold CV = 12,960 model fits
-    - Estimated time: 2-4 hours on CPU (depends on data size)
+    Returns a balanced grid for efficient but thorough search:
+    - 3 × 3 × 3 × 2 × 2 × 2 × 2 × 2 = 864 combinations
+    - With 5-fold CV = 4,320 model fits
+    - Estimated time: 1-2 hours on CPU (depends on data size)
     
     Returns:
         dict: Parameter grid with parameter names as keys and lists of values
     """
     return {
-        "n_estimators": [100, 200, 300, 400],
-        "learning_rate": [0.03, 0.05, 0.08, 0.1],
+        "n_estimators": [50, 100, 150],
+        "learning_rate": [0.01, 0.05, 0.1],
         "num_leaves": [31, 63, 127],
-        "max_depth": [-1, 6, 10],
-        "subsample": [0.7, 0.8, 0.9],
-        "colsample_bytree": [0.7, 0.8, 1.0],
+        "max_depth": [-1, 10],
+        "subsample": [0.7, 0.9],
+        "colsample_bytree": [0.7, 1.0],
         "reg_alpha": [0.0, 0.1],      # L1 regularization
         "reg_lambda": [0.0, 0.1],     # L2 regularization
     }
