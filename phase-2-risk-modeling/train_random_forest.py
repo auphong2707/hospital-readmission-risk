@@ -2,10 +2,23 @@
 Random Forest Training for Hospital Readmission Risk Prediction
 ===============================================================
 
-Ensemble model with comprehensive configuration:
+Ensemble model with comprehensive configuration and robust evaluation pipeline:
+
+Evaluation Pipeline:
+1. Final Holdout Split: Split entire dataset into development_set and final_test_set
+   - final_test_set remains untouched until final evaluation
+2. Hyperparameter Search: Grid search with K-fold CV to find best parameters
+   - Each parameter combination evaluated with K-fold CV on development set
+   - Evaluate on fold's holdout set
+3. K-Fold Cross-Validation with best parameters:
+   - Perform K-fold CV only on development_set with best parameters
+   - Calculate CV statistics (mean, std, confidence intervals)
+4. Train final model on full development_set
+5. Final evaluation on untouched final_test_set
+
+Features:
 - 100-500 trees with optimized depth tuning
 - Feature importance analysis for interpretability
-- Temporal validation: Train (1999-2005), Validation (2006-2007), Test (2008)
 - Stratified K-fold cross-validation (k=5)
 - Grid search for hyperparameter optimization
 - Out-of-bag error estimation
@@ -27,81 +40,25 @@ import time
 import json
 from datetime import datetime
 from typing import Dict, Optional
+from pathlib import Path
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import GridSearchCV, StratifiedKFold
+from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import make_scorer, roc_auc_score
 import matplotlib.pyplot as plt
+import seaborn as sns
 
-# Import our custom utilities
-from utils import ModelEvaluator, HuggingFaceUploader
+# Import utilities
+from utilities import (
+    calculate_comprehensive_metrics,
+    print_metrics_table,
+    save_visualizations,
+    print_section,
+    upload_results_to_hf,
+    load_data
+)
 
 warnings.filterwarnings('ignore')
-
-
-class TemporalSplitter:
-    """
-    Simulates temporal validation by splitting data chronologically.
-    
-    Since the dataset doesn't have actual dates, we simulate temporal splits:
-    - 70% for training (simulating 1999-2005)
-    - 15% for validation (simulating 2006-2007)
-    - 15% for test (simulating 2008)
-    """
-    
-    def __init__(self, train_ratio=0.70, val_ratio=0.15, random_state=42):
-        self.train_ratio = train_ratio
-        self.val_ratio = val_ratio
-        self.test_ratio = 1.0 - train_ratio - val_ratio
-        self.random_state = random_state
-        
-    def split(self, X, y):
-        """
-        Split data into train, validation, and test sets temporally.
-        
-        Args:
-            X: Feature matrix
-            y: Target vector
-            
-        Returns:
-            X_train, X_val, X_test, y_train, y_val, y_test
-        """
-        n_samples = len(X)
-        
-        # Set random seed for reproducibility
-        np.random.seed(self.random_state)
-        
-        # Create shuffled indices
-        indices = np.arange(n_samples)
-        np.random.shuffle(indices)
-        
-        # Calculate split points
-        train_end = int(n_samples * self.train_ratio)
-        val_end = int(n_samples * (self.train_ratio + self.val_ratio))
-        
-        # Split indices
-        train_idx = indices[:train_end]
-        val_idx = indices[train_end:val_end]
-        test_idx = indices[val_end:]
-        
-        # Split data
-        X_train = X.iloc[train_idx] if isinstance(X, pd.DataFrame) else X[train_idx]
-        X_val = X.iloc[val_idx] if isinstance(X, pd.DataFrame) else X[val_idx]
-        X_test = X.iloc[test_idx] if isinstance(X, pd.DataFrame) else X[test_idx]
-        
-        y_train = y.iloc[train_idx] if isinstance(y, pd.Series) else y[train_idx]
-        y_val = y.iloc[val_idx] if isinstance(y, pd.Series) else y[val_idx]
-        y_test = y.iloc[test_idx] if isinstance(y, pd.Series) else y[test_idx]
-        
-        print(f"\n{'='*70}")
-        print("Temporal Data Split (Simulated)")
-        print(f"{'='*70}")
-        print(f"Training set (1999-2005):   {len(X_train):,} samples ({self.train_ratio*100:.1f}%)")
-        print(f"Validation set (2006-2007): {len(X_val):,} samples ({self.val_ratio*100:.1f}%)")
-        print(f"Test set (2008):            {len(X_test):,} samples ({self.test_ratio*100:.1f}%)")
-        print(f"{'='*70}\n")
-        
-        return X_train, X_val, X_test, y_train, y_val, y_test
 
 
 class RandomForestTrainer:
@@ -114,7 +71,6 @@ class RandomForestTrainer:
     - Out-of-bag error estimation
     - Stratified K-fold cross-validation
     - Grid search optimization
-    - Temporal validation
     - Feature importance analysis
     """
     
@@ -124,33 +80,6 @@ class RandomForestTrainer:
         self.grid_search = None
         self.feature_names = None
         self.oob_scores = []
-        
-    def load_data(self, data_dir="./data/processed"):
-        """Load preprocessed features and target."""
-        print(f"\n{'='*70}")
-        print("Loading Preprocessed Data")
-        print(f"{'='*70}")
-        
-        # Load features and target
-        features_path = data_dir + "/features.csv"
-        target_path = data_dir + "/target.csv"
-
-        print(f"Loading features from: {features_path}")
-        X = pd.read_csv(features_path)
-        
-        print(f"Loading target from: {target_path}")
-        y = pd.read_csv(target_path)['target']
-        
-        self.feature_names = X.columns.tolist()
-        
-        print(f"\n✅ Data loaded successfully!")
-        print(f"   Features shape: {X.shape}")
-        print(f"   Target shape: {y.shape}")
-        print(f"   Number of features: {len(self.feature_names)}")
-        print(f"   Target distribution: {dict(y.value_counts())}")
-        print(f"{'='*70}\n")
-        
-        return X, y
     
     def create_hyperparameter_grid(self):
         """
@@ -301,35 +230,30 @@ class RandomForestTrainer:
         Returns:
             Dictionary of metrics
         """
-        print(f"\n{'='*70}")
-        print(f"Evaluating on {set_name} Set")
-        print(f"{'='*70}")
+        print_section(f"Evaluating on {set_name} Set", "-")
         
         # Make predictions
         y_pred = self.best_model.predict(X)
         y_prob = self.best_model.predict_proba(X)[:, 1]
         
-        # Create evaluator
-        evaluator = ModelEvaluator(model_name=f"Random_Forest_{set_name}")
-        
         # Calculate metrics
-        metrics = evaluator.calculate_clinical_metrics(y, y_pred, y_prob)
+        metrics = calculate_comprehensive_metrics(y, y_prob, threshold=0.5)
         
         # Print metrics
-        evaluator.print_metrics(metrics)
+        print_metrics_table(metrics, f"Random Forest - {set_name} Set")
         
         # Generate plots if output directory provided
         if output_dir:
-            set_output_dir = os.path.join(output_dir, set_name.lower().replace(" ", "_"))
-            os.makedirs(set_output_dir, exist_ok=True)
+            set_output_dir = Path(output_dir) / set_name.lower().replace(" ", "_")
+            set_output_dir.mkdir(parents=True, exist_ok=True)
             
-            # Generate full report with plots
-            evaluator.generate_full_report(
-                y, y_pred, y_prob,
-                feature_names=self.feature_names,
-                feature_importance=self.best_model.feature_importances_,
-                output_dir=set_output_dir
+            # Generate visualizations
+            save_visualizations(
+                y, y_prob, y_pred, set_output_dir,
+                model=self.best_model, X=X, feature_names=self.feature_names
             )
+        
+        return metrics
         
         return metrics
     
@@ -437,8 +361,9 @@ class RandomForestTrainer:
         plt.tight_layout()
         
         if output_dir:
-            os.makedirs(output_dir, exist_ok=True)
-            save_path = os.path.join(output_dir, 'cv_results_analysis.png')
+            output_dir = Path(output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            save_path = output_dir / 'cv_results_analysis.png'
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"✅ CV results plot saved to: {save_path}")
         
@@ -485,79 +410,20 @@ class RandomForestTrainer:
         plt.tight_layout()
         
         if output_dir:
-            os.makedirs(output_dir, exist_ok=True)
-            save_path = os.path.join(output_dir, 'detailed_feature_importance.png')
+            output_dir = Path(output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            save_path = output_dir / 'detailed_feature_importance.png'
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"✅ Detailed feature importance plot saved to: {save_path}")
             
             # Save to CSV
-            csv_path = os.path.join(output_dir, 'feature_importance_ranking.csv')
+            csv_path = output_dir / 'feature_importance_ranking.csv'
             importance_df.to_csv(csv_path, index=False)
             print(f"✅ Feature importance ranking saved to: {csv_path}")
         
         plt.close()
         
         return importance_df
-    
-    def upload_to_huggingface(self, 
-                             model_path: str,
-                             metadata_path: str,
-                             metrics: Dict[str, Dict[str, float]],
-                             repo_id: str,
-                             hf_token: Optional[str] = None,
-                             private: bool = False,
-                             metrics_json_path: Optional[str] = None,
-                             summary_json_path: Optional[str] = None) -> Optional[str]:
-        """
-        Upload trained model to HuggingFace Hub.
-        
-        Args:
-            model_path: Path to the saved model
-            metadata_path: Path to the metadata file
-            metrics: Dictionary containing train/val/test metrics
-            repo_id: HuggingFace repository ID (username/model-name)
-            hf_token: HuggingFace API token (if None, uses environment variable)
-            private: Whether to make the repository private
-            metrics_json_path: Path to metrics JSON file (optional)
-            summary_json_path: Path to training summary JSON file (optional)
-            
-        Returns:
-            URL to the uploaded model, or None if upload fails
-        """
-        try:
-            uploader = HuggingFaceUploader(hf_token=hf_token)
-            
-            description = """
-This Random Forest ensemble model provides robust predictions for hospital readmission risk.
-It uses 100-500 decision trees with optimized depth tuning and feature selection.
-
-**Key Features:**
-- Ensemble of decision trees for robust predictions
-- Feature importance analysis for interpretability
-- Out-of-bag error estimation for additional validation
-- Handles non-linear relationships and feature interactions
-- Optimized via 5-fold cross-validation with grid search
-"""
-            
-            repo_url = uploader.upload_model(
-                model_path=model_path,
-                metadata_path=metadata_path,
-                repo_id=repo_id,
-                metrics=metrics,
-                model_type="Random Forest",
-                description=description,
-                private=private,
-                commit_message="Upload Random Forest model for hospital readmission prediction",
-                metrics_json_path=metrics_json_path,
-                summary_json_path=summary_json_path
-            )
-            
-            return repo_url
-            
-        except Exception as e:
-            print(f"\n⚠️  Failed to upload to HuggingFace: {str(e)}")
-            print("You can manually upload later using the saved model files.")
-            return None
 
 
 def main(hf_repo_id: Optional[str] = None,
@@ -581,146 +447,309 @@ def main(hf_repo_id: Optional[str] = None,
     print(f"  - Ensemble of 100-500 decision trees")
     print(f"  - Depth tuning and feature selection")
     print(f"  - Out-of-bag error estimation")
-    print(f"  - Temporal validation (1999-2005 train, 2006-2007 val, 2008 test)")
+    print(f"  - Robust evaluation: 85% development, 15% final holdout")
     print(f"  - Stratified 5-fold cross-validation")
     print(f"  - Grid search hyperparameter optimization")
     print(f"  - Feature importance analysis")
     print(f"{'='*70}\n")
     
+    start_time = time.time()
+    
     # Initialize trainer
     trainer = RandomForestTrainer(random_state=42)
     
-    # Load preprocessed data
-    X, y = trainer.load_data()
+    # STEP 1: Load preprocessed data and create final holdout split
+    print_section("📊 Step 1: Load Data & Create Final Holdout Split", "=")
+    X, y = load_data()
+    trainer.feature_names = X.columns.tolist()
     
-    # Temporal split
-    splitter = TemporalSplitter(train_ratio=0.70, val_ratio=0.15, random_state=42)
-    X_train, X_val, X_test, y_train, y_val, y_test = splitter.split(X, y)
+    print(f"Total samples: {len(X)}")
+    print(f"Number of features: {len(trainer.feature_names)}")
+    print(f"Target distribution: {dict(y.value_counts())}")
     
-    # Train with cross-validation and grid search
-    print("🚀 Starting model training...")
-    best_model = trainer.train_with_cv(X_train, y_train, n_folds=5)
+    # Create final holdout split (85% development, 15% final test)
+    X_development, X_final_test, y_development, y_final_test = train_test_split(
+        X, y, 
+        test_size=0.15, 
+        random_state=42,
+        stratify=y
+    )
     
-    # Evaluate on all sets
-    output_dir = "../reports/random_forest"
+    print(f"\n✅ Final holdout split created:")
+    print(f"   Development set: {len(X_development)} samples ({len(X_development)/len(X)*100:.1f}%)")
+    print(f"   Final test set: {len(X_final_test)} samples ({len(X_final_test)/len(X)*100:.1f}%)")
+    
+    # STEP 2: Hyperparameter search with K-fold CV on development set
+    print_section("🔍 Step 2: Hyperparameter Search with Cross-Validation", "=")
+    print("Performing grid search with 5-fold stratified CV on development set...")
+    
+    best_model = trainer.train_with_cv(X_development, y_development, n_folds=5)
+    best_params = trainer.grid_search.best_params_
+    best_cv_score = trainer.grid_search.best_score_
+    
+    print(f"\n✅ Hyperparameter search completed")
+    print(f"🏆 Best CV ROC-AUC: {best_cv_score:.4f}")
+    print(f"📋 Best parameters:")
+    for k, v in best_params.items():
+        print(f"   {k}: {v}")
+    
+    # STEP 3: K-Fold CV with best parameters to collect statistics
+    print_section("📊 Step 3: K-Fold Cross-Validation with Best Parameters", "=")
+    print(f"Re-training with best parameters to collect detailed metrics across 5 folds\n")
+    
+    cv_kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    fold_scores = []
+    fold_details = []
+    
+    for fold_idx, (train_idx, test_idx) in enumerate(cv_kfold.split(X_development, y_development), 1):
+        print(f"\n{'='*60}")
+        print(f"📁 Fold {fold_idx}/5")
+        print(f"{'='*60}")
+        
+        # Get fold data
+        X_fold_train = X_development.iloc[train_idx]
+        y_fold_train = y_development.iloc[train_idx]
+        X_fold_test = X_development.iloc[test_idx]
+        y_fold_test = y_development.iloc[test_idx]
+        
+        print(f"   Fold train size: {len(X_fold_train)}")
+        print(f"   Fold test size: {len(X_fold_test)}")
+        
+        # Train model with best parameters
+        fold_model = RandomForestClassifier(**best_params, random_state=42, n_jobs=-1)
+        fold_model.fit(X_fold_train, y_fold_train)
+        
+        # Evaluate on fold test set
+        y_fold_pred = fold_model.predict(X_fold_test)
+        y_fold_proba = fold_model.predict_proba(X_fold_test)[:, 1]
+        
+        fold_metrics = calculate_comprehensive_metrics(y_fold_test, y_fold_pred, y_fold_proba)
+        
+        print(f"\n   📊 Fold {fold_idx} Results:")
+        print(f"      ROC-AUC: {fold_metrics['roc_auc']:.4f}")
+        print(f"      Precision: {fold_metrics['precision']:.4f}")
+        print(f"      Recall: {fold_metrics['recall']:.4f}")
+        print(f"      F1: {fold_metrics['f1']:.4f}")
+        
+        fold_scores.append(fold_metrics['roc_auc'])
+        fold_details.append({
+            'fold': fold_idx,
+            'metrics': fold_metrics,
+            'train_size': len(X_fold_train),
+            'test_size': len(X_fold_test),
+            'oob_score': float(fold_model.oob_score_) if hasattr(fold_model, 'oob_score_') else None
+        })
+    
+    # Calculate CV statistics
+    print_section("📊 Cross-Validation Results", "=")
+    fold_scores_array = pd.Series(fold_scores)
+    mean_score = fold_scores_array.mean()
+    std_score = fold_scores_array.std()
+    
+    print(f"🎯 Cross-Validation ROC-AUC Scores:")
+    for i, score in enumerate(fold_scores, 1):
+        print(f"   Fold {i}: {score:.4f}")
+    print(f"\n   {'─'*40}")
+    print(f"   Mean ROC-AUC:   {mean_score:.4f}")
+    print(f"   Std Dev:        {std_score:.4f}")
+    print(f"   95% CI:         [{mean_score - 1.96*std_score:.4f}, {mean_score + 1.96*std_score:.4f}]")
+    print(f"   {'─'*40}")
+    
+    # STEP 4: Train final model on development set with validation monitoring
+    print_section("🏗️  Step 4: Training Final Model on Development Set with Validation", "-")
+    print("Training final model with validation split for monitoring...")
+    
+    # Split development set for validation monitoring
+    X_dev_train, X_dev_val, y_dev_train, y_dev_val = train_test_split(
+        X_development, y_development,
+        test_size=0.15,
+        random_state=42,
+        stratify=y_development
+    )
+    
+    print(f"   Inner train size: {len(X_dev_train)}")
+    print(f"   Inner val size: {len(X_dev_val)}")
+    
+    # Train final model
+    final_model = RandomForestClassifier(**best_params, random_state=42, n_jobs=-1)
+    final_model.fit(X_dev_train, y_dev_train)
+    trainer.best_model = final_model
+    
+    # Monitor validation performance
+    y_dev_val_proba = final_model.predict_proba(X_dev_val)[:, 1]
+    dev_val_auc = roc_auc_score(y_dev_val, y_dev_val_proba)
+    
+    print(f"✅ Final model trained on {len(X_dev_train)} samples")
+    if hasattr(final_model, 'oob_score_'):
+        print(f"   OOB Score: {final_model.oob_score_:.4f}")
+    print(f"   Validation AUC-ROC: {dev_val_auc:.4f}")
+    
+    # STEP 5: Final evaluation on untouched test set
+    print_section("🎯 Step 5: Final Evaluation on Untouched Test Set", "=")
+    print("Evaluating final model on the untouched final test set...")
+    
+    y_final_pred = final_model.predict(X_final_test)
+    y_final_proba = final_model.predict_proba(X_final_test)[:, 1]
+    
+    final_metrics = calculate_comprehensive_metrics(y_final_test, y_final_pred, y_final_proba)
+    print_metrics_table(final_metrics, "🎯 FINAL TEST SET RESULTS")
+    
+    print(f"\n📈 Model Performance Summary:")
+    print(f"   Cross-Validation (Development Set):")
+    print(f"      Mean ROC-AUC: {mean_score:.4f} ± {std_score:.4f}")
+    print(f"   Final Test Set (Untouched Holdout):")
+    print(f"      ROC-AUC: {final_metrics['roc_auc']:.4f}")
+    
+    # Create output directories
+    output_dir = Path("../models")
+    reports_dir = Path("../reports/random_forest")
     os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(reports_dir, exist_ok=True)
     
-    train_metrics = trainer.evaluate_model(X_train, y_train, "Training", output_dir)
-    val_metrics = trainer.evaluate_model(X_val, y_val, "Validation", output_dir)
-    test_metrics = trainer.evaluate_model(X_test, y_test, "Test", output_dir)
+    # Save comprehensive visualizations
+    print_section("📊 Generating Comprehensive Visualizations", "-")
+    save_visualizations(
+        y_final_test, y_final_proba, y_final_pred, reports_dir,
+        model=final_model, X=X_final_test, feature_names=trainer.feature_names
+    )
     
     # Plot CV results
-    trainer.plot_cv_results(output_dir)
+    trainer.plot_cv_results(str(reports_dir))
     
     # Plot detailed feature importance
-    trainer.plot_feature_importance_detailed(output_dir, top_n=30)
+    trainer.plot_feature_importance_detailed(str(reports_dir), top_n=30)
     
     # Save model
-    model_path = trainer.save_model(output_dir="../models")
-    
-    # Collect all metrics for HuggingFace upload
-    all_metrics = {
-        'train': train_metrics,
-        'val': val_metrics,
-        'test': test_metrics
-    }
+    print_section("💾 Saving Results", "-")
+    model_path = trainer.save_model(output_dir=str(output_dir))
     
     # Save metrics as JSON
-    metrics_json_path = "../models/random_forest_metrics.json"
+    metrics_json_path = output_dir / "random_forest_metrics.json"
     with open(metrics_json_path, 'w') as f:
-        # Convert numpy types to native Python types for JSON serialization
-        json_metrics = {}
-        for set_name, metrics in all_metrics.items():
-            json_metrics[set_name] = {k: float(v) if isinstance(v, (np.integer, np.floating)) else int(v) if isinstance(v, (int, np.integer)) else v 
-                                      for k, v in metrics.items()}
-        json.dump(json_metrics, f, indent=4)
-    print(f"✅ Metrics saved to: {metrics_json_path}")
+        json.dump(final_metrics, f, indent=2)
+    print(f"✅ Metrics saved: {metrics_json_path}")
     
-    # Save training summary with best config
+    # Save fold details
+    fold_details_path = output_dir / "random_forest_cv_fold_details.json"
+    with open(fold_details_path, 'w') as f:
+        json.dump(fold_details, f, indent=2)
+    print(f"✅ Fold details saved: {fold_details_path}")
+    
+    # Create comprehensive training summary
+    total_time = time.time() - start_time
     training_summary = {
-        'model_type': 'Random Forest',
+        'model': 'Random Forest',
+        'task': 'Hospital 30-Day Readmission Risk Prediction',
         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        'best_hyperparameters': trainer.grid_search.best_params_,
-        'best_cv_score': float(trainer.grid_search.best_score_),
-        'oob_score': float(trainer.best_model.oob_score_) if hasattr(trainer.best_model, 'oob_score_') else None,
-        'n_features': len(trainer.feature_names),
-        'data_split': {
-            'train_size': len(X_train),
-            'val_size': len(X_val),
-            'test_size': len(X_test),
-            'train_ratio': 0.70,
-            'val_ratio': 0.15,
-            'test_ratio': 0.15
+        'evaluation_pipeline': {
+            'description': 'Robust nested CV with final holdout and validation monitoring',
+            'final_holdout_size': 0.15,
+            'inner_val_size': 0.15,
+            'k_folds': 5,
+            'cv_strategy': 'StratifiedKFold'
         },
+        'data': {
+            'total_samples': len(X),
+            'development_size': len(X_development),
+            'dev_train_size': len(X_dev_train),
+            'dev_val_size': len(X_dev_val),
+            'final_test_size': len(X_final_test),
+            'n_features': len(trainer.feature_names)
+        },
+        'best_hyperparameters': best_params,
+        'oob_score': float(final_model.oob_score_) if hasattr(final_model, 'oob_score_') else None,
         'cross_validation': {
-            'n_folds': 5,
-            'strategy': 'StratifiedKFold',
-            'scoring_metric': 'AUC-ROC'
+            'mean_roc_auc': float(mean_score),
+            'std_roc_auc': float(std_score),
+            'fold_scores': [float(s) for s in fold_scores],
+            'n_folds': 5
         },
-        'final_metrics': json_metrics,
-        'random_state': trainer.random_state
+        'validation_monitoring': {
+            'dev_val_auc': float(dev_val_auc)
+        },
+        'final_test_metrics': final_metrics,
+        'total_time_seconds': total_time,
+        'random_state': 42
     }
     
-    summary_json_path = "../models/random_forest_training_summary.json"
+    summary_json_path = output_dir / "random_forest_training_summary.json"
     with open(summary_json_path, 'w') as f:
-        json.dump(training_summary, f, indent=4)
-    print(f"✅ Training summary saved to: {summary_json_path}")
+        json.dump(training_summary, f, indent=2)
+    print(f"✅ Training summary saved: {summary_json_path}")
     
     # Auto-upload to HuggingFace if token is available
     hf_url = None
-    if HuggingFaceUploader.is_token_available() or hf_token:
-        print(f"\n{'='*70}")
-        print("🚀 HuggingFace Token Detected - Preparing Upload")
-        print(f"{'='*70}")
+    hf_token_from_env = os.getenv('HF_TOKEN')
+    hf_username = os.getenv('HF_USERNAME', 'auphong2707')
+    
+    if hf_token_from_env or hf_token:
+        print_section("🚀 HuggingFace Upload", "-")
         
-        # Use default repo_id if not provided
+        # Prepare summary for upload
+        summary = {
+            'model_name': 'Random Forest',
+            'model_type': 'random-forest',
+            'best_params': best_params,
+            'best_cv_score': float(best_cv_score),
+            'cv_mean_score': float(mean_score),
+            'cv_std_score': float(std_score),
+            'oob_score': float(final_model.oob_score_) if hasattr(final_model, 'oob_score_') else None,
+            'final_test_metrics': final_metrics,
+            'n_features': len(trainer.feature_names),
+            'feature_names': trainer.feature_names,
+            'data_split': {
+                'development_size': len(X_development),
+                'final_test_size': len(X_final_test)
+            },
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+        # Use provided repo_id or construct from username
         if hf_repo_id is None:
-            hf_repo_id = "auphong2707/random-forest"
+            hf_repo_id = f"{hf_username}/random-forest"
             print(f"⚠️  No repo_id provided. Using default: {hf_repo_id}")
-            print(f"💡 To specify your own repo, pass: hf_repo_id='username/model-name'")
         
-        metadata_path = "../models/random_forest_metadata.pkl"
-        hf_url = trainer.upload_to_huggingface(
-            model_path=model_path,
-            metadata_path=metadata_path,
-            metrics=all_metrics,
-            repo_id=hf_repo_id,
-            hf_token=hf_token,
-            private=hf_private,
-            metrics_json_path=metrics_json_path,
-            summary_json_path=summary_json_path
+        # Upload to HuggingFace
+        upload_success = upload_results_to_hf(
+            summary=summary,
+            output_dir=str(output_dir),
+            model_name="Random Forest",
+            hf_repo_name=hf_repo_id,
+            hf_token=hf_token or hf_token_from_env,
+            metrics_json_path=str(metrics_json_path),
+            summary_json_path=str(summary_json_path)
         )
+        
+        if upload_success:
+            hf_url = f"https://huggingface.co/{hf_repo_id}"
     else:
-        print(f"\n{'='*70}")
-        print("ℹ️  No HuggingFace Token Found - Skipping Upload")
-        print(f"{'='*70}")
+        print_section("ℹ️  No HuggingFace Token Found - Skipping Upload", "-")
         print("To enable auto-upload, set HF_TOKEN environment variable.")
         print("Get your token from: https://huggingface.co/settings/tokens")
-        print(f"{'='*70}")
     
     # Final summary
-    print(f"\n{'='*70}")
-    print("TRAINING COMPLETE!")
-    print(f"{'='*70}")
+    print_section("✅ TRAINING COMPLETE!", "=")
     print(f"\n📊 Final Performance Summary:")
-    print(f"  Training AUC-ROC:   {train_metrics['auc_roc']:.4f}")
-    print(f"  Validation AUC-ROC: {val_metrics['auc_roc']:.4f}")
-    print(f"  Test AUC-ROC:       {test_metrics['auc_roc']:.4f}")
+    print(f"  Cross-Validation ROC-AUC: {mean_score:.4f} ± {std_score:.4f}")
+    print(f"  Final Test ROC-AUC:       {final_metrics['roc_auc']:.4f}")
     
-    if hasattr(trainer.best_model, 'oob_score_'):
-        print(f"\n  Out-of-Bag Score:   {trainer.best_model.oob_score_:.4f}")
+    if hasattr(final_model, 'oob_score_'):
+        print(f"  Out-of-Bag Score:         {final_model.oob_score_:.4f}")
     
+    print(f"\n⏱️  Total training time: {total_time:.2f} seconds")
     print(f"\n📁 Outputs saved to:")
     print(f"  Model: {model_path}")
     print(f"  Metrics JSON: {metrics_json_path}")
     print(f"  Training Summary JSON: {summary_json_path}")
-    print(f"  Reports: {output_dir}")
+    print(f"  Fold Details JSON: {fold_details_path}")
+    print(f"  Reports: {reports_dir}")
     if hf_url:
         print(f"  HuggingFace: {hf_url}")
     print(f"{'='*70}\n")
     
-    return trainer, train_metrics, val_metrics, test_metrics
+    return trainer, final_metrics
 
 
 if __name__ == "__main__":
-    trainer, train_metrics, val_metrics, test_metrics = main()
+    trainer, final_metrics = main()
+
