@@ -45,7 +45,6 @@ The risk modeling phase implements multiple machine learning algorithms to predi
 
 ### Hyperparameter Optimization
 - **Grid Search**: Systematic parameter space exploration
-- **Random Search**: Efficient sampling for large parameter spaces
 - **Early Stopping**: Prevents overfitting during training
 
 ## 📊 Expected Deliverables
@@ -125,9 +124,15 @@ python phase-2-risk-modeling/train_neural_network.py
 python phase-2-risk-modeling/model_comparison.py
 ```
 
+## 📈 Expected Plots
+- Learning curves for each model
+- Validation curves for hyperparameter tuning
+- ROC / PR curves for readability calibration
+- Feature importance / SHAP value plots
+
 ## 📈 Expected Performance Metrics
 
-- **Primary Metrics**: AUC-ROC, Precision, Recall, F1-Score
+- **Primary Metrics**: AUC-ROC, Precision, Recall, F1-Score, Accuracy, Specificity (TNR), FPR, F1-score, and Balanced Accuracy
 - **Clinical Metrics**: Sensitivity, Specificity, PPV, NPV
 - **Fairness Metrics**: Performance across demographic groups
 - **Calibration**: Probability calibration assessment

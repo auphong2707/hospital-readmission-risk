@@ -7,6 +7,7 @@ DATASET_DOWNLOAD_LINK = "https://archive.ics.uci.edu/static/public/296/diabetes+
 
 
 def download_and_extract_dataset():
+    """Download and extract the diabetes dataset."""
     # Check if data exists
     if os.path.exists('data/diabetic_data.csv') and os.path.exists('data/IDS_mapping.csv'):
         print("Dataset already exists. Skipping download.")
