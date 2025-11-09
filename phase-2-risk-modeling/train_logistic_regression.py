@@ -89,31 +89,36 @@ class LogisticRegressionTrainer:
         Includes:
         - Regularization strength (C): controls overfitting
         - Penalty type: L1 (Lasso), L2 (Ridge), Elastic Net
+        - Solver: liblinear for L1/L2, saga for Elastic Net
         - L1 ratio: mixing parameter for Elastic Net (only used when penalty='elasticnet')
         - Class weights: balanced vs custom ratios
+        
+        Note: We create separate parameter combinations for different penalty-solver pairs:
+        - L1 + liblinear
+        - L2 + liblinear
+        - elasticnet + saga
         """
-        param_grid = {
-            # Regularization strength (inverse of regularization: smaller = more regularization)
+        # Base parameters for L1 and L2 with liblinear solver
+        param_grid_l1_l2 = {
             'C': [0.001, 0.01, 0.1, 1.0, 10.0, 100.0],
-            
-            # Penalty type: L1, L2, or Elastic Net
-            'penalty': ['l1', 'l2', 'elasticnet'],
-            
-            # Solver compatibility: 'saga' supports all penalty types including elasticnet
-            'solver': ['saga'],
-            
-            # L1 ratio for Elastic Net (0 = L2, 1 = L1, 0.5 = equal mix)
-            # Only used when penalty='elasticnet'
-            'l1_ratio': [0.25, 0.5, 0.75],
-            
-            # Class weight balancing
+            'penalty': ['l1', 'l2'],
+            'solver': ['liblinear'],
             'class_weight': ['balanced', {0: 1, 1: 8}],
-            
-            # Maximum iterations
             'max_iter': [2000]
         }
         
-        return param_grid
+        # Parameters for Elastic Net with saga solver
+        param_grid_elasticnet = {
+            'C': [0.001, 0.01, 0.1, 1.0, 10.0, 100.0],
+            'penalty': ['elasticnet'],
+            'solver': ['saga'],
+            'l1_ratio': [0.25, 0.5, 0.75],
+            'class_weight': ['balanced', {0: 1, 1: 8}],
+            'max_iter': [2000]
+        }
+        
+        # Return list of parameter grids for GridSearchCV
+        return [param_grid_l1_l2, param_grid_elasticnet]
     
     def train_with_cv(self, X_train, y_train, n_folds=5):
         """
@@ -132,20 +137,23 @@ class LogisticRegressionTrainer:
         print(f"{'='*70}")
         
         # Create parameter grid
-        param_grid = self.create_hyperparameter_grid()
+        param_grids = self.create_hyperparameter_grid()
         
         print(f"Grid search configuration:")
         print(f"  Number of CV folds: {n_folds}")
         print(f"  Stratification: Yes (balanced across readmission classes)")
         print(f"  Scoring metric: AUC-ROC")
+        print(f"  Penalty-Solver combinations:")
+        print(f"    - L1/L2: liblinear (efficient for these penalties)")
+        print(f"    - ElasticNet: saga (supports l1_ratio parameter)")
         
-        # Calculate total combinations (considering l1_ratio is only used with elasticnet)
-        # For L1 and L2: C * class_weight combinations each
-        # For elasticnet: C * l1_ratio * class_weight combinations
-        base_combos = len(param_grid['C']) * len(param_grid['class_weight'])
-        elasticnet_combos = base_combos * len(param_grid['l1_ratio'])
-        total_combos = 2 * base_combos + elasticnet_combos  # 2 for L1 and L2
-        print(f"  Total combinations: ~{total_combos}")
+        # Calculate total combinations
+        # L1 and L2: 6 C values * 2 penalties * 2 class_weights = 24
+        # Elasticnet: 6 C values * 3 l1_ratios * 2 class_weights = 36
+        l1_l2_combos = 6 * 2 * 2  # C * penalties * class_weight
+        elasticnet_combos = 6 * 3 * 2  # C * l1_ratio * class_weight
+        total_combos = l1_l2_combos + elasticnet_combos
+        print(f"  Total combinations: {total_combos} (L1/L2: {l1_l2_combos}, ElasticNet: {elasticnet_combos})")
         
         # Create stratified K-fold splitter
         cv_splitter = StratifiedKFold(
@@ -164,7 +172,7 @@ class LogisticRegressionTrainer:
         # Create grid search with AUC-ROC scoring
         self.grid_search = GridSearchCV(
             estimator=base_model,
-            param_grid=param_grid,
+            param_grid=param_grids,  # List of parameter grids
             cv=cv_splitter,
             scoring='roc_auc',
             n_jobs=-1,
@@ -174,15 +182,10 @@ class LogisticRegressionTrainer:
         )
         
         # Calculate total number of fits
-        # L1 and L2 each: C * class_weight combinations
-        # Elasticnet: C * l1_ratio * class_weight combinations
-        base_combos = len(param_grid['C']) * len(param_grid['class_weight'])
-        elasticnet_combos = base_combos * len(param_grid['l1_ratio'])
-        total_combinations = 2 * base_combos + elasticnet_combos
-        total_fits = total_combinations * n_folds
+        total_fits = total_combos * n_folds
         
         print(f"\n🔄 Starting grid search...")
-        print(f"📊 Training {total_combinations} hyperparameter combinations with {n_folds}-fold CV")
+        print(f"📊 Training {total_combos} hyperparameter combinations with {n_folds}-fold CV")
         print(f"📈 Total model fits: {total_fits}")
         print(f"⏱️  Progress will be displayed below with timing for each fit...\n")
         print(f"{'='*70}")
