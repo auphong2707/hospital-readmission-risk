@@ -715,9 +715,7 @@ def main(hf_repo_id: Optional[str] = None,
             output_dir=str(output_dir),
             model_name="Random Forest",
             hf_repo_name=hf_repo_id,
-            hf_token=hf_token or hf_token_from_env,
-            metrics_json_path=str(metrics_json_path),
-            summary_json_path=str(summary_json_path)
+            hf_token=hf_token or hf_token_from_env
         )
         
         if upload_success:

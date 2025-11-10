@@ -32,17 +32,12 @@ import pandas as pd
 import os
 import time
 import json
-import joblib
-from datetime import datetime
-from pathlib import Path
 import pickle
-import os
 import warnings
-import time
-import json
 from datetime import datetime
-from typing import Dict, Optional
 from pathlib import Path
+from typing import Dict, Optional
+
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -437,7 +432,7 @@ def main(hf_repo_id: Optional[str] = None,
         X_fold_test_scaled = scaler.transform(X_fold_test)
         
         # Train model with best parameters
-        fold_model = LogisticRegression(**best_params, random_state=42, max_iter=1000)
+        fold_model = LogisticRegression(**best_params, random_state=42)
         fold_model.fit(X_fold_train_scaled, y_fold_train)
         
         # Evaluate on fold test set
@@ -495,7 +490,7 @@ def main(hf_repo_id: Optional[str] = None,
     X_dev_val_scaled = trainer.scaler.transform(X_dev_val)
     
     # Train final model
-    final_model = LogisticRegression(**best_params, random_state=42, max_iter=1000)
+    final_model = LogisticRegression(**best_params, random_state=42)
     final_model.fit(X_dev_train_scaled, y_dev_train)
     trainer.best_model = final_model
     
@@ -633,9 +628,7 @@ def main(hf_repo_id: Optional[str] = None,
             output_dir=str(output_dir),
             model_name="Logistic Regression",
             hf_repo_name=hf_repo_id,
-            hf_token=hf_token or hf_token_from_env,
-            metrics_json_path=str(metrics_json_path),
-            summary_json_path=str(summary_json_path)
+            hf_token=hf_token or hf_token_from_env
         )
         
         if upload_success:
