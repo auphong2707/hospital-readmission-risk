@@ -54,6 +54,8 @@ from utilities import (
     save_learning_curves,
     save_validation_curves,
     save_metrics_comparison,
+    calculate_permutation_importance,
+    save_permutation_importance,
     detect_gpu,
     is_kaggle_environment,
     print_section,
@@ -250,6 +252,29 @@ class NNTrainer:
             val_loss = self.criterion(outputs, self.y_val).item()
         self.model.train()
         return val_loss
+    
+    def predict_proba(self, X: np.ndarray):
+        """Predict class probabilities (required for permutation_importance).
+        
+        Args:
+            X: Features to predict on
+            
+        Returns:
+            array: Probabilities for each class [P(class=0), P(class=1)]
+        """
+        self.model.eval()
+        
+        # Scale features
+        X_scaled = self.scaler.transform(X)
+        X_tensor = torch.FloatTensor(X_scaled).to(self.device)
+        
+        # Get predictions
+        with torch.no_grad():
+            proba_pos = self.model(X_tensor).cpu().numpy().flatten()
+        
+        # Return probabilities for both classes
+        proba_neg = 1 - proba_pos
+        return np.column_stack([proba_neg, proba_pos])
     
     def evaluate(self, X: np.ndarray, y: np.ndarray, threshold: float = 0.5):
         """Evaluate model with comprehensive metrics.
@@ -630,11 +655,40 @@ def train_model(args: argparse.Namespace):
         model=None, X=None, feature_names=None  # NN doesn't have built-in feature importance
     )
     
+    # Learning curves
+    save_learning_curves(
+        final_model, X_development, y_development, out_dir, cv=args.n_splits
+    )
+    
     # Validation curves
     save_validation_curves(all_search_results, out_dir)
     
     # Metrics comparison
     save_metrics_comparison(fold_details, out_dir)
+    
+    # Feature importance using permutation importance
+    print_section("🔍 Calculating Feature Importance", "-")
+    print("Using permutation importance method (model-agnostic)...")
+    
+    # Get feature names from original data
+    if isinstance(X, pd.DataFrame):
+        feature_names = X.columns.tolist()
+    else:
+        feature_names = [f'Feature {i}' for i in range(X_array.shape[1])]
+    
+    # Calculate permutation importance on test set
+    importance_dict = calculate_permutation_importance(
+        model=final_trainer,
+        X=X_final_test,
+        y=y_final_test,
+        feature_names=feature_names,
+        n_repeats=10,
+        random_state=args.random_state
+    )
+    
+    # Save permutation importance plots and CSV
+    if importance_dict is not None:
+        save_permutation_importance(importance_dict, out_dir, top_n=20)
 
     # Save model and artifacts
     print_section("💾 Saving Results", "-")

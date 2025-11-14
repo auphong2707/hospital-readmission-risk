@@ -27,6 +27,7 @@ from sklearn.metrics import (
 )
 from sklearn.calibration import calibration_curve
 from sklearn.model_selection import learning_curve
+from sklearn.inspection import permutation_importance
 
 
 # ============================================================================
@@ -512,6 +513,134 @@ def save_learning_curves(model, X_train, y_train, output_dir: Path, cv=5, scorin
         print(f"   ✅ Learning curves saved: {lc_path}")
     except Exception as e:
         print(f"   ⚠️  Could not generate learning curves: {e}")
+
+
+def calculate_permutation_importance(
+    model, 
+    X, 
+    y, 
+    feature_names=None,
+    n_repeats=10, 
+    random_state=42,
+    scoring='roc_auc'
+):
+    """
+    Calculate permutation importance for any model (including neural networks).
+    
+    Permutation importance works by randomly shuffling each feature and measuring
+    the decrease in model performance. Features that cause large decreases in
+    performance when shuffled are considered important.
+    
+    Args:
+        model: Trained model (must have predict_proba or predict method)
+        X: Feature matrix (numpy array or pandas DataFrame)
+        y: True labels
+        feature_names: List of feature names (optional)
+        n_repeats: Number of times to permute each feature (default: 10)
+        random_state: Random seed for reproducibility
+        scoring: Scoring metric to use (default: 'roc_auc')
+        
+    Returns:
+        dict: Dictionary with 'importances_mean', 'importances_std', 'feature_names'
+    """
+    print(f"🔍 Calculating permutation importance (n_repeats={n_repeats})...")
+    
+    try:
+        # Get feature names
+        if feature_names is None:
+            if hasattr(X, 'columns'):
+                feature_names = X.columns.tolist()
+            else:
+                feature_names = [f'Feature {i}' for i in range(X.shape[1])]
+        
+        # Convert to numpy if needed
+        X_array = X.values if hasattr(X, 'values') else X
+        y_array = y.values if hasattr(y, 'values') else y
+        
+        # Calculate permutation importance
+        result = permutation_importance(
+            model, X_array, y_array,
+            n_repeats=n_repeats,
+            random_state=random_state,
+            scoring=scoring,
+            n_jobs=-1
+        )
+        
+        print(f"   ✅ Permutation importance calculated")
+        
+        return {
+            'importances_mean': result.importances_mean,
+            'importances_std': result.importances_std,
+            'feature_names': feature_names
+        }
+    except Exception as e:
+        print(f"   ⚠️  Error calculating permutation importance: {e}")
+        return None
+
+
+def save_permutation_importance(
+    importance_dict,
+    output_dir: Path,
+    top_n=20
+):
+    """
+    Save permutation importance plots and CSV.
+    
+    Args:
+        importance_dict: Dictionary from calculate_permutation_importance
+        output_dir: Directory to save the plots
+        top_n: Number of top features to display (default: 20)
+    """
+    if importance_dict is None:
+        print("   ⚠️  No importance data to save")
+        return
+    
+    print(f"💾 Saving permutation importance (top {top_n} features)...")
+    output_dir = Path(output_dir)
+    
+    try:
+        importances_mean = importance_dict['importances_mean']
+        importances_std = importance_dict['importances_std']
+        feature_names = importance_dict['feature_names']
+        
+        # Get top features
+        indices = np.argsort(importances_mean)[::-1][:top_n]
+        top_features = [feature_names[i] for i in indices]
+        top_importances = importances_mean[indices]
+        top_std = importances_std[indices]
+        
+        # Create plot
+        plt.figure(figsize=(10, 8))
+        colors = plt.cm.viridis(np.linspace(0.3, 0.9, len(top_features)))
+        y_pos = range(len(top_features))
+        
+        plt.barh(y_pos, top_importances, xerr=top_std, color=colors, alpha=0.8)
+        plt.yticks(y_pos, top_features)
+        plt.xlabel('Permutation Importance (decrease in ROC-AUC)', fontsize=12)
+        plt.ylabel('Features', fontsize=12)
+        plt.title(f'Top {top_n} Feature Importances (Permutation Method)', 
+                 fontsize=14, fontweight='bold')
+        plt.gca().invert_yaxis()
+        plt.tight_layout()
+        
+        fi_path = output_dir / "feature_importance_permutation.png"
+        plt.savefig(fi_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        print(f"   ✅ Permutation importance plot saved: {fi_path}")
+        
+        # Save as CSV
+        fi_df = pd.DataFrame({
+            'feature': feature_names,
+            'importance_mean': importances_mean,
+            'importance_std': importances_std
+        }).sort_values('importance_mean', ascending=False)
+        
+        fi_csv_path = output_dir / "feature_importance_permutation.csv"
+        fi_df.to_csv(fi_csv_path, index=False)
+        print(f"   ✅ Permutation importance CSV saved: {fi_csv_path}")
+        
+    except Exception as e:
+        print(f"   ⚠️  Error saving permutation importance: {e}")
 
 
 def save_validation_curves(search_results, output_dir: Path):
