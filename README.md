@@ -60,13 +60,12 @@ The dataset represents 10 years (1999-2008) of clinical care at 130 US hospitals
   - Handle class imbalance (30-day readmission: 11.2%)
 
 #### 2. Risk Modeling
-- 🔲 **Develop predictive models for 30-day readmission risk**
+- ✅ **Develop predictive models for 30-day readmission risk**
 - **Model candidates with specific configurations:**
   - **Logistic Regression (baseline)**: L1/L2 regularization, class weights for imbalance
   - **Random Forest**: 100-500 trees, max_depth tuning, feature importance extraction
   - **Gradient Boosting**: XGBoost/LightGBM with early stopping, DART/GOSS sampling
-  - **Neural Networks**: Dense layers with dropout, batch normalization
-- 🔲 **Cross-validation and hyperparameter tuning**
+- ✅ **Cross-validation and hyperparameter tuning**
   - **Stratified K-fold** (k=5) for readmission classes
   - **Grid/Random search** for hyperparameters
   - **Early stopping** to prevent overfitting
