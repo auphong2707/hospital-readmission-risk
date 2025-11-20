@@ -441,9 +441,9 @@ def generate_comparison_report(y_test, uncalibrated_proba, calibrated_proba, out
     comparison_path = output_path / "calibration_comparison_metrics.json"
     with open(comparison_path, 'w') as f:
         # Convert numpy types to Python types for JSON
-        metrics_json = json.loads(
-            json.dumps(metrics, default=lambda x: float(x) if isinstance(x, np.floating) else x)
-        )
+        # Import the safe converter to avoid circular reference errors
+        from utilities import convert_to_serializable
+        metrics_json = convert_to_serializable(metrics)
         json.dump(metrics_json, f, indent=2)
     print(f"   ✅ Comparison metrics saved: {comparison_path}")
 

@@ -976,6 +976,44 @@ class CalibrationVisualizer:
         return fig
 
 
+def convert_to_serializable(obj):
+    """
+    Recursively convert numpy types and other non-serializable objects to Python native types.
+    
+    Handles nested dictionaries, lists, numpy arrays, and numpy scalars.
+    Prevents circular reference errors by creating new objects instead of modifying in place.
+    
+    Parameters:
+    -----------
+    obj : any
+        Object to convert
+        
+    Returns:
+    --------
+    Serializable Python object
+    """
+    if isinstance(obj, (np.integer, np.int64, np.int32)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float64, np.float32)):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: convert_to_serializable(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_serializable(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_to_serializable(item) for item in obj)
+    elif isinstance(obj, (str, int, float, bool, type(None))):
+        return obj
+    else:
+        # For any other type, try to convert to string as fallback
+        try:
+            return str(obj)
+        except:
+            return None
+
+
 class CalibrationReport:
     """
     Generate comprehensive calibration reports.
@@ -1085,9 +1123,8 @@ class CalibrationReport:
         # Save metrics as JSON
         with open(output_path / f"{model_name.replace(' ', '_')}_metrics.json", 'w') as f:
             # Convert numpy types to Python types for JSON serialization
-            metrics_json = json.loads(
-                json.dumps(metrics, default=lambda x: float(x) if isinstance(x, np.floating) else x)
-            )
+            # Use recursive converter to avoid circular reference errors
+            metrics_json = convert_to_serializable(metrics)
             json.dump(metrics_json, f, indent=2)
         
         # Generate text report
