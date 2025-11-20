@@ -264,7 +264,9 @@ class ModelCalibrator:
         
         if self.method == 'sigmoid':
             # Platt scaling: fit logistic regression on predicted probabilities
-            self.calibrator = LogisticRegression(penalty='none', solver='lbfgs')
+            # Use penalty=None (not the string 'none') to disable regularization
+            # and increase max_iter for robust convergence on large datasets.
+            self.calibrator = LogisticRegression(penalty=None, solver='lbfgs', max_iter=1000)
             # Reshape for sklearn
             X = y_pred_proba.reshape(-1, 1)
             self.calibrator.fit(X, y_true)
