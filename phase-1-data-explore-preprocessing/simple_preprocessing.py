@@ -30,9 +30,8 @@ class CompletePreprocessor:
     - CV-safe target encoding for high-cardinality categoricals
     - StandardScaler/RobustScaler normalization
     
-    NOTE: Class imbalance is handled via class_weight parameter in models (not preprocessing).
+    NOTE: Class imbalance is handled via class_weight parameter in models.
     NOTE: For sklearn Pipeline compatibility, use this class within a custom transformer.
-          Feature relevance checks performed during modeling phase, not preprocessing.
     
     Usage:
         preprocessor = CompletePreprocessor(scaler_type='standard')
@@ -306,7 +305,7 @@ class CompletePreprocessor:
             )
             print("Created care utilization risk score")
         
-        # 3. Age group categories (ordered buckets per README)
+        # 3. Age group categories
         if 'age' in data.columns:
             # Convert age ranges to numeric midpoints
             age_mapping = {
@@ -462,11 +461,7 @@ class CompletePreprocessor:
             data_path: Path to the data file
             
         Returns:
-            X, y: Preprocessed features and target (natural class distribution)
-        
-        Note:
-            Class imbalance should be handled in modeling via class_weight parameter,
-            not through resampling in preprocessing (per README specifications).
+            X, y: Preprocessed features and target
         """
         print("=" * 80)
         print("COMPLETE HOSPITAL READMISSION PREPROCESSING PIPELINE (100% README COVERAGE)")
@@ -519,7 +514,7 @@ class CompletePreprocessor:
         print(f"✅ Feature scaling ({self.scaler_type.capitalize()}Scaler): Applied")
         print(f"\n📊 Final dataset: {X.shape[0]} samples, {X.shape[1]} features")
         print(f"📊 Target distribution: {dict(pd.Series(y).value_counts())}")
-        print(f"\n⚠️  Class imbalance handling: Use class_weight parameter in models (per README)")
+        print(f"\n⚠️  Class imbalance handling: Use class_weight parameter in models.")
         
         return X, y
     
