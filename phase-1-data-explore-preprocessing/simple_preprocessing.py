@@ -10,7 +10,6 @@ interaction features, and multiple encoding strategies.
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler, RobustScaler, LabelEncoder
-from imblearn.over_sampling import SMOTE
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -30,7 +29,10 @@ class CompletePreprocessor:
     - One-hot encoding for low-cardinality categoricals
     - CV-safe target encoding for high-cardinality categoricals
     - StandardScaler/RobustScaler normalization
-    - SMOTE class balancing
+    
+    NOTE: Class imbalance is handled via class_weight parameter in models (not preprocessing).
+    NOTE: For sklearn Pipeline compatibility, use this class within a custom transformer.
+          Feature relevance checks performed during modeling phase, not preprocessing.
     
     Usage:
         preprocessor = CompletePreprocessor(scaler_type='standard')
@@ -304,21 +306,34 @@ class CompletePreprocessor:
             )
             print("Created care utilization risk score")
         
-        # 3. Age group categories
+        # 3. Age group categories (ordered buckets per README)
         if 'age' in data.columns:
-            # Convert age ranges to numeric midpoints for categorization
+            # Convert age ranges to numeric midpoints
             age_mapping = {
                 '[0-10)': 5, '[10-20)': 15, '[20-30)': 25, '[30-40)': 35, '[40-50)': 45,
                 '[50-60)': 55, '[60-70)': 65, '[70-80)': 75, '[80-90)': 85, '[90-100)': 95
             }
             data['age_numeric'] = data['age'].map(age_mapping).fillna(65)  # Default to 65
             
-            # Create age groups
-            data['age_young'] = (data['age_numeric'] < 40).astype(int)
-            data['age_adult'] = ((data['age_numeric'] >= 40) & (data['age_numeric'] < 65)).astype(int)
-            data['age_senior'] = ((data['age_numeric'] >= 65) & (data['age_numeric'] < 80)).astype(int)
-            data['age_elderly'] = (data['age_numeric'] >= 80).astype(int)
-            print("Created age group categories")
+            # Create ordered categorical age buckets (clinically meaningful)
+            def bucket_age(age_val):
+                if age_val < 40:
+                    return 'Young'  # 0-39
+                elif age_val < 65:
+                    return 'Adult'  # 40-64
+                elif age_val < 80:
+                    return 'Senior'  # 65-79
+                else:
+                    return 'Elderly'  # 80+
+            
+            data['age_bucket'] = data['age_numeric'].apply(bucket_age)
+            # Convert to ordered categorical
+            data['age_bucket'] = pd.Categorical(
+                data['age_bucket'],
+                categories=['Young', 'Adult', 'Senior', 'Elderly'],
+                ordered=True
+            )
+            print("Created ordered age buckets: Young, Adult, Senior, Elderly")
         
         # 4. BMI categories (estimated from weight ranges)
         if 'weight' in data.columns:
@@ -344,6 +359,9 @@ class CompletePreprocessor:
         if all(col in data.columns for col in ['num_medications', 'number_diagnoses']):
             data['med_diagnosis_interaction'] = data['num_medications'] * data['number_diagnoses']
             print("Created medications × diagnoses interaction")
+        
+        # Note: Feature relevance checks (statistical & model-based) performed during modeling
+        # This includes: chi-square tests, mutual information, model-based feature importance
         
         return data
     
@@ -436,31 +454,19 @@ class CompletePreprocessor:
         X_scaled = self.scaler.fit_transform(X)
         return pd.DataFrame(X_scaled, columns=X.columns, index=X.index)
     
-    def balance_classes(self, X, y):
-        """Balance classes using SMOTE."""
-        print("Balancing classes with SMOTE...")
-        
-        original_counts = y.value_counts()
-        print(f"Original class distribution: {dict(original_counts)}")
-        
-        smote = SMOTE(random_state=self.random_state)
-        X_balanced, y_balanced = smote.fit_resample(X, y)
-        
-        balanced_counts = pd.Series(y_balanced).value_counts()
-        print(f"Balanced class distribution: {dict(balanced_counts)}")
-        
-        return X_balanced, y_balanced
-    
-    def fit_transform(self, data_path="./data/diabetic_data.csv", balance_classes=True):
+    def fit_transform(self, data_path="./data/diabetic_data.csv"):
         """
         Complete preprocessing pipeline covering 100% of README requirements.
         
         Args:
             data_path: Path to the data file
-            balance_classes: Whether to apply SMOTE balancing
             
         Returns:
-            X, y: Preprocessed features and target
+            X, y: Preprocessed features and target (natural class distribution)
+        
+        Note:
+            Class imbalance should be handled in modeling via class_weight parameter,
+            not through resampling in preprocessing (per README specifications).
         """
         print("=" * 80)
         print("COMPLETE HOSPITAL READMISSION PREPROCESSING PIPELINE (100% README COVERAGE)")
@@ -488,16 +494,12 @@ class CompletePreprocessor:
         # Step 7: Encode features (one-hot + CV-safe target encoding)
         data = self.encode_features(data, is_training=True)
         
-        # Step 7: Separate features and target
+        # Step 8: Separate features and target
         X = data.drop('target', axis=1)
         y = data['target']
         
-        # Step 8: Scale features (StandardScaler)
+        # Step 9: Scale features
         X = self.scale_features(X)
-        
-        # Step 9: Balance classes with SMOTE
-        if balance_classes:
-            X, y = self.balance_classes(X, y)
         
         print("\n" + "=" * 80)
         print("COMPLETE PREPROCESSING FINISHED - 100% README REQUIREMENTS COVERED!")
@@ -515,9 +517,9 @@ class CompletePreprocessor:
         print(f"✅ One-hot encoding (low-cardinality): Applied")
         print(f"✅ CV-safe target encoding (high-cardinality): Applied")
         print(f"✅ Feature scaling ({self.scaler_type.capitalize()}Scaler): Applied")
-        print(f"✅ Class balancing (SMOTE): Applied")
         print(f"\n📊 Final dataset: {X.shape[0]} samples, {X.shape[1]} features")
         print(f"📊 Target distribution: {dict(pd.Series(y).value_counts())}")
+        print(f"\n⚠️  Class imbalance handling: Use class_weight parameter in models (per README)")
         
         return X, y
     
@@ -572,7 +574,7 @@ class CompletePreprocessor:
             f.write("- One-hot encoding for low-cardinality categoricals\n")
             f.write("- CV-safe target encoding for high-cardinality categoricals\n")
             f.write(f"- {self.scaler_type.capitalize()}Scaler normalization\n")
-            f.write("- SMOTE class balancing\n\n")
+            f.write("\nNote: Class imbalance handled via class_weight in models (not preprocessing)\n\n")
             f.write(f"Feature Names ({len(X.columns)} total):\n")
             for i, col in enumerate(X.columns, 1):
                 f.write(f"{i:3d}. {col}\n")
