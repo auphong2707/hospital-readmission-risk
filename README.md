@@ -41,23 +41,24 @@ The dataset represents 10 years (1999-2008) of clinical care at 130 US hospitals
 ### Planned Approach
 
 #### 1. Data Exploration & Preprocessing
-- ✅ **Exploratory data analysis (EDA) to understand data distributions** *(COMPLETED)*
-- ✅ **Handle missing values and outliers**
-  - Replace '?' values with appropriate missing indicators
-  - Handle A1C (83% missing) and weight (97% missing) strategically
-  - Apply outlier treatment for numerical features (IQR method)
-  - Create missing value indicators for important clinical features
-- ✅ **Feature engineering and selection**
-  - Create 30-day readmission binary target
-  - Engineer medication complexity scores
-  - Create care utilization risk scores
-  - Generate age group and BMI categories
-  - Build interaction features (length of stay × medication complexity)
-- ✅ **Data encoding and normalization**
-  - One-hot encode categorical variables with <10 categories
-  - Target encode high-cardinality features (diagnoses codes)
-  - Scale numerical features (StandardScaler/MinMaxScaler)
-  - Handle class imbalance (30-day readmission: 11.2%)
+* ✅ **Exploratory data analysis (EDA) to understand data distributions** *(COMPLETED)*
+* ✅ **Handle missing values and ensure data quality**
+  * Replace `'?'` placeholders with `NaN`
+  * Assess missingness patterns (MCAR/MAR/MNAR)
+  * Apply median/mode or group-wise imputation based on feature type
+  * Add binary `is_missing` indicators for clinically relevant variables
+  * Validate value ranges, data types, and domain constraints
+* ✅ **Feature engineering and selection**
+  * Create binary 30-day readmission target
+  * Bucket age into clinically meaningful ordered categories
+  * Aggregate diagnosis codes into higher-level groups
+  * Build utilization features through counts and group-by statistics
+  * Perform feature relevance checks using statistical and model-based methods
+* ✅ **Data encoding and normalization**
+  * One-hot encode low-cardinality categorical variables
+  * Target encode high-cardinality categorical variables using CV-safe encoding
+  * Scale numerical features using StandardScaler/RobustScaler
+  * Implement preprocessing inside sklearn Pipelines to avoid data leakage
 
 #### 2. Risk Modeling
 - ✅ **Develop predictive models for 30-day readmission risk**
