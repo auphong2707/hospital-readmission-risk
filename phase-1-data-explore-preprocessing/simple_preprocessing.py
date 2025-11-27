@@ -9,7 +9,10 @@ interaction features, and multiple encoding strategies.
 
 import pandas as pd
 import numpy as np
+import os
+import json
 from sklearn.preprocessing import StandardScaler, RobustScaler, LabelEncoder
+from sklearn.model_selection import train_test_split
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -520,7 +523,6 @@ class CompletePreprocessor:
     
     def save_processed_data(self, X, y, output_dir="./data/processed"):
         """Save the processed data to specified directory."""
-        import os
         
         print(f"\n💾 Saving processed data to {output_dir}/...")
         
@@ -583,6 +585,239 @@ class CompletePreprocessor:
             'target': target_file,
             'metadata': metadata_file
         }
+    
+    def create_train_test_split(self, X, y, test_size=0.15, val_size=0.15, output_dir="./data/processed"):
+        """
+        Create train/validation/test splits and save them for ML workflows.
+        
+        Args:
+            X: Features dataframe
+            y: Target series
+            test_size: Proportion for test set (default 0.15 = 15%)
+            val_size: Proportion for validation set from remaining data (default 0.15)
+            output_dir: Directory to save split datasets
+            
+        Returns:
+            Dictionary with split data paths and split information
+        """
+        
+        print(f"\n📊 Creating train/validation/test splits...")
+        print(f"Split strategy: Train: ~{(1-test_size)*(1-val_size)*100:.0f}%, Val: ~{(1-test_size)*val_size*100:.0f}%, Test: {test_size*100:.0f}%")
+        
+        # First split: separate test set
+        X_temp, X_test, y_temp, y_test = train_test_split(
+            X, y, 
+            test_size=test_size, 
+            random_state=self.random_state,
+            stratify=y  # Stratify to maintain class distribution
+        )
+        
+        # Second split: separate validation from training
+        val_size_adjusted = val_size / (1 - test_size)  # Adjust val_size for remaining data
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_temp, y_temp,
+            test_size=val_size_adjusted,
+            random_state=self.random_state,
+            stratify=y_temp
+        )
+        
+        # Print split statistics
+        print(f"\n✅ Split completed:")
+        print(f"   Training set: {X_train.shape[0]:,} samples ({X_train.shape[0]/len(X)*100:.1f}%)")
+        print(f"   Validation set: {X_val.shape[0]:,} samples ({X_val.shape[0]/len(X)*100:.1f}%)")
+        print(f"   Test set: {X_test.shape[0]:,} samples ({X_test.shape[0]/len(X)*100:.1f}%)")
+        
+        print(f"\n📈 Class distribution:")
+        print(f"   Training: {dict(pd.Series(y_train).value_counts())}")
+        print(f"   Validation: {dict(pd.Series(y_val).value_counts())}")
+        print(f"   Test: {dict(pd.Series(y_test).value_counts())}")
+        
+        # Create splits directory
+        splits_dir = os.path.join(output_dir, "splits")
+        os.makedirs(splits_dir, exist_ok=True)
+        
+        # Save training set
+        train_file = os.path.join(splits_dir, "train.csv")
+        train_data = X_train.copy()
+        train_data['target'] = y_train
+        train_data.to_csv(train_file, index=False)
+        print(f"\n💾 Saved training set: {train_file}")
+        
+        # Save validation set
+        val_file = os.path.join(splits_dir, "validation.csv")
+        val_data = X_val.copy()
+        val_data['target'] = y_val
+        val_data.to_csv(val_file, index=False)
+        print(f"💾 Saved validation set: {val_file}")
+        
+        # Save test set
+        test_file = os.path.join(splits_dir, "test.csv")
+        test_data = X_test.copy()
+        test_data['target'] = y_test
+        test_data.to_csv(test_file, index=False)
+        print(f"💾 Saved test set: {test_file}")
+        
+        # Save split info
+        split_info_file = os.path.join(splits_dir, "split_info.txt")
+        with open(split_info_file, 'w') as f:
+            f.write("Train/Validation/Test Split Information\n")
+            f.write("=" * 60 + "\n\n")
+            f.write(f"Random seed: {self.random_state}\n")
+            f.write(f"Stratified split: Yes (maintains class distribution)\n\n")
+            f.write(f"Training set: {X_train.shape[0]:,} samples ({X_train.shape[0]/len(X)*100:.1f}%)\n")
+            f.write(f"Validation set: {X_val.shape[0]:,} samples ({X_val.shape[0]/len(X)*100:.1f}%)\n")
+            f.write(f"Test set: {X_test.shape[0]:,} samples ({X_test.shape[0]/len(X)*100:.1f}%)\n\n")
+            f.write(f"Class distribution:\n")
+            f.write(f"  Training - No readmission: {(y_train==0).sum():,}, Readmission: {(y_train==1).sum():,}\n")
+            f.write(f"  Validation - No readmission: {(y_val==0).sum():,}, Readmission: {(y_val==1).sum():,}\n")
+            f.write(f"  Test - No readmission: {(y_test==0).sum():,}, Readmission: {(y_test==1).sum():,}\n")
+        
+        print(f"💾 Saved split info: {split_info_file}")
+        print(f"\n📁 All splits saved in: {splits_dir}/")
+        
+        return {
+            'train': train_file,
+            'validation': val_file,
+            'test': test_file,
+            'split_info': split_info_file,
+            'X_train': X_train,
+            'X_val': X_val,
+            'X_test': X_test,
+            'y_train': y_train,
+            'y_val': y_val,
+            'y_test': y_test
+        }
+    
+    def export_for_huggingface(self, X, y, output_dir="./data/processed/huggingface"):
+        """
+        Export processed data in Hugging Face compatible format.
+        Creates a dataset card and proper structure for upload.
+        
+        Args:
+            X: Features dataframe
+            y: Target series
+            output_dir: Directory for HuggingFace export
+            
+        Returns:
+            Dictionary with export paths and dataset card
+        """
+        
+        print(f"\n🤗 Preparing data for Hugging Face upload...")
+        
+        # Create HuggingFace directory
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Combine features and target
+        dataset = X.copy()
+        dataset['target'] = y
+        
+        # Save full dataset
+        full_dataset_file = os.path.join(output_dir, "hospital_readmission_full.csv")
+        dataset.to_csv(full_dataset_file, index=False)
+        print(f"✅ Saved full dataset: {full_dataset_file}")
+        
+        # Create train/val/test splits for HuggingFace
+        splits = self.create_train_test_split(X, y, output_dir=output_dir)
+        
+        # Create README/dataset card for HuggingFace
+        readme_file = os.path.join(output_dir, "README.md")
+        with open(readme_file, 'w') as f:
+            f.write("# Hospital Readmission Risk - Preprocessed Dataset\n\n")
+            f.write("## Dataset Description\n\n")
+            f.write("This dataset contains preprocessed hospital readmission data for diabetic patients.\n")
+            f.write("The goal is to predict 30-day hospital readmissions to enable proactive interventions.\n\n")
+            
+            f.write("## Dataset Summary\n\n")
+            f.write(f"- **Total samples**: {len(dataset):,}\n")
+            f.write(f"- **Features**: {len(X.columns)}\n")
+            f.write(f"- **Target**: Binary (0=No readmission, 1=Readmission within 30 days)\n")
+            f.write(f"- **Class distribution**: No readmission: {(y==0).sum():,} ({(y==0).sum()/len(y)*100:.1f}%), ")
+            f.write(f"Readmission: {(y==1).sum():,} ({(y==1).sum()/len(y)*100:.1f}%)\n\n")
+            
+            f.write("## Data Splits\n\n")
+            f.write(f"- **Training**: {splits['X_train'].shape[0]:,} samples\n")
+            f.write(f"- **Validation**: {splits['X_val'].shape[0]:,} samples\n")
+            f.write(f"- **Test**: {splits['X_test'].shape[0]:,} samples\n\n")
+            
+            f.write("## Preprocessing Applied\n\n")
+            f.write("1. **Missing Value Handling**: Median/mode imputation with group-wise strategies\n")
+            f.write("2. **Data Validation**: Value ranges, data types, and domain constraints checked\n")
+            f.write("3. **Outlier Treatment**: IQR-based winsorization\n")
+            f.write("4. **Feature Engineering**:\n")
+            f.write("   - Diagnosis code aggregation into clinical categories\n")
+            f.write("   - Utilization features (group-by statistics)\n")
+            f.write("   - Medication complexity scores\n")
+            f.write("   - Age/BMI categorical buckets\n")
+            f.write("   - Interaction features\n")
+            f.write("5. **Encoding**: One-hot (low-cardinality) + CV-safe target encoding (high-cardinality)\n")
+            f.write("6. **Normalization**: StandardScaler applied\n\n")
+            
+            f.write("## Usage\n\n")
+            f.write("```python\n")
+            f.write("import pandas as pd\n\n")
+            f.write("# Load full dataset\n")
+            f.write("data = pd.read_csv('hospital_readmission_full.csv')\n")
+            f.write("X = data.drop('target', axis=1)\n")
+            f.write("y = data['target']\n\n")
+            f.write("# Or load splits\n")
+            f.write("train = pd.read_csv('splits/train.csv')\n")
+            f.write("val = pd.read_csv('splits/validation.csv')\n")
+            f.write("test = pd.read_csv('splits/test.csv')\n")
+            f.write("```\n\n")
+            
+            f.write("## Citation\n\n")
+            f.write("```\n")
+            f.write("Original Dataset: Diabetes 130-US Hospitals for Years 1999-2008\n")
+            f.write("UCI Machine Learning Repository\n")
+            f.write("https://archive.ics.uci.edu/dataset/296/diabetes-130-us-hospitals-for-years-1999-2008\n")
+            f.write("```\n\n")
+            
+            f.write("## License\n\n")
+            f.write("See original dataset license from UCI Machine Learning Repository.\n")
+        
+        print(f"✅ Created dataset card: {readme_file}")
+        
+        # Create dataset_info.json for HuggingFace
+        dataset_info_file = os.path.join(output_dir, "dataset_info.json")
+        
+        dataset_info = {
+            "dataset_name": "hospital-readmission-risk-preprocessed",
+            "version": "1.0.0",
+            "description": "Preprocessed hospital readmission data for 30-day readmission prediction",
+            "features": list(X.columns),
+            "num_features": len(X.columns),
+            "num_samples": len(dataset),
+            "target": "target",
+            "task": "binary-classification",
+            "splits": {
+                "train": splits['X_train'].shape[0],
+                "validation": splits['X_val'].shape[0],
+                "test": splits['X_test'].shape[0]
+            },
+            "class_distribution": {
+                "no_readmission": int((y==0).sum()),
+                "readmission": int((y==1).sum())
+            }
+        }
+        
+        with open(dataset_info_file, 'w') as f:
+            json.dump(dataset_info, f, indent=2)
+        
+        print(f"✅ Created dataset info: {dataset_info_file}")
+        print(f"\n🎉 HuggingFace export complete!")
+        print(f"📁 All files saved in: {output_dir}/")
+        print(f"\n📤 To upload to Hugging Face:")
+        print(f"   1. Install: pip install huggingface_hub")
+        print(f"   2. Login: huggingface-cli login")
+        print(f"   3. Upload: huggingface-cli upload <your-username>/hospital-readmission-risk {output_dir}")
+        
+        return {
+            'full_dataset': full_dataset_file,
+            'readme': readme_file,
+            'dataset_info': dataset_info_file,
+            'splits_dir': os.path.join(output_dir, "splits"),
+            'splits': splits
+        }
 
 
 def main():
@@ -597,14 +832,29 @@ def main():
     # Save processed data to data/processed/ folder
     saved_files = preprocessor.save_processed_data(X, y)
     
-    # Display results
-    print(f"\n🎉 Ready for machine learning with 100% README coverage!")
+    # Create train/validation/test splits
+    print("\n" + "=" * 80)
+    splits = preprocessor.create_train_test_split(X, y)
+    
+    # Export for Hugging Face
+    print("\n" + "=" * 80)
+    hf_export = preprocessor.export_for_huggingface(X, y)
+    
+    # Display final results
+    print("\n" + "=" * 80)
+    print("🎉 COMPLETE PREPROCESSING PIPELINE FINISHED!")
+    print("=" * 80)
     print(f"📈 Features shape: {X.shape}")
     print(f"🎯 Target shape: {y.shape}")
-    print(f"🔧 Sample feature names: {list(X.columns)[:10]}...")  # Show first 10 feature names
+    print(f"🔧 Sample feature names: {list(X.columns)[:10]}...")
+    print(f"\n📁 Outputs:")
+    print(f"   - Processed data: ./data/processed/")
+    print(f"   - Train/val/test splits: ./data/processed/splits/")
+    print(f"   - HuggingFace export: ./data/processed/huggingface/")
     
-    return X, y, preprocessor, saved_files
+    return X, y, preprocessor, saved_files, splits, hf_export
 
 
 if __name__ == "__main__":
+    X, y, preprocessor, saved_files, splits, hf_export = main()
     X, y, preprocessor, saved_files = main()
