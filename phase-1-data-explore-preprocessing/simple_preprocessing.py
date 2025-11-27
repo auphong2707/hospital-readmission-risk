@@ -377,6 +377,11 @@ class CompletePreprocessor:
         id_cols = ['encounter_id', 'patient_nbr', 'readmitted', 'age_numeric', 'estimated_bmi']
         data = data.drop(columns=[col for col in id_cols if col in data.columns], errors='ignore')
         
+        # Convert ordered categorical to numeric codes (age_bucket)
+        if 'age_bucket' in data.columns and pd.api.types.is_categorical_dtype(data['age_bucket']):
+            data['age_bucket'] = data['age_bucket'].cat.codes
+            print("Converted ordered categorical 'age_bucket' to numeric codes")
+        
         # Separate target for encoding
         y = data['target'] if 'target' in data.columns else None
         categorical_cols = data.select_dtypes(include=['object']).columns
