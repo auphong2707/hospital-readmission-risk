@@ -13,6 +13,8 @@ import os
 import json
 from sklearn.preprocessing import StandardScaler, RobustScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
+from dotenv import load_dotenv
+from huggingface_hub import HfApi, create_repo
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -806,10 +808,9 @@ class CompletePreprocessor:
         print(f"✅ Created dataset info: {dataset_info_file}")
         print(f"\n🎉 HuggingFace export complete!")
         print(f"📁 All files saved in: {output_dir}/")
-        print(f"\n📤 To upload to Hugging Face:")
-        print(f"   1. Install: pip install huggingface_hub")
-        print(f"   2. Login: huggingface-cli login")
-        print(f"   3. Upload: huggingface-cli upload <your-username>/hospital-readmission-risk {output_dir}")
+        
+        # Attempt to upload to Hugging Face
+        self._upload_to_huggingface(output_dir, splits_dir=os.path.join(output_dir, "splits"))
         
         return {
             'full_dataset': full_dataset_file,
@@ -818,6 +819,106 @@ class CompletePreprocessor:
             'splits_dir': os.path.join(output_dir, "splits"),
             'splits': splits
         }
+    
+    def _upload_to_huggingface(self, output_dir, splits_dir):
+        """
+        Upload dataset to Hugging Face Hub.
+        Reads HF_TOKEN from .env file.
+        
+        Args:
+            output_dir: Directory containing the dataset files
+            splits_dir: Directory containing train/val/test splits
+        """
+        print(f"\n📤 Attempting to upload to Hugging Face...")
+        
+        # Load environment variables from .env file
+        load_dotenv()
+        hf_token = os.getenv('HF_TOKEN')
+        
+        if not hf_token:
+            print("⚠️  HF_TOKEN not found in .env file!")
+            print("📝 To upload to Hugging Face:")
+            print("   1. Create a .env file with: HF_TOKEN=your_token_here")
+            print("   2. Get token from: https://huggingface.co/settings/tokens")
+            print("   3. Re-run the script")
+            print(f"\n💡 Manual upload option:")
+            print(f"   huggingface-cli upload <your-username>/hospital-readmission-risk {output_dir}")
+            return
+        
+        # Get repository name from user input or use default
+        repo_id = os.getenv('HF_REPO_ID', 'hospital-readmission-risk')
+        
+        # Ensure repo_id has username prefix
+        if '/' not in repo_id:
+            try:
+                api = HfApi(token=hf_token)
+                user_info = api.whoami(token=hf_token)
+                username = user_info['name']
+                repo_id = f"{username}/{repo_id}"
+            except Exception as e:
+                print(f"❌ Error getting username: {e}")
+                print("💡 Set HF_REPO_ID in .env as: username/dataset-name")
+                return
+        
+        print(f"📦 Repository: {repo_id}")
+        
+        try:
+            # Initialize Hugging Face API
+            api = HfApi(token=hf_token)
+            
+            # Create repository (if it doesn't exist)
+            try:
+                create_repo(
+                    repo_id=repo_id,
+                    token=hf_token,
+                    repo_type="dataset",
+                    private=False,
+                    exist_ok=True
+                )
+                print(f"✅ Repository created/verified: https://huggingface.co/datasets/{repo_id}")
+            except Exception as e:
+                print(f"⚠️  Repository creation warning: {e}")
+            
+            # Upload all files in output_dir
+            print(f"\n📤 Uploading files...")
+            
+            # Upload main dataset files
+            for filename in ['hospital_readmission_full.csv', 'README.md', 'dataset_info.json']:
+                file_path = os.path.join(output_dir, filename)
+                if os.path.exists(file_path):
+                    api.upload_file(
+                        path_or_fileobj=file_path,
+                        path_in_repo=filename,
+                        repo_id=repo_id,
+                        repo_type="dataset",
+                        token=hf_token
+                    )
+                    print(f"   ✅ Uploaded: {filename}")
+            
+            # Upload splits folder
+            if os.path.exists(splits_dir):
+                for filename in ['train.csv', 'validation.csv', 'test.csv', 'split_info.txt']:
+                    file_path = os.path.join(splits_dir, filename)
+                    if os.path.exists(file_path):
+                        api.upload_file(
+                            path_or_fileobj=file_path,
+                            path_in_repo=f"splits/{filename}",
+                            repo_id=repo_id,
+                            repo_type="dataset",
+                            token=hf_token
+                        )
+                        print(f"   ✅ Uploaded: splits/{filename}")
+            
+            print(f"\n🎉 Successfully uploaded to Hugging Face!")
+            print(f"🔗 View dataset at: https://huggingface.co/datasets/{repo_id}")
+            
+        except Exception as e:
+            print(f"\n❌ Upload failed: {e}")
+            print(f"\n💡 Manual upload option:")
+            print(f"   1. Install: pip install huggingface_hub")
+            print(f"   2. Login: huggingface-cli login")
+            print(f"   3. Upload: huggingface-cli upload {repo_id} {output_dir} --repo-type=dataset")
+            return
 
 
 def main():
