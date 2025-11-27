@@ -963,4 +963,3 @@ def main():
 
 if __name__ == "__main__":
     X, y, preprocessor, saved_files, splits, hf_export = main()
-    X, y, preprocessor, saved_files = main()
