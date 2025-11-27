@@ -2,7 +2,12 @@
 Logistic Regression Training for Hospital Readmission Risk Prediction
 =====================================================================
 
-Baseline model with comprehensive configuration and robust evaluation pipeline:
+Baseline model with comprehensive configuration and robust evaluation pipeline.
+
+Data Source:
+- HuggingFace repository: auphong2707/hospital-readmission-risk-data
+- Automatically downloads preprocessed features and target
+- No local preprocessing needed
 
 Evaluation Pipeline:
 1. Final Holdout Split: Split entire dataset into development_set and final_test_set
@@ -357,6 +362,7 @@ def main(hf_repo_id: Optional[str] = None,
     print("LOGISTIC REGRESSION TRAINING - HOSPITAL READMISSION RISK")
     print(f"{'='*70}")
     print(f"Configuration:")
+    print(f"  - Data source: HuggingFace (auphong2707/hospital-readmission-risk-data)")
     print(f"  - L1/L2/Elastic Net regularization (with l1_ratio tuning)")
     print(f"  - Class weight balancing")
     print(f"  - Robust evaluation: 85% development, 15% final holdout")
@@ -369,9 +375,9 @@ def main(hf_repo_id: Optional[str] = None,
     # Initialize trainer
     trainer = LogisticRegressionTrainer(random_state=42)
     
-    # STEP 1: Load preprocessed data and create final holdout split
-    print_section("📊 Step 1: Load Data & Create Final Holdout Split", "=")
-    X, y = load_data()
+    # STEP 1: Load preprocessed data from HuggingFace and create final holdout split
+    print_section("📊 Step 1: Load Data from HuggingFace & Create Final Holdout Split", "=")
+    X, y = load_data(from_huggingface=True)
     trainer.feature_names = X.columns.tolist()
     
     print(f"Total samples: {len(X)}")

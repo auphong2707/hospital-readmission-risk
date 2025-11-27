@@ -2,7 +2,12 @@
 Random Forest Training for Hospital Readmission Risk Prediction
 ===============================================================
 
-Ensemble model with comprehensive configuration and robust evaluation pipeline:
+Ensemble model with comprehensive configuration and robust evaluation pipeline.
+
+Data Source:
+- HuggingFace repository: auphong2707/hospital-readmission-risk-data
+- Automatically downloads preprocessed features and target
+- No local preprocessing needed
 
 Evaluation Pipeline:
 1. Final Holdout Split: Split entire dataset into development_set and final_test_set
@@ -444,6 +449,7 @@ def main(hf_repo_id: Optional[str] = None,
     print("RANDOM FOREST TRAINING - HOSPITAL READMISSION RISK")
     print(f"{'='*70}")
     print(f"Configuration:")
+    print(f"  - Data source: HuggingFace (auphong2707/hospital-readmission-risk-data)")
     print(f"  - Ensemble of 100-500 decision trees")
     print(f"  - Depth tuning and feature selection")
     print(f"  - Out-of-bag error estimation")
@@ -458,9 +464,9 @@ def main(hf_repo_id: Optional[str] = None,
     # Initialize trainer
     trainer = RandomForestTrainer(random_state=42)
     
-    # STEP 1: Load preprocessed data and create final holdout split
-    print_section("📊 Step 1: Load Data & Create Final Holdout Split", "=")
-    X, y = load_data()
+    # STEP 1: Load preprocessed data from HuggingFace and create final holdout split
+    print_section("📊 Step 1: Load Data from HuggingFace & Create Final Holdout Split", "=")
+    X, y = load_data(from_huggingface=True)
     trainer.feature_names = X.columns.tolist()
     
     print(f"Total samples: {len(X)}")

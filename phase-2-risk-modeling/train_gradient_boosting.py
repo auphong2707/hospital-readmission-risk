@@ -1,7 +1,12 @@
-"""Complete pipeline to preprocess data and train LightGBM model for 30-day readmission.
+"""Complete pipeline to train LightGBM model for 30-day readmission prediction.
 
-This script combines preprocessing orchestration and model training with a robust
-evaluation pipeline:
+This script loads preprocessed data from HuggingFace Hub and trains a LightGBM model
+with a robust evaluation pipeline:
+
+Data Source:
+- HuggingFace repository: auphong2707/hospital-readmission-risk-data
+- Automatically downloads preprocessed features and target
+- No local preprocessing needed
 
 Evaluation Pipeline:
 1. Final Holdout Split: Split entire dataset into development_set and final_test_set
@@ -56,7 +61,9 @@ Examples:
     python train_gradient_boosting.py --n-splits 10 --val-size 0.15
 
 Requirements:
-    pip install lightgbm scikit-learn pandas joblib matplotlib seaborn tqdm
+    pip install lightgbm scikit-learn pandas joblib matplotlib seaborn tqdm datasets
+    
+Note: Data is automatically loaded from HuggingFace Hub (auphong2707/hospital-readmission-risk-data)
     
 HuggingFace Upload:
     Results are automatically uploaded to HuggingFace Hub after training.
@@ -221,7 +228,7 @@ def train_model(args: argparse.Namespace):
     # Print configuration
     print_section("🚀 LightGBM Training - Hospital Readmission Risk", "=")
     print(f"⚙️  Configuration:")
-    print(f"   - Data directory: {args.data_dir}")
+    print(f"   - Data source: HuggingFace (auphong2707/hospital-readmission-risk-data)")
     print(f"   - Output directory: {args.output_dir}")
     print(f"   - Test size: {args.test_size}")
     print(f"   - Validation size (for early stopping): {args.val_size}")
@@ -232,8 +239,8 @@ def train_model(args: argparse.Namespace):
     print(f"   - Device: {'GPU' if args.use_gpu else 'CPU'}")
     print(f"   - Environment: {'🏆 Kaggle' if args.environment == 'kaggle' else '💻 Local'}")
     
-    # Load data
-    X, y = load_data(args.data_dir)
+    # Load data from HuggingFace
+    X, y = load_data(from_huggingface=True)
 
     # STEP 1: Final holdout split - create untouched test set
     print_section("🔀 Step 1: Final Holdout Split", "-")
@@ -624,11 +631,12 @@ def train_model(args: argparse.Namespace):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Complete pipeline: preprocess data and train LightGBM with robust nested CV evaluation.",
+        description="Train LightGBM with robust nested CV evaluation using preprocessed data from HuggingFace.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
             Examples:
             # Default: Full hyperparameter search with 5-fold CV, early stopping, and final holdout
+            # Data loaded from HuggingFace: auphong2707/hospital-readmission-risk-data
             # Performance settings (CPU cores, GPU) are auto-detected
             python train_gradient_boosting.py
             
@@ -646,9 +654,7 @@ def main():
         """
     )
     
-    # Data arguments
-    parser.add_argument("--data-dir", type=str, default="data/processed",
-                        help="Directory with features.csv and target.csv")
+    # Output arguments
     parser.add_argument("--output-dir", type=str, default=None,
                         help="Directory to save model and metrics (auto-detects Kaggle)")
     
@@ -695,23 +701,8 @@ def main():
     if args.output_dir is None:
         args.output_dir = "/kaggle/working/models" if on_kaggle else str(repo_root / "models")
     
-    # Resolve paths
-    data_dir = repo_root / args.data_dir
-    preprocess_script = repo_root / "phase-1-data-explore-preprocessing" / "simple_preprocessing.py"
-    
-    features_file = data_dir / "features.csv"
-    target_file = data_dir / "target.csv"
-    
-    # Check for processed data and run preprocessing if needed
-    if not features_file.exists() or not target_file.exists():
-        if not preprocess_script.exists():
-            raise FileNotFoundError(f"Preprocessing script not found: {preprocess_script}")
-        run_preprocessing(preprocess_script)
-    else:
-        print("✅ Processed data found, skipping preprocessing")
-    
-    # Update data_dir to absolute path for training
-    args.data_dir = str(data_dir)
+    print("\n📥 Data will be loaded directly from HuggingFace: auphong2707/hospital-readmission-risk-data")
+    print("   (No local preprocessing needed)")
     
     # Run training
     train_model(args)
