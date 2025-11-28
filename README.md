@@ -40,6 +40,24 @@ The dataset represents 10 years (1999-2008) of clinical care at 130 US hospitals
 
 ### Planned Approach
 
+#### 0. Problem Framing & Business Understanding
+
+* 🔲 **Define Decision Framework (DOC Template)**
+  * **Context**: High baseline readmission costs ($15k/event)
+  * **Decision**: Which specific patients should be enrolled in the intervention program?
+  * **Options**: Treat top risk %, treat random, or treat specific diagnosis groups
+  * **Criteria**: Maximize ROI while maintaining operational capacity
+
+* 🔲 **Design KPI Tree**
+  * **North Star Metric**: Total Healthcare Cost Savings
+  * **Drivers**: Readmission Rate, Intervention Success Rate, Cost per Patient
+  * **Levers**: Targeted discharge planning, medication reconciliation, follow-up calls
+
+* 🔲 **Establish Success Metrics & Guardrails**
+  * **Primary Metric**: Reduction in 30-day readmission rate (Target: >3.3%)
+  * **Guardrails**: Do not increase Length of Stay (LoS); maintain fairness across demographic groups
+  * **Stakeholders**: Define RACI (Data Scientist, Clinical Staff, Hospital Admin)
+
 #### 1. Data Exploration & Preprocessing
 * ✅ **Exploratory data analysis (EDA) to understand data distributions** *(COMPLETED)*
 * ✅ **Handle missing values and ensure data quality**
@@ -104,6 +122,16 @@ The dataset represents 10 years (1999-2008) of clinical care at 130 US hospitals
   - **Monitoring**: Ongoing fairness tracking in production
 
 #### 5. Intervention ROI Estimation
+- 🔲 **Optimal threshold calculation (BA7):**
+  - **Cost-sensitive threshold optimization**: Find decision threshold that maximizes expected value
+  - **Cost matrix definition**: 
+    - True Positive (intervene on readmission): -$500 (intervention) + $15K (prevented readmission) = +$14.5K
+    - False Positive (unnecessary intervention): -$500 (wasted intervention cost)
+    - True Negative (correctly no intervention): $0
+    - False Negative (missed readmission): -$15K (readmission cost)
+  - **Expected value calculation**: EV = (TP × $14.5K) + (FP × -$500) + (TN × $0) + (FN × -$15K)
+  - **Threshold tuning**: Test thresholds from 0.05 to 0.95 to find optimal balance
+  - **Sensitivity analysis**: Evaluate ROI across different cost assumptions
 - 🔲 **Cost-benefit analysis framework:**
   - **Baseline costs**: $15K average per 30-day readmission (from EDA)
   - **Intervention costs**: $500 per patient program cost estimate
