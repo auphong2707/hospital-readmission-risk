@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import Optional, Tuple
@@ -217,18 +216,6 @@ def load_data(data_dir: str = "data/processed",
     print(f"✅ Loaded from local: features {X.shape}, target {y.shape}")
     print(f"   Class distribution: {y.value_counts().to_dict()}")
     return X, y
-
-
-def run_preprocessing(preprocess_script: Path) -> None:
-    """Run preprocessing script to generate features and target files.
-    
-    Args:
-        preprocess_script: Path to the preprocessing script to execute
-    """
-    print_section("🔄 Running Preprocessing", "-")
-    print(f"📂 Running: {preprocess_script}")
-    subprocess.run([sys.executable, str(preprocess_script)], check=True)
-    print("✅ Preprocessing completed")
 
 
 # ============================================================================

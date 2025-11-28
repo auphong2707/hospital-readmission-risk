@@ -265,9 +265,31 @@ python phase-1-data-explore-preprocessing/simple_preprocessing.py
 
 ## Usage
 
-### Running the Data Preprocessing Pipeline
+### Option 1: Load Data from HuggingFace Hub (Recommended)
 
-To run the complete preprocessing pipeline from the root directory:
+For Phase 2 modeling, preprocessed data is available on HuggingFace Hub:
+
+```python
+from phase-2-risk-modeling.utilities import load_data
+
+# Automatically downloads from auphong2707/hospital-readmission-risk-data
+X, y = load_data(from_huggingface=True)
+
+# Data specs: 101,766 samples, 113 features
+# Class distribution: ~11.2% readmission rate
+```
+
+Training scripts automatically use HuggingFace data:
+```bash
+# No preprocessing needed - data loaded automatically
+python phase-2-risk-modeling/train_gradient_boosting.py
+python phase-2-risk-modeling/train_logistic_regression.py
+python phase-2-risk-modeling/train_random_forest.py
+```
+
+### Option 2: Run Local Data Preprocessing Pipeline
+
+To preprocess data locally and upload to HuggingFace:
 
 ```bash
 # Using Python virtual environment (recommended)
@@ -280,10 +302,11 @@ python phase-1-data-explore-preprocessing/simple_preprocessing.py
 This preprocessing script will:
 - Load data from `./data/diabetic_data.csv`
 - Apply comprehensive preprocessing covering 100% of README requirements
-- Generate a balanced dataset ready for machine learning
-- Output: 180,818 samples with 96 engineered features
+- Create train/validation/test splits (70%/15%/15%)
+- Upload to HuggingFace Hub
+- Output: 101,766 samples with 113 engineered features
 
-**Prerequisites**: Ensure pandas, numpy, scikit-learn, and imbalanced-learn are installed.
+**Prerequisites**: Ensure pandas, numpy, scikit-learn, and python-dotenv are installed.
 
 **Data Structure**: The script expects the following data files in the `data/` folder:
 - `data/diabetic_data.csv` - Main dataset (automatically loaded by the script)
@@ -292,17 +315,19 @@ This preprocessing script will:
 **Expected Output**: When run successfully, the script will:
 1. Load 101,766 patients with 50 features from `data/diabetic_data.csv`
 2. Apply comprehensive preprocessing (missing value handling, outlier treatment, feature engineering)
-3. Generate 180,818 balanced samples with 96 engineered features
+3. Generate 101,766 samples with 113 engineered features
 4. **Save processed data to `data/processed/` folder**:
    - `preprocessed_hospital_data.csv` - Complete processed dataset
    - `features.csv` - Features only (for ML workflows)
    - `target.csv` - Target variable only
    - `preprocessing_metadata.txt` - Detailed preprocessing information
-5. Display detailed preprocessing steps and final dataset statistics
+   - Train/validation/test splits in `splits/` folder
+5. **Upload to HuggingFace Hub** (if `.env` configured with `HF_TOKEN`)
+6. Display detailed preprocessing steps and final dataset statistics
 
-### Using the Processed Data
+### Using Locally Processed Data
 
-After running the preprocessing script, you can load the processed data for machine learning:
+After running the preprocessing script, you can load the processed data:
 
 ```python
 import pandas as pd

@@ -60,68 +60,55 @@ The risk modeling phase implements multiple machine learning algorithms to predi
 
 ### Prerequisites
 
-Ensure you have completed **Phase 1: Data Preprocessing** before proceeding with risk modeling.
+**Data Source**: Models automatically load preprocessed data from HuggingFace Hub:
+- Repository: `auphong2707/hospital-readmission-risk-data`
+- No local preprocessing needed - data is downloaded automatically
 
 #### Required Dependencies
 ```bash
-pip install pandas numpy scikit-learn xgboost lightgbm tensorflow imbalanced-learn matplotlib seaborn
+pip install pandas numpy scikit-learn lightgbm matplotlib seaborn datasets
 ```
 
-### Step 1: Run Data Preprocessing
-
-**⚠️ Important**: You must run the preprocessing pipeline first to generate the required training data.
+### Step 1: Install Dependencies
 
 From the project root directory:
 
 ```powershell
-# Using Python virtual environment (recommended)
-python phase-1-data-explore-preprocessing/simple_preprocessing.py
-
-# Or with full path to virtual environment Python
-.venv/Scripts/python.exe phase-1-data-explore-preprocessing/simple_preprocessing.py
+# Install all required packages
+pip install -r requirements.txt
 ```
 
-#### Preprocessing Output
-The preprocessing script generates:
-- **180,818 samples** with **96 engineered features**
-- Balanced dataset ready for machine learning
-- Comprehensive feature engineering and data cleaning
+The `datasets` library will automatically download and cache data from HuggingFace on first run.
 
-#### Generated Files (in `data/processed/`)
-- `preprocessed_hospital_data.csv` - Complete processed dataset
-- `features.csv` - Feature matrix (X)
-- `target.csv` - Target variable (y)
-- `preprocessing_metadata.txt` - Processing details and statistics
+### Step 2: Run Risk Modeling
 
-### Step 2: Load Processed Data
-
-```python
-import pandas as pd
-import numpy as np
-
-# Load the complete processed dataset
-data = pd.read_csv('./data/processed/preprocessed_hospital_data.csv')
-
-# Or load features and target separately for ML workflows
-X = pd.read_csv('./data/processed/features.csv')
-y = pd.read_csv('./data/processed/target.csv')['target']
-
-# View preprocessing metadata
-with open('./data/processed/preprocessing_metadata.txt', 'r') as f:
-    print(f.read())
-```
-
-### Step 3: Run Risk Modeling
+All training scripts automatically load preprocessed data from HuggingFace:
 
 ```powershell
-# Run individual model training scripts (to be implemented)
+# Run individual model training scripts
 python phase-2-risk-modeling/train_logistic_regression.py
 python phase-2-risk-modeling/train_random_forest.py
 python phase-2-risk-modeling/train_gradient_boosting.py
-python phase-2-risk-modeling/train_neural_network.py
 
 # Or run complete model comparison pipeline
 python phase-2-risk-modeling/model_comparison.py
+```
+
+### Data Loading
+
+The training scripts use the `load_data()` utility which:
+- Downloads from `auphong2707/hospital-readmission-risk-data` by default
+- Caches data locally for faster subsequent runs
+- Loads the complete preprocessed dataset (101,766 samples, 113 features)
+
+```python
+from utilities import load_data
+
+# Automatically loads from HuggingFace
+X, y = load_data(from_huggingface=True)
+
+# Or load from local files (if available)
+X, y = load_data(from_huggingface=False, data_dir="data/processed")
 ```
 
 ## 📈 Expected Plots
@@ -140,10 +127,12 @@ python phase-2-risk-modeling/model_comparison.py
 ## 🔧 Model Configuration
 
 ### Input Data Specifications
-- **Features**: 96 engineered features from preprocessing phase
-- **Samples**: 180,818 balanced patient records
+- **Data Source**: HuggingFace Hub (`auphong2707/hospital-readmission-risk-data`)
+- **Features**: 113 engineered features from preprocessing phase
+- **Samples**: 101,766 patient records
 - **Target**: Binary readmission indicator (0: No readmission, 1: Readmission within 30 days)
-- **Data Split**: Temporal validation ensuring no data leakage
+- **Class Distribution**: ~11.2% readmission rate (imbalanced)
+- **Data Split**: Stratified train/validation/test ensuring balanced class distribution
 
 ### Output Specifications
 - **Predictions**: Readmission probability scores (0-1)
