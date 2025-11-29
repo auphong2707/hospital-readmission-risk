@@ -258,11 +258,11 @@ class CompletePreprocessor:
             # Create diagnosis category features
             for diag_col in diagnosis_cols:
                 if diag_col in data.columns:
-                    data[f'{diag_col}_category'] = data[diag_col].apply(categorize_diagnosis)
+                    data[f'{diag_col}_cat'] = data[diag_col].apply(categorize_diagnosis)
             
             # Count unique diagnosis categories
-            if all(f'{col}_category' in data.columns for col in diagnosis_cols):
-                data['unique_diagnosis_categories'] = data[[f'{col}_category' for col in diagnosis_cols]].nunique(axis=1)
+            if all(f'{col}_cat' in data.columns for col in diagnosis_cols):
+                data['unique_diagnosis_categories'] = data[[f'{col}_cat' for col in diagnosis_cols]].nunique(axis=1)
                 print(f"Created diagnosis category features and unique category count")
         
         # 2. Build utilization features through counts and group-by statistics
@@ -457,6 +457,55 @@ class CompletePreprocessor:
         print(f"Encoded {total_features} categorical features total")
         return data
     
+    def sanitize_column_names(self, data):
+        """Sanitize column names to remove special JSON characters that LightGBM doesn't support.
+        
+        Removes: colons, quotes, brackets, backslashes, forward slashes, commas
+        Replaces spaces and other special chars with underscores.
+        """
+        print("Sanitizing column names for LightGBM compatibility...")
+        
+        def clean_name(name):
+            # Remove or replace special JSON characters
+            name = str(name)
+            # Replace problematic characters with underscores
+            for char in [':', '"', "'", '[', ']', '{', '}', '\\', '/', ',', '<', '>', '|']:
+                name = name.replace(char, '_')
+            # Replace spaces and dashes with underscores
+            name = name.replace(' ', '_').replace('-', '_')
+            # Remove any consecutive underscores
+            while '__' in name:
+                name = name.replace('__', '_')
+            # Remove leading/trailing underscores
+            name = name.strip('_')
+            return name
+        
+        old_columns = data.columns.tolist()
+        new_columns = [clean_name(col) for col in old_columns]
+        
+        # Check for duplicates after sanitization
+        if len(new_columns) != len(set(new_columns)):
+            # Handle duplicates by adding suffixes
+            seen = {}
+            final_columns = []
+            for col in new_columns:
+                if col in seen:
+                    seen[col] += 1
+                    final_columns.append(f"{col}_{seen[col]}")
+                else:
+                    seen[col] = 0
+                    final_columns.append(col)
+            new_columns = final_columns
+        
+        data.columns = new_columns
+        
+        # Count how many were changed
+        changed = sum(1 for old, new in zip(old_columns, new_columns) if old != new)
+        if changed > 0:
+            print(f"   Sanitized {changed} column names")
+        
+        return data
+    
     def scale_features(self, X):
         """Scale numerical features using StandardScaler or RobustScaler."""
         print(f"Scaling features using {self.scaler_type.capitalize()}Scaler...")
@@ -499,6 +548,9 @@ class CompletePreprocessor:
         # Step 7: Encode features (one-hot + CV-safe target encoding)
         data = self.encode_features(data, is_training=True)
         
+        # Step 7.5: Sanitize column names for LightGBM compatibility
+        data = self.sanitize_column_names(data)
+        
         # Step 8: Separate features and target
         X = data.drop('target', axis=1)
         y = data['target']
@@ -521,6 +573,7 @@ class CompletePreprocessor:
         print(f"✅ Interaction features: Created")
         print(f"✅ One-hot encoding (low-cardinality): Applied")
         print(f"✅ CV-safe target encoding (high-cardinality): Applied")
+        print(f"✅ Column name sanitization (LightGBM compatibility): Applied")
         print(f"✅ Feature scaling ({self.scaler_type.capitalize()}Scaler): Applied")
         print(f"\n📊 Final dataset: {X.shape[0]} samples, {X.shape[1]} features")
         print(f"📊 Target distribution: {dict(pd.Series(y).value_counts())}")
