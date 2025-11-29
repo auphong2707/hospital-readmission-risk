@@ -213,7 +213,7 @@ def download_model_from_hf(
 
 
 def download_data_from_hf(
-    repo_id: str = "auphong2707/hospital-readmission-risk",
+    repo_id: str = "auphong2707/hospital-readmission-risk-data",
     split: str = "all",
     cache_dir: str = "./data/downloaded",
     force_download: bool = False
@@ -229,7 +229,7 @@ def download_data_from_hf(
     -----------
     repo_id : str
         HuggingFace dataset repository ID (format: "username/repo-name")
-        Default: "auphong2707/hospital-readmission-risk"
+        Default: "auphong2707/hospital-readmission-risk-data"
     split : str
         Which split to download: "train", "validation", "test", or "all"
         Default: "all" (downloads all splits)

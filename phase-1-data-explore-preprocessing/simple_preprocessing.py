@@ -851,7 +851,7 @@ class CompletePreprocessor:
             return
         
         # Get repository name from user input or use default
-        repo_id = os.getenv('HF_REPO_ID', 'hospital-readmission-risk')
+        repo_id = os.getenv('HF_REPO_ID', 'hospital-readmission-risk-data')
         
         # Ensure repo_id has username prefix
         if '/' not in repo_id:

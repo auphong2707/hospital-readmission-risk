@@ -90,7 +90,7 @@ def print_section(title: str, char: str = "=", width: int = 80):
     print(f"{char * width}\n")
 
 
-def load_and_preprocess_data(repo_id: str = "auphong2707/hospital-readmission-risk",
+def load_and_preprocess_data(repo_id: str = "auphong2707/hospital-readmission-risk-data",
                              cache_dir: str = "./data/downloaded",
                              force_download: bool = False):
     """
@@ -590,8 +590,8 @@ Examples:
     parser.add_argument(
         '--data-repo-id',
         type=str,
-        default='auphong2707/hospital-readmission-risk',
-        help='HuggingFace dataset repository ID (default: auphong2707/hospital-readmission-risk)'
+        default='auphong2707/hospital-readmission-risk-data',
+        help='HuggingFace dataset repository ID (default: auphong2707/hospital-readmission-risk-data)'
     )
     
     parser.add_argument(

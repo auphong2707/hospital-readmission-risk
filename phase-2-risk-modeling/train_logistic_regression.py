@@ -625,7 +625,7 @@ def main(hf_repo_id: Optional[str] = None,
         
         # Use provided repo_id or construct from username
         if hf_repo_id is None:
-            hf_repo_id = f"{hf_username}/logistic-regression"
+            hf_repo_id = f"{hf_username}/hospital-readmission-lr"
             print(f"⚠️  No repo_id provided. Using default: {hf_repo_id}")
         
         # Upload to HuggingFace
