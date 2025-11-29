@@ -2,12 +2,12 @@
 Phase 3: Calibrate Gradient Boosting Model for Hospital Readmission Prediction
 
 This script performs comprehensive calibration of the trained LightGBM model from Phase 2.
-It downloads the pre-trained model from HuggingFace Hub, applies calibration techniques,
-and generates detailed calibration reports with visualizations.
+It downloads both the pre-trained model AND preprocessed data from HuggingFace Hub,
+applies calibration techniques, and generates detailed calibration reports with visualizations.
 
 Calibration Pipeline:
 1. Download pre-trained model from HuggingFace Hub
-2. Load and preprocess data (using same preprocessing as training)
+2. Download preprocessed data from HuggingFace Hub (same splits as training)
 3. Generate uncalibrated predictions
 4. Apply calibration methods (Platt Scaling, Isotonic Regression)
 5. Evaluate calibration quality (Brier score, ECE, Hosmer-Lemeshow test)
@@ -63,6 +63,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from utilities import (
     download_model_from_hf,
+    download_data_from_hf,
     ModelCalibrator,
     GroupSpecificCalibrator,
     CalibrationMetrics,
@@ -89,91 +90,66 @@ def print_section(title: str, char: str = "=", width: int = 80):
     print(f"{char * width}\n")
 
 
-def load_and_preprocess_data(data_dir: str = "data/processed", 
-                             test_size: float = 0.2,
-                             random_state: int = 42):
+def load_and_preprocess_data(repo_id: str = "auphong2707/hospital-readmission-risk",
+                             cache_dir: str = "./data/downloaded",
+                             force_download: bool = False):
     """
-    Load and preprocess data for calibration.
+    Load preprocessed data from HuggingFace Hub.
     
-    This function loads the preprocessed features and target from Phase 1,
-    and splits them into train/test sets using the SAME split strategy as
-    the training script (stratified split with same random seed).
+    This function downloads the preprocessed features and target from HuggingFace Hub.
+    The data has already been preprocessed using the pipeline from Phase 1 and split
+    into train/validation/test sets with the SAME split strategy as the training script.
     
-    CRITICAL: Must use same preprocessing and split as training to ensure
-    calibration is done on the same validation/test set.
+    CRITICAL: Data is downloaded from HuggingFace Hub where it was uploaded by the
+    preprocessing script. This ensures calibration uses the exact same data splits
+    as the training process.
     
     Args:
-        data_dir: Directory containing features.csv and target.csv
-        test_size: Fraction of data for test set (must match training)
-        random_state: Random seed (must match training)
+        repo_id: HuggingFace dataset repository ID
+        cache_dir: Directory to cache downloaded files
+        force_download: Force re-download even if cached
         
     Returns:
         tuple: (X_train, X_test, y_train, y_test)
     """
-    from sklearn.model_selection import train_test_split
+    print_section("📂 Loading Preprocessed Data from HuggingFace", "-")
     
-    print_section("📂 Loading and Preprocessing Data", "-")
-    
-    # Step 1: Check if preprocessed data exists
-    data_path = Path(data_dir)
-    features_file = data_path / "features.csv"
-    target_file = data_path / "target.csv"
-    
-    if not features_file.exists() or not target_file.exists():
-        print("⚠️  Preprocessed data not found!")
-        print(f"   Expected files:")
-        print(f"   - {features_file}")
-        print(f"   - {target_file}")
-        print()
-        print("🔄 Running preprocessing script...")
+    try:
+        # Download all splits from HuggingFace
+        print("⏳ Downloading preprocessed data from HuggingFace Hub...")
+        print(f"   Repository: {repo_id}")
+        print(f"   ⚠️  CRITICAL: Using same data splits as training!\n")
         
-        # Run preprocessing script (same as training)
-        preprocess_script = Path(__file__).resolve().parents[1] / "phase-1-data-explore-preprocessing" / "simple_preprocessing.py"
+        data = download_data_from_hf(
+            repo_id=repo_id,
+            split="all",
+            cache_dir=cache_dir,
+            force_download=force_download
+        )
         
-        if not preprocess_script.exists():
-            raise FileNotFoundError(
-                f"Preprocessing script not found: {preprocess_script}\n"
-                f"Please ensure phase-1-data-explore-preprocessing/simple_preprocessing.py exists."
-            )
+        # Extract train and test splits
+        X_train, y_train = data['train']
+        X_test, y_test = data['test']
         
-        import subprocess
-        subprocess.run([sys.executable, str(preprocess_script)], check=True)
-        print("✅ Preprocessing completed\n")
-    else:
-        print("✅ Found preprocessed data files")
-    
-    # Step 2: Load features and target
-    print("📥 Loading features and target...")
-    X = pd.read_csv(features_file)
-    y = pd.read_csv(target_file)
-    
-    # Handle target format (same as training script)
-    if "target" in y.columns:
-        y = y["target"]
-    else:
-        y = y.iloc[:, 0]
-    
-    print(f"   Features shape: {X.shape}")
-    print(f"   Target shape: {y.shape}")
-    print(f"   Class distribution: {y.value_counts().to_dict()}")
-    
-    # Step 3: Split data (MUST match training split exactly)
-    print(f"\n🔀 Splitting data (test_size={test_size}, random_state={random_state})...")
-    print("   ⚠️  CRITICAL: Using same split parameters as training!")
-    
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, 
-        test_size=test_size, 
-        random_state=random_state, 
-        stratify=y
-    )
-    
-    print(f"   Train set: {X_train.shape}")
-    print(f"   Test set: {X_test.shape}")
-    print(f"   Train class distribution: {y_train.value_counts().to_dict()}")
-    print(f"   Test class distribution: {y_test.value_counts().to_dict()}")
-    
-    return X_train, X_test, y_train, y_test
+        print("✅ Data loaded successfully from HuggingFace Hub")
+        print(f"\n📊 Final Split Summary:")
+        print(f"   Train set: {X_train.shape} features, {y_train.shape} target")
+        print(f"   Test set: {X_test.shape} features, {y_test.shape} target")
+        print(f"   Train class distribution: {dict(y_train.value_counts())}")
+        print(f"   Test class distribution: {dict(y_test.value_counts())}")
+        
+        return X_train, X_test, y_train, y_test
+        
+    except Exception as e:
+        print(f"\n❌ Error loading data from HuggingFace: {e}")
+        print(f"\n💡 Troubleshooting:")
+        print(f"   1. Ensure preprocessing script has uploaded data to HuggingFace")
+        print(f"   2. Check repository exists: https://huggingface.co/datasets/{repo_id}")
+        print(f"   3. Verify data files exist in repository (check splits/ folder)")
+        print(f"   4. Try running preprocessing script first:")
+        print(f"      python ./phase-1-data-explore-preprocessing/simple_preprocessing.py")
+        print(f"   5. Check HF_TOKEN and HF_REPO_ID in .env file")
+        raise
 
 
 def generate_uncalibrated_predictions(model, X_train, X_test, y_train, y_test):
@@ -586,16 +562,19 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    # Default: Platt scaling calibration
+    # Default: Platt scaling calibration (downloads from HuggingFace)
     python calibrate_gradient_boosting.py
     
     # Use isotonic regression
     python calibrate_gradient_boosting.py --method isotonic
     
+    # Custom data repository
+    python calibrate_gradient_boosting.py --data-repo-id username/my-dataset
+    
     # Custom output directory
     python calibrate_gradient_boosting.py --output-dir ./my_calibration_results
     
-    # Force re-download model from HuggingFace
+    # Force re-download model and data from HuggingFace
     python calibrate_gradient_boosting.py --force-download
         """
     )
@@ -609,10 +588,10 @@ Examples:
     )
     
     parser.add_argument(
-        '--data-dir',
+        '--data-repo-id',
         type=str,
-        default='data/processed',
-        help='Directory containing preprocessed data (default: data/processed)'
+        default='auphong2707/hospital-readmission-risk',
+        help='HuggingFace dataset repository ID (default: auphong2707/hospital-readmission-risk)'
     )
     
     parser.add_argument(
@@ -623,17 +602,10 @@ Examples:
     )
     
     parser.add_argument(
-        '--test-size',
-        type=float,
-        default=0.2,
-        help='Test set size - MUST match training (default: 0.2)'
-    )
-    
-    parser.add_argument(
-        '--random-state',
-        type=int,
-        default=42,
-        help='Random seed - MUST match training (default: 42)'
+        '--cache-dir',
+        type=str,
+        default='./data/downloaded',
+        help='Directory to cache downloaded data (default: ./data/downloaded)'
     )
     
     parser.add_argument(
@@ -655,11 +627,10 @@ Examples:
     print_section("🎯 Phase 3: Model Calibration - Gradient Boosting", "=")
     print(f"📋 Configuration:")
     print(f"   Calibration Method: {args.method.upper()}")
-    print(f"   Data Directory: {args.data_dir}")
+    print(f"   Model Repository: {args.repo_id}")
+    print(f"   Data Repository: {args.data_repo_id}")
     print(f"   Output Directory: {args.output_dir}")
-    print(f"   Test Size: {args.test_size}")
-    print(f"   Random State: {args.random_state}")
-    print(f"   HuggingFace Repo: {args.repo_id}")
+    print(f"   Cache Directory: {args.cache_dir}")
     print(f"   Force Download: {args.force_download}")
     
     try:
@@ -672,12 +643,12 @@ Examples:
             force_download=args.force_download
         )
         
-        # STEP 2: Load and preprocess data
-        print_section("📂 Step 2: Load and Preprocess Data", "=")
+        # STEP 2: Load preprocessed data from HuggingFace Hub
+        print_section("📂 Step 2: Load Preprocessed Data from HuggingFace", "=")
         X_train, X_test, y_train, y_test = load_and_preprocess_data(
-            data_dir=args.data_dir,
-            test_size=args.test_size,
-            random_state=args.random_state
+            repo_id=args.data_repo_id,
+            cache_dir=args.cache_dir,
+            force_download=args.force_download
         )
         
         # STEP 3: Generate uncalibrated predictions
