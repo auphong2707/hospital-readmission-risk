@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import Optional, Tuple
@@ -113,26 +112,97 @@ def print_section(title: str, char: str = "="):
 # DATA LOADING
 # ============================================================================
 
-def load_data(data_dir: str = "data/processed"):
-    """Load features and target data from processed directory.
+def load_data_from_huggingface(repo_id: str = "auphong2707/hospital-readmission-risk-data", 
+                               split: str = "full"):
+    """Load preprocessed data directly from HuggingFace Hub.
     
     Args:
-        data_dir: Directory containing features.csv and target.csv
+        repo_id: HuggingFace repository ID (default: auphong2707/hospital-readmission-risk-data)
+        split: Which split to load - 'full', 'train', 'validation', or 'test'
+               Default 'full' loads the complete preprocessed dataset
+    
+    Returns:
+        tuple: (X, y) where X is features DataFrame and y is target Series
+    
+    Raises:
+        ImportError: If datasets library is not installed
+        ValueError: If split is invalid
+    """
+    try:
+        from datasets import load_dataset
+    except ImportError:
+        raise ImportError(
+            "datasets library required for HuggingFace loading. "
+            "Install with: pip install datasets"
+        )
+    
+    print(f"📥 Loading data from HuggingFace: {repo_id}")
+    print(f"   Split: {split}")
+    
+    # Map split names to file paths
+    file_mapping = {
+        "full": "hospital_readmission_full.csv",
+        "train": "splits/train.csv",
+        "validation": "splits/validation.csv",
+        "test": "splits/test.csv"
+    }
+    
+    if split not in file_mapping:
+        raise ValueError(f"Invalid split: {split}. Choose from: {list(file_mapping.keys())}")
+    
+    # Load dataset from HuggingFace
+    dataset = load_dataset(
+        repo_id,
+        data_files=file_mapping[split],
+        split="train"  # HF datasets always uses 'train' for custom CSV files
+    )
+    
+    # Convert to pandas DataFrame
+    df = dataset.to_pandas()
+    
+    # Separate features and target
+    if "target" not in df.columns:
+        raise ValueError(f"No 'target' column found in dataset")
+    
+    X = df.drop(columns=["target"])
+    y = df["target"]
+    
+    print(f"✅ Loaded from HuggingFace: features {X.shape}, target {y.shape}")
+    print(f"   Class distribution: {y.value_counts().to_dict()}")
+    
+    return X, y
+
+
+def load_data(data_dir: str = "data/processed", 
+              from_huggingface: bool = True,
+              hf_repo_id: str = "auphong2707/hospital-readmission-risk-data"):
+    """Load features and target data from HuggingFace or local directory.
+    
+    Args:
+        data_dir: Directory containing features.csv and target.csv (used if from_huggingface=False)
+        from_huggingface: If True, load from HuggingFace Hub; if False, load from local directory
+        hf_repo_id: HuggingFace repository ID (default: auphong2707/hospital-readmission-risk-data)
         
     Returns:
         tuple: (X, y) where X is features DataFrame and y is target Series
         
     Raises:
-        FileNotFoundError: If processed data files are not found
+        FileNotFoundError: If local processed data files are not found (when from_huggingface=False)
+        ImportError: If datasets library is not installed (when from_huggingface=True)
     """
-    print("📂 Loading data...")
+    if from_huggingface:
+        return load_data_from_huggingface(repo_id=hf_repo_id, split="full")
+    
+    # Load from local directory
+    print("📂 Loading data from local directory...")
     data_dir = Path(data_dir)
     X_path = data_dir / "features.csv"
     y_path = data_dir / "target.csv"
 
     if not X_path.exists() or not y_path.exists():
         raise FileNotFoundError(
-            f"Processed data not found in {data_dir}. Run phase-1 preprocessing first."
+            f"Processed data not found in {data_dir}. "
+            f"Either run phase-1 preprocessing or use from_huggingface=True to load from HuggingFace Hub."
         )
 
     X = pd.read_csv(X_path)
@@ -143,21 +213,9 @@ def load_data(data_dir: str = "data/processed"):
     else:
         y = y.iloc[:, 0]
 
-    print(f"✅ Loaded features: {X.shape}, target: {y.shape}")
+    print(f"✅ Loaded from local: features {X.shape}, target {y.shape}")
     print(f"   Class distribution: {y.value_counts().to_dict()}")
     return X, y
-
-
-def run_preprocessing(preprocess_script: Path) -> None:
-    """Run preprocessing script to generate features and target files.
-    
-    Args:
-        preprocess_script: Path to the preprocessing script to execute
-    """
-    print_section("🔄 Running Preprocessing", "-")
-    print(f"📂 Running: {preprocess_script}")
-    subprocess.run([sys.executable, str(preprocess_script)], check=True)
-    print("✅ Preprocessing completed")
 
 
 # ============================================================================
