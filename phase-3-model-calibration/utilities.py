@@ -438,22 +438,21 @@ class ModelCalibrator:
         Parameters:
         -----------
         method : str
-            Calibration method - 'platt' (sigmoid) or 'isotonic'
+            Calibration method - only 'platt' is supported
         cv : int
-            Number of cross-validation folds for calibration
+            Number of cross-validation folds (unused, kept for compatibility)
         """
-        if method not in ['platt', 'isotonic', 'sigmoid']:
-            raise ValueError("method must be 'platt', 'sigmoid', or 'isotonic'")
+        if method not in ['platt', 'sigmoid']:
+            raise ValueError("method must be 'platt' or 'sigmoid'")
         
-        # Normalize method name
-        self.method = 'sigmoid' if method == 'platt' else method
+        self.method = 'platt'
         self.cv = cv
         self.calibrator = None
         self.is_fitted = False
         
     def fit(self, y_true: np.ndarray, y_pred_proba: np.ndarray) -> 'ModelCalibrator':
         """
-        Fit the calibration model on validation data.
+        Fit Platt Scaling calibration on validation data.
         
         Parameters:
         -----------
@@ -470,26 +469,17 @@ class ModelCalibrator:
         y_true = np.array(y_true).ravel()
         y_pred_proba = np.array(y_pred_proba).ravel()
         
-        if self.method == 'sigmoid':
-            # Platt scaling: fit logistic regression on predicted probabilities
-            # Use penalty=None (not the string 'none') to disable regularization
-            # and increase max_iter for robust convergence on large datasets.
-            self.calibrator = LogisticRegression(penalty=None, solver='lbfgs', max_iter=1000)
-            # Reshape for sklearn
-            X = y_pred_proba.reshape(-1, 1)
-            self.calibrator.fit(X, y_true)
-            
-        elif self.method == 'isotonic':
-            # Isotonic regression: monotonic calibration
-            self.calibrator = IsotonicRegression(out_of_bounds='clip')
-            self.calibrator.fit(y_pred_proba, y_true)
+        # Platt scaling: fit logistic regression on predicted probabilities
+        self.calibrator = LogisticRegression(penalty=None, solver='lbfgs', max_iter=1000)
+        X = y_pred_proba.reshape(-1, 1)
+        self.calibrator.fit(X, y_true)
         
         self.is_fitted = True
         return self
     
     def predict_proba(self, y_pred_proba: np.ndarray) -> np.ndarray:
         """
-        Apply calibration to uncalibrated probabilities.
+        Apply Platt Scaling calibration to uncalibrated probabilities.
         
         Parameters:
         -----------
@@ -505,12 +495,8 @@ class ModelCalibrator:
             raise ValueError("Calibrator must be fitted before prediction")
         
         y_pred_proba = np.array(y_pred_proba).ravel()
-        
-        if self.method == 'sigmoid':
-            X = y_pred_proba.reshape(-1, 1)
-            calibrated = self.calibrator.predict_proba(X)[:, 1]
-        else:  # isotonic
-            calibrated = self.calibrator.predict(y_pred_proba)
+        X = y_pred_proba.reshape(-1, 1)
+        calibrated = self.calibrator.predict_proba(X)[:, 1]
         
         return calibrated
     
