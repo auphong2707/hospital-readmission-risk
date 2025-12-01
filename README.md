@@ -139,40 +139,6 @@ The dataset represents 10 years (1999-2008) of clinical care at 130 US hospitals
   - **Documentation**: Model card with performance, fairness, and limitation disclosures
   - **Validation report**: Clinical review of risk categories and recommended actions
 
-### Immediate Next Steps (Priority Order)
-
-#### **Phase 1: Data Preprocessing (Week 1-2)**
-1. **Create preprocessing pipeline** (`notebooks/02_preprocessing.ipynb`)
-   - Missing value imputation strategy
-   - Outlier treatment implementation
-   - Feature engineering pipeline
-2. **Generate clean dataset** with engineered features
-3. **Create train/validation/test splits** (temporal: 70%/15%/15%)
-
-#### **Phase 2: Baseline Modeling (Week 3)**
-1. **Implement Logistic Regression baseline** (`notebooks/03_modeling.ipynb`)
-2. **Establish evaluation framework** (metrics, cross-validation)
-
-#### **Phase 3: Advanced Modeling (Week 4-5)**
-1. **Train ensemble models** (Random Forest, XGBoost, LightGBM)
-2. **Hyperparameter optimization** with cross-validation
-3. **Model comparison and selection**
-
-#### **Phase 4: Model Calibration (Week 6)**
-1. **Apply Platt Scaling calibration** to model probabilities
-2. **Validate calibration quality** (Brier score, ECE, H-L test)
-3. **Check calibration fairness** across demographic groups
-
-#### **Phase 5: Threshold Optimization & Risk Scoring (Week 7)**
-1. **Calculate optimal decision threshold** using cost matrix and expected value
-2. **Define risk categories** derived from optimal threshold
-3. **Validate risk categories** with actual readmission rates and ROI projections
-
-#### **Phase 6: Fairness Evaluation & Deployment (Week 8)**
-1. **Evaluate fairness** at optimal threshold across demographic groups
-2. **Apply bias mitigation** if unfairness detected (group-specific thresholds)
-3. **Package final model** with documentation and clinical validation report
-
 ## Deliverables
 
 ### 1. Risk Prediction Model
