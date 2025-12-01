@@ -1,25 +1,16 @@
 """
 Phase 3: Model Calibration Utilities
 
-This module provides comprehensive utilities for calibrating machine learning models
-for hospital readmission prediction. Includes calibration techniques, validation methods,
-risk score mapping, and fairness-aware calibration.
+Provides Platt Scaling calibration for hospital readmission prediction models.
 
-Supported Models:
-- Logistic Regression (baseline)
-- Random Forest
-- Gradient Boosting (XGBoost/LightGBM)
-
-Calibration Techniques:
-1. Platt Scaling (Logistic regression transformation)
-2. Isotonic Regression (Non-parametric calibration)
-3. Group-Specific Calibration (Demographics-based)
+Calibration Method:
+- Platt Scaling: Logistic regression transformation of predicted probabilities
 
 Validation Methods:
 - Reliability Diagrams
 - Brier Score
+- Expected Calibration Error (ECE)
 - Hosmer-Lemeshow Test
-- Risk Score Mapping
 """
 
 import numpy as np
@@ -28,7 +19,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import Dict, List, Tuple, Optional, Union, Any
 from sklearn.calibration import CalibratedClassifierCV, calibration_curve
-from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import brier_score_loss, log_loss, roc_auc_score
 from scipy import stats
@@ -436,9 +426,9 @@ def download_data_from_hf(
 
 class ModelCalibrator:
     """
-    Main calibration class for hospital readmission models.
+    Platt Scaling calibration for hospital readmission models.
     
-    Provides Platt scaling and Isotonic regression calibration methods.
+    Uses logistic regression to transform uncalibrated probabilities.
     """
     
     def __init__(self, method: str = 'platt', cv: int = 5):
@@ -538,119 +528,6 @@ class ModelCalibrator:
         """Load a fitted calibrator from disk."""
         with open(filepath, 'rb') as f:
             return pickle.load(f)
-
-
-class GroupSpecificCalibrator:
-    """
-    Calibrate models separately for different demographic groups.
-    
-    Ensures fair calibration across protected attributes like age, race, gender.
-    """
-    
-    def __init__(self, method: str = 'platt', min_group_size: int = 100):
-        """
-        Initialize group-specific calibrator.
-        
-        Parameters:
-        -----------
-        method : str
-            Calibration method - 'platt' or 'isotonic'
-        min_group_size : int
-            Minimum samples required for group-specific calibration
-        """
-        self.method = method
-        self.min_group_size = min_group_size
-        self.calibrators = {}
-        self.global_calibrator = None
-        self.groups_calibrated = []
-        
-    def fit(self, y_true: np.ndarray, y_pred_proba: np.ndarray, 
-            groups: np.ndarray) -> 'GroupSpecificCalibrator':
-        """
-        Fit separate calibrators for each demographic group.
-        
-        Parameters:
-        -----------
-        y_true : np.ndarray
-            True binary labels
-        y_pred_proba : np.ndarray
-            Uncalibrated predicted probabilities
-        groups : np.ndarray
-            Group labels (e.g., age groups, race categories)
-            
-        Returns:
-        --------
-        self : GroupSpecificCalibrator
-            Fitted calibrator instance
-        """
-        y_true = np.array(y_true).ravel()
-        y_pred_proba = np.array(y_pred_proba).ravel()
-        groups = np.array(groups).ravel()
-        
-        # Fit global calibrator as fallback
-        self.global_calibrator = ModelCalibrator(method=self.method)
-        self.global_calibrator.fit(y_true, y_pred_proba)
-        
-        # Fit group-specific calibrators
-        unique_groups = np.unique(groups)
-        for group in unique_groups:
-            group_mask = groups == group
-            group_size = np.sum(group_mask)
-            
-            if group_size >= self.min_group_size:
-                y_true_group = y_true[group_mask]
-                y_pred_group = y_pred_proba[group_mask]
-                
-                # Check if group has both classes
-                if len(np.unique(y_true_group)) > 1:
-                    calibrator = ModelCalibrator(method=self.method)
-                    calibrator.fit(y_true_group, y_pred_group)
-                    self.calibrators[group] = calibrator
-                    self.groups_calibrated.append(group)
-                else:
-                    warnings.warn(f"Group {group} has only one class. Using global calibrator.")
-            else:
-                warnings.warn(f"Group {group} size ({group_size}) < min_group_size. Using global calibrator.")
-        
-        return self
-    
-    def predict_proba(self, y_pred_proba: np.ndarray, 
-                      groups: np.ndarray) -> np.ndarray:
-        """
-        Apply group-specific calibration.
-        
-        Parameters:
-        -----------
-        y_pred_proba : np.ndarray
-            Uncalibrated predicted probabilities
-        groups : np.ndarray
-            Group labels
-            
-        Returns:
-        --------
-        calibrated_proba : np.ndarray
-            Calibrated probabilities
-        """
-        y_pred_proba = np.array(y_pred_proba).ravel()
-        groups = np.array(groups).ravel()
-        
-        calibrated = np.zeros_like(y_pred_proba)
-        
-        for group in np.unique(groups):
-            group_mask = groups == group
-            
-            if group in self.calibrators:
-                # Use group-specific calibrator
-                calibrated[group_mask] = self.calibrators[group].predict_proba(
-                    y_pred_proba[group_mask]
-                )
-            else:
-                # Use global calibrator
-                calibrated[group_mask] = self.global_calibrator.predict_proba(
-                    y_pred_proba[group_mask]
-                )
-        
-        return calibrated
 
 
 class CalibrationMetrics:
@@ -1194,89 +1071,6 @@ class CalibrationVisualizer:
         return fig
     
     @staticmethod
-    def plot_multi_method_calibration_comparison(
-        y_true: np.ndarray,
-        probabilities_dict: Dict[str, np.ndarray],
-        n_bins: int = 10,
-        title: str = "Multi-Method Calibration Comparison",
-        save_path: Optional[str] = None
-    ) -> plt.Figure:
-        """
-        Compare multiple calibration methods on same plot.
-        
-        Parameters:
-        -----------
-        y_true : np.ndarray
-            True binary labels
-        probabilities_dict : Dict[str, np.ndarray]
-            Dictionary mapping method names to predicted probabilities
-            Example: {'Uncalibrated': proba_uncal, 'Platt': proba_platt, 'Isotonic': proba_iso}
-        n_bins : int
-            Number of bins for calibration curve
-        title : str
-            Plot title
-        save_path : str, optional
-            Path to save the figure
-            
-        Returns:
-        --------
-        fig : matplotlib.figure.Figure
-            The created figure
-        """
-        fig, ax = plt.subplots(figsize=(10, 8))
-        
-        # Plot perfect calibration line
-        ax.plot([0, 1], [0, 1], 'k--', label='Perfect Calibration', linewidth=2, alpha=0.8)
-        
-        # Color palette for methods
-        colors = ['#E63946', '#2E86AB', '#06A77D', '#F18F01', '#9D4EDD']
-        markers = ['s', 'o', '^', 'D', 'v']
-        
-        # Plot each calibration method
-        metrics_text_parts = []
-        for i, (method_name, y_pred_proba) in enumerate(probabilities_dict.items()):
-            prob_true, prob_pred = calibration_curve(
-                y_true, y_pred_proba, n_bins=n_bins, strategy='uniform'
-            )
-            
-            # Calculate metrics
-            brier = brier_score_loss(y_true, y_pred_proba)
-            ece = CalibrationMetrics.expected_calibration_error(y_true, y_pred_proba, n_bins)
-            
-            # Plot
-            color = colors[i % len(colors)]
-            marker = markers[i % len(markers)]
-            ax.plot(prob_pred, prob_true, marker=marker, linestyle='-',
-                   color=color, label=method_name, 
-                   linewidth=2, markersize=8, alpha=0.8)
-            
-            # Collect metrics
-            metrics_text_parts.append(f"{method_name}: Brier={brier:.4f}, ECE={ece:.4f}")
-        
-        # Add metrics text box
-        metrics_text = '\n'.join(metrics_text_parts)
-        ax.text(0.05, 0.95, metrics_text, transform=ax.transAxes,
-                fontsize=9, verticalalignment='top', family='monospace',
-                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
-        
-        ax.set_xlabel('Mean Predicted Probability', fontsize=12, fontweight='bold')
-        ax.set_ylabel('Fraction of Positives (Observed)', fontsize=12, fontweight='bold')
-        ax.set_title(title, fontsize=14, fontweight='bold')
-        ax.legend(loc='lower right', fontsize=10, framealpha=0.9)
-        ax.grid(True, alpha=0.3, linestyle='--')
-        ax.set_xlim([0, 1])
-        ax.set_ylim([0, 1])
-        
-        plt.tight_layout()
-        
-        if save_path:
-            Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            print(f"   ✅ Multi-method calibration comparison saved: {save_path}")
-        
-        return fig
-    
-    @staticmethod
     def plot_brier_score_comparison(
         y_true: np.ndarray,
         probabilities_dict: Dict[str, np.ndarray],
@@ -1348,84 +1142,6 @@ class CalibrationVisualizer:
             Path(save_path).parent.mkdir(parents=True, exist_ok=True)
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"   ✅ Brier score comparison saved: {save_path}")
-        
-        return fig
-    
-    @staticmethod
-    def plot_ece_comparison(
-        y_true: np.ndarray,
-        probabilities_dict: Dict[str, np.ndarray],
-        n_bins: int = 10,
-        title: str = "Expected Calibration Error (ECE) Comparison",
-        save_path: Optional[str] = None
-    ) -> plt.Figure:
-        """
-        Bar chart comparing Expected Calibration Error across methods.
-        
-        Parameters:
-        -----------
-        y_true : np.ndarray
-            True binary labels
-        probabilities_dict : Dict[str, np.ndarray]
-            Dictionary mapping method names to predicted probabilities
-        n_bins : int
-            Number of bins for ECE calculation
-        title : str
-            Plot title
-        save_path : str, optional
-            Path to save the figure
-            
-        Returns:
-        --------
-        fig : matplotlib.figure.Figure
-            The created figure
-        """
-        # Calculate ECE scores
-        method_names = []
-        ece_scores = []
-        
-        for method_name, y_pred_proba in probabilities_dict.items():
-            ece = CalibrationMetrics.expected_calibration_error(y_true, y_pred_proba, n_bins)
-            method_names.append(method_name)
-            ece_scores.append(ece)
-        
-        # Create figure
-        fig, ax = plt.subplots(figsize=(10, 6))
-        
-        # Color bars based on performance
-        colors = ['#E63946' if score > 0.05 else '#06A77D' if score < 0.02 else '#F18F01' 
-                 for score in ece_scores]
-        
-        bars = ax.bar(method_names, ece_scores, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
-        
-        # Add value labels on bars
-        for bar, score in zip(bars, ece_scores):
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height,
-                   f'{score:.4f}',
-                   ha='center', va='bottom', fontweight='bold', fontsize=11)
-        
-        # Add reference lines
-        ax.axhline(y=0.05, color='red', linestyle='--', linewidth=2, 
-                  label='Target Threshold (< 0.05)', alpha=0.7)
-        ax.axhline(y=0.02, color='green', linestyle='--', linewidth=2, 
-                  label='Excellent (< 0.02)', alpha=0.7)
-        
-        ax.set_ylabel('Expected Calibration Error (Lower is Better)', fontsize=12, fontweight='bold')
-        ax.set_xlabel('Calibration Method', fontsize=12, fontweight='bold')
-        ax.set_title(title, fontsize=14, fontweight='bold')
-        ax.legend(loc='upper right', fontsize=10)
-        ax.grid(axis='y', alpha=0.3, linestyle='--')
-        ax.set_ylim([0, max(ece_scores) * 1.2])
-        
-        # Rotate x-axis labels if needed
-        plt.xticks(rotation=45, ha='right')
-        plt.tight_layout()
-        
-        if save_path:
-            Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            print(f"   ✅ ECE comparison saved: {save_path}")
         
         return fig
     
@@ -1711,45 +1427,20 @@ class CalibrationVisualizer:
         )
         visualization_paths['reliability_diagram'] = save_path
         
-        # 2. Multi-Method Calibration Comparison
-        if len(probabilities_dict) > 1:
-            print("2️⃣  Multi-Method Calibration Comparison...")
-            save_path = str(output_path / "02_multi_method_calibration_comparison.png")
-            CalibrationVisualizer.plot_multi_method_calibration_comparison(
-                y_true=y_true,
-                probabilities_dict=probabilities_dict,
-                n_bins=n_bins,
-                title="Multi-Method Calibration Comparison",
-                save_path=save_path
-            )
-            visualization_paths['multi_method_comparison'] = save_path
-        
-        # 3. Brier Score Comparison
-        print("3️⃣  Brier Score Comparison...")
-        save_path = str(output_path / "03_brier_score_comparison.png")
+        # 2. Calibration Improvement Metrics (Brier, ECE, Log Loss)
+        print("2️⃣  Calibration Improvement Metrics...")
+        save_path = str(output_path / "02_calibration_improvement_metrics.png")
         CalibrationVisualizer.plot_brier_score_comparison(
             y_true=y_true,
             probabilities_dict=probabilities_dict,
-            title="Brier Score Comparison Across Calibration Methods",
+            title="Calibration Improvement: Brier Score & ECE Comparison",
             save_path=save_path
         )
-        visualization_paths['brier_comparison'] = save_path
+        visualization_paths['calibration_improvement'] = save_path
         
-        # 4. ECE Comparison
-        print("4️⃣  Expected Calibration Error (ECE) Comparison...")
-        save_path = str(output_path / "04_ece_comparison.png")
-        CalibrationVisualizer.plot_ece_comparison(
-            y_true=y_true,
-            probabilities_dict=probabilities_dict,
-            n_bins=n_bins,
-            title="Expected Calibration Error (ECE) Comparison",
-            save_path=save_path
-        )
-        visualization_paths['ece_comparison'] = save_path
-        
-        # 5. Probability Distribution Changes
-        print("5️⃣  Probability Distribution Changes...")
-        save_path = str(output_path / "05_probability_distribution_changes.png")
+        # 3. Probability Distribution Changes
+        print("3️⃣  Probability Distribution Changes...")
+        save_path = str(output_path / "03_probability_distribution_changes.png")
         risk_thresholds = (0.05, 0.15)  # Default thresholds
         if risk_mapper is not None:
             risk_thresholds = (risk_mapper.low_threshold, risk_mapper.high_threshold)
@@ -1762,10 +1453,10 @@ class CalibrationVisualizer:
         )
         visualization_paths['probability_distribution'] = save_path
         
-        # 6. Risk Score Distribution (if risk_mapper provided)
+        # 4. Risk Score Distribution (if risk_mapper provided)
         if risk_mapper is not None:
-            print("6️⃣  Risk Score Distribution...")
-            save_path = str(output_path / "06_risk_score_distribution.png")
+            print("4️⃣  Risk Score Distribution...")
+            save_path = str(output_path / "04_risk_score_distribution.png")
             CalibrationVisualizer.plot_risk_distribution(
                 probabilities=y_pred_proba_calibrated,
                 risk_mapper=risk_mapper,
@@ -1774,10 +1465,10 @@ class CalibrationVisualizer:
             )
             visualization_paths['risk_distribution'] = save_path
         
-        # 7. Group-Specific Calibration (if groups provided)
+        # 5. Group-Specific Calibration (if groups provided)
         if groups is not None:
-            print(f"7️⃣  Group-Specific Calibration by {group_name}...")
-            save_path = str(output_path / f"07_group_calibration_{group_name.lower().replace(' ', '_')}.png")
+            print(f"5️⃣  Group-Specific Calibration by {group_name}...")
+            save_path = str(output_path / f"05_group_calibration_{group_name.lower().replace(' ', '_')}.png")
             CalibrationVisualizer.plot_group_calibration(
                 y_true=y_true,
                 y_pred_proba=y_pred_proba_calibrated,
@@ -1788,9 +1479,9 @@ class CalibrationVisualizer:
             )
             visualization_paths[f'group_calibration_{group_name.lower()}'] = save_path
             
-            # 8. Calibration Fairness Metrics
-            print(f"8️⃣  Calibration Fairness Metrics by {group_name}...")
-            save_path = str(output_path / f"08_calibration_fairness_{group_name.lower().replace(' ', '_')}.png")
+            # 6. Calibration Fairness Metrics
+            print(f"6️⃣  Calibration Fairness Metrics by {group_name}...")
+            save_path = str(output_path / f"06_calibration_fairness_{group_name.lower().replace(' ', '_')}.png")
             CalibrationVisualizer.plot_calibration_fairness_metrics(
                 y_true=y_true,
                 y_pred_proba=y_pred_proba_calibrated,
@@ -2058,9 +1749,9 @@ def calibrate_model_pipeline(model_predictions: Dict[str, np.ndarray],
                              groups: Optional[np.ndarray] = None,
                              group_name: Optional[str] = None) -> Tuple[np.ndarray, Dict]:
     """
-    Complete end-to-end calibration pipeline for a single model.
+    Complete end-to-end Platt Scaling calibration pipeline.
     
-    This is the main function to use for calibrating models.
+    Main function for calibrating models using Platt Scaling.
     
     Parameters:
     -----------
@@ -2071,7 +1762,7 @@ def calibrate_model_pipeline(model_predictions: Dict[str, np.ndarray],
     model_name : str
         Name of the model
     calibration_method : str
-        Calibration method ('platt', 'isotonic', 'group-specific')
+        Calibration method (default: 'platt')
     output_dir : str
         Directory for outputs
     groups : np.ndarray, optional
@@ -2090,28 +1781,15 @@ def calibrate_model_pipeline(model_predictions: Dict[str, np.ndarray],
     print(f"CALIBRATING MODEL: {model_name}")
     print(f"{'='*80}\n")
     
-    # Initialize calibrator
-    if calibration_method == 'group-specific' and groups is not None:
-        calibrator = GroupSpecificCalibrator(method='platt')
-        # Assuming groups are provided for train set
-        calibrator.fit(
-            model_predictions['train']['y_true'],
-            model_predictions['train']['y_pred_proba'],
-            model_predictions['train']['groups']
-        )
-        calibrated_proba = calibrator.predict_proba(
-            model_predictions['test']['y_pred_proba'],
-            groups
-        )
-    else:
-        calibrator = ModelCalibrator(method=calibration_method)
-        calibrator.fit(
-            model_predictions['train']['y_true'],
-            model_predictions['train']['y_pred_proba']
-        )
-        calibrated_proba = calibrator.predict_proba(
-            model_predictions['test']['y_pred_proba']
-        )
+    # Initialize Platt Scaling calibrator
+    calibrator = ModelCalibrator(method='platt')
+    calibrator.fit(
+        model_predictions['train']['y_true'],
+        model_predictions['train']['y_pred_proba']
+    )
+    calibrated_proba = calibrator.predict_proba(
+        model_predictions['test']['y_pred_proba']
+    )
     
     # Save calibrator
     calibrator_path = Path(output_dir) / f"{model_name.replace(' ', '_')}_calibrator.pkl"
