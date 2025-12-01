@@ -1,7 +1,7 @@
 # Phase 3: Model Calibration
 
 ## Purpose
-Ensure predicted probabilities accurately reflect actual readmission risk for reliable clinical decision-making.
+Calibrate probability predictions using Platt Scaling to ensure reliable risk estimates for threshold optimization.
 
 ## Methodology
 
@@ -12,24 +12,13 @@ Ensure predicted probabilities accurately reflect actual readmission risk for re
 - Parameters (a, b) learned on validation set to map probabilities to true event rates
 
 ### Validation Methods
-- **Reliability Diagrams**: Plot predicted vs. observed probabilities
+- **Reliability Diagrams**: Plot predicted vs actual probabilities (before/after calibration)
 - **Brier Score**: Measure calibration quality (target: < 0.15)
+- **Expected Calibration Error (ECE)**: Target < 0.05
 - **Hosmer-Lemeshow Test**: Statistical calibration assessment (p-value > 0.05)
 
-### Note on Risk Categories
-**⚠️ Important**: Risk category thresholds shown in Phase 3 visualizations are **temporary placeholders** for visualization purposes only. The actual risk thresholds will be **determined in Phase 4** using cost-sensitive threshold optimization.
-
-**Temporary thresholds used in Phase 3 visualizations:**
-| Risk Category | Probability | Purpose |
-|--------------|-------------|---------|
-| Low | 0-5% | Visualization baseline only |
-| Medium | 5-15% | Visualization reference only |
-| High | 15%+ | Visualization reference only |
-
-**Actual thresholds (Phase 4)** will be derived from:
-- Optimal decision threshold that maximizes expected value
-- Cost matrix ($15K readmission cost vs $500 intervention cost)
-- ROI analysis and resource allocation constraints
+### Note on Risk Thresholds
+**⚠️ Temporary thresholds (5%, 15%)** are used in Phase 3 visualizations as placeholders only. Actual thresholds will be determined in Phase 4 using cost-sensitive optimization.
 
 ## Input
 - Best-performing model from Phase 2
@@ -38,13 +27,10 @@ Ensure predicted probabilities accurately reflect actual readmission risk for re
 - Patient demographic data
 
 ## Output
-1. **Calibrated Probabilities**: Reliable probabilities ready for threshold optimization in Phase 4
-2. **Calibration Report**: Reliability diagrams, Brier scores, H-L test results, ECE metrics
-3. **Calibration Method Selection**: Best calibration technique (Platt vs Isotonic vs Group-specific)
-4. **Calibration Fairness Assessment**: ECE and Brier scores by demographic group
-5. **Comprehensive Visualizations**: See visualization section below
-
-**Note**: Risk category thresholds and clinical decision rules are **not finalized in Phase 3**. They will be determined in Phase 4 through cost-sensitive threshold optimization.
+1. **Calibrated Probabilities**: Platt-calibrated probabilities ready for Phase 4 threshold optimization
+2. **Calibration Metrics**: Brier score, ECE, H-L test, reliability diagrams
+3. **Calibration Fairness**: ECE and Brier scores by demographic group
+4. **Visualizations**: 8 calibration quality and fairness plots
 
 ## 📊 Visualizations
 
@@ -74,30 +60,19 @@ Ensure predicted probabilities accurately reflect actual readmission risk for re
 ### Probability Analysis
 7. **Probability Distribution Changes**
    - Histograms showing before/after calibration
-   - Visualize how extreme probabilities were adjusted
-   - Overlay **temporary** risk category thresholds (for reference only)
-   - **Note**: Thresholds shown are placeholders; actual thresholds determined in Phase 4
+   - Visualize how probabilities were adjusted by Platt Scaling
 
-8. **Risk Score Distribution (Preliminary)**
-   - Patients by **temporary** risk category (Low/Medium/High)
-   - Bar chart with counts and percentages using placeholder thresholds (5%, 15%)
-   - **Purpose**: Visualize probability distribution shape, not final clinical stratification
-   - **Final risk categories**: Will be defined in Phase 4 based on ROI optimization
-
-### Reused from Phase 2
-- ROC/PR curves for reference (model discrimination preserved)
-- Confusion matrix at optimal threshold
+8. **Risk Score Distribution**
+   - Patient distribution by temporary thresholds (5%, 15%)
+   - For visualization reference only
 
 ## Success Criteria
-- Brier score < 0.15 (probability accuracy)
-- ECE < 0.05 (Expected Calibration Error - within ±5% of perfect calibration)
-- Predictions within ±5% of diagonal on reliability plot
-- Hosmer-Lemeshow p-value > 0.05 (statistical calibration goodness-of-fit)
+- Brier score < 0.15
+- ECE < 0.05
+- Hosmer-Lemeshow p-value > 0.05
 - Calibration fairness: ECE difference < 0.03 across demographic groups
-- ROC-AUC preserved (calibration shouldn't reduce discrimination ability)
-- Platt Scaling improves Brier score and ECE vs uncalibrated baseline
-
-**Note**: Clinical risk categories and decision thresholds are **NOT** success criteria for Phase 3. These will be validated in Phase 4 after threshold optimization.
+- ROC-AUC preserved after calibration
+- Platt Scaling improves Brier/ECE vs uncalibrated
 
 ## 🚀 Usage
 
