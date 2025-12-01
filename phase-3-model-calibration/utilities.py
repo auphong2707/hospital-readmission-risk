@@ -202,221 +202,101 @@ def download_model_from_hf(
         raise
 
 
-def download_data_from_hf(
-    repo_id: str = "auphong2707/hospital-readmission-risk-data",
-    split: str = "all",
-    cache_dir: str = "./data/downloaded",
-    force_download: bool = False
-) -> Union[Tuple[pd.DataFrame, pd.Series], Dict[str, Tuple[pd.DataFrame, pd.Series]]]:
-    """
-    Download preprocessed data from HuggingFace Hub.
+def load_phase1_splits(cache_dir: str = "./data/downloaded",
+                       repo_id: str = "auphong2707/hospital-readmission-risk-data"):
+    """Load Phase 1 splits from HuggingFace.
     
-    This function downloads preprocessed hospital readmission data from HuggingFace
-    Hub dataset repository. The data has already been preprocessed using the pipeline
-    from phase-1-data-explore-preprocessing.
+    This ensures all phases (2-5) use the exact same preprocessed data from Phase 1.
+    Phase 1 created these splits with:
+    - Train: 73,526 samples (72.25%)
+    - Validation: 12,975 samples (12.75%)
+    - Test: 15,265 samples (15%)
+    - Random seed: 42
+    - Stratification: Yes (on target variable)
     
-    Parameters:
-    -----------
-    repo_id : str
-        HuggingFace dataset repository ID (format: "username/repo-name")
-        Default: "auphong2707/hospital-readmission-risk-data"
-    split : str
-        Which split to download: "train", "validation", "test", or "all"
-        Default: "all" (downloads all splits)
-    cache_dir : str
-        Local directory to cache downloaded files
-        Default: "./data/downloaded"
-    force_download : bool
-        If True, re-download even if file exists locally
-        Default: False
+    Args:
+        cache_dir: Directory to cache downloaded files
+        repo_id: HuggingFace repository ID
     
     Returns:
-    --------
-    If split="all":
-        dict: {
-            'train': (X_train, y_train),
-            'validation': (X_val, y_val),
-            'test': (X_test, y_test),
-            'info': dataset_info_dict
-        }
-    If split in ["train", "validation", "test"]:
-        tuple: (X, y)
-            X: Features DataFrame
-            y: Target Series
-    
+        tuple: (X_train, X_val, X_test, y_train, y_val, y_test)
+        
     Raises:
-    -------
-    ImportError: If huggingface_hub is not installed
-    FileNotFoundError: If data files not found in repository
-    ValueError: If invalid split specified
-    
-    Example:
-    --------
-    >>> # Download all splits
-    >>> data = download_data_from_hf()
-    >>> X_train, y_train = data['train']
-    >>> X_test, y_test = data['test']
-    >>> 
-    >>> # Download specific split
-    >>> X_train, y_train = download_data_from_hf(split="train")
-    >>> 
-    >>> # Use for calibration
-    >>> data = download_data_from_hf()
-    >>> X_train, y_train = data['train']
-    >>> X_test, y_test = data['test']
-    
-    Notes:
-    ------
-    - Requires huggingface_hub: pip install huggingface_hub
-    - Downloaded files are cached locally to avoid re-downloading
-    - Data is already preprocessed (scaled, encoded, engineered features)
-    - No authentication token required for public repositories
-    - Data includes all preprocessing from phase-1: imputation, encoding,
-      feature engineering, scaling, etc.
+        ImportError: If huggingface_hub is not installed
+        Exception: If splits cannot be loaded from HuggingFace
     """
     try:
         from huggingface_hub import hf_hub_download
     except ImportError:
         raise ImportError(
-            "huggingface_hub is required to download data. "
+            "huggingface_hub library required. "
             "Install with: pip install huggingface_hub"
         )
     
-    # Validate split parameter
-    valid_splits = ["train", "validation", "test", "all"]
-    if split not in valid_splits:
-        raise ValueError(
-            f"Invalid split '{split}'. Must be one of: {valid_splits}"
-        )
-    
-    print(f"\n{'='*80}")
-    print(f"📥 Downloading Preprocessed Data from HuggingFace Hub")
-    print(f"{'='*80}")
+    print("\n" + "="*80)
+    print("📥 Loading Phase 1 Splits from HuggingFace")
+    print("="*80)
     print(f"Repository: {repo_id}")
-    print(f"Split: {split}")
     print(f"Cache directory: {cache_dir}")
     
-    # Create cache directory
-    cache_path = Path(cache_dir)
-    cache_path.mkdir(parents=True, exist_ok=True)
-    
     try:
-        # Download dataset info first
-        print(f"\n⏳ Downloading dataset info...")
-        info_path = hf_hub_download(
+        # Download Phase 1 splits from HuggingFace
+        train_path = hf_hub_download(
             repo_id=repo_id,
-            filename="dataset_info.json",
+            filename="splits/train.csv",
             repo_type="dataset",
-            cache_dir=cache_dir,
-            force_download=force_download
+            cache_dir=cache_dir
         )
-        print(f"✅ Dataset info downloaded: {info_path}")
+        val_path = hf_hub_download(
+            repo_id=repo_id,
+            filename="splits/validation.csv",
+            repo_type="dataset",
+            cache_dir=cache_dir
+        )
+        test_path = hf_hub_download(
+            repo_id=repo_id,
+            filename="splits/test.csv",
+            repo_type="dataset",
+            cache_dir=cache_dir
+        )
         
-        # Load dataset info
-        with open(info_path, 'r') as f:
-            dataset_info = json.load(f)
+        # Load into DataFrames
+        train_df = pd.read_csv(train_path)
+        val_df = pd.read_csv(val_path)
+        test_df = pd.read_csv(test_path)
         
-        # Print dataset information
-        print(f"\n{'='*80}")
-        print(f"📊 Dataset Information")
-        print(f"{'='*80}")
-        print(f"Dataset: {dataset_info.get('dataset_name', 'N/A')}")
-        print(f"Version: {dataset_info.get('version', 'N/A')}")
-        print(f"Description: {dataset_info.get('description', 'N/A')}")
-        print(f"Total Samples: {dataset_info.get('num_samples', 'N/A'):,}")
-        print(f"Number of Features: {dataset_info.get('num_features', 'N/A')}")
-        print(f"Target: {dataset_info.get('target', 'N/A')}")
-        print(f"Task: {dataset_info.get('task', 'N/A')}")
+        # Split features and target
+        # Phase 1 uses 'target' as the column name
+        target_col = 'target' if 'target' in train_df.columns else 'readmitted'
         
-        # Split information
-        split_info = dataset_info.get('splits', {})
-        if split_info:
-            print(f"\n📈 Split Sizes:")
-            print(f"   Train: {split_info.get('train', 'N/A'):,} samples")
-            print(f"   Validation: {split_info.get('validation', 'N/A'):,} samples")
-            print(f"   Test: {split_info.get('test', 'N/A'):,} samples")
+        X_train = train_df.drop(columns=[target_col])
+        y_train = train_df[target_col]
         
-        # Class distribution
-        class_dist = dataset_info.get('class_distribution', {})
-        if class_dist:
-            print(f"\n📊 Class Distribution:")
-            print(f"   No Readmission (0): {class_dist.get('no_readmission', 'N/A'):,}")
-            print(f"   Readmission (1): {class_dist.get('readmission', 'N/A'):,}")
+        X_val = val_df.drop(columns=[target_col])
+        y_val = val_df[target_col]
         
-        # Download data based on split parameter
-        result = {}
+        X_test = test_df.drop(columns=[target_col])
+        y_test = test_df[target_col]
         
-        if split == "all":
-            splits_to_download = ["train", "validation", "test"]
-        else:
-            splits_to_download = [split]
+        print(f"✅ Successfully loaded Phase 1 splits:")
+        print(f"   Train: {X_train.shape} ({len(X_train):,} samples)")
+        print(f"   Validation: {X_val.shape} ({len(X_val):,} samples)")
+        print(f"   Test: {X_test.shape} ({len(X_test):,} samples)")
+        print(f"   Total: {len(X_train) + len(X_val) + len(X_test):,} samples")
+        print(f"\n📊 Class distributions:")
+        print(f"   Train: {dict(y_train.value_counts())}")
+        print(f"   Validation: {dict(y_val.value_counts())}")
+        print(f"   Test: {dict(y_test.value_counts())}")
+        print("="*80 + "\n")
         
-        for split_name in splits_to_download:
-            print(f"\n⏳ Downloading {split_name} split...")
-            
-            # Download the split file
-            split_filename = f"splits/{split_name}.csv"
-            split_path = hf_hub_download(
-                repo_id=repo_id,
-                filename=split_filename,
-                repo_type="dataset",
-                cache_dir=cache_dir,
-                force_download=force_download
-            )
-            print(f"✅ {split_name.capitalize()} split downloaded: {split_path}")
-            
-            # Load the split data
-            print(f"⏳ Loading {split_name} data...")
-            data = pd.read_csv(split_path)
-            
-            # Separate features and target
-            if 'target' in data.columns:
-                y = data['target']
-                X = data.drop('target', axis=1)
-            else:
-                # If target is not in data, assume last column is target
-                y = data.iloc[:, -1]
-                X = data.iloc[:, :-1]
-            
-            print(f"✅ {split_name.capitalize()} data loaded:")
-            print(f"   Features shape: {X.shape}")
-            print(f"   Target shape: {y.shape}")
-            print(f"   Target distribution: {dict(y.value_counts())}")
-            
-            result[split_name] = (X, y)
-        
-        # Add dataset info to result if downloading all splits
-        if split == "all":
-            result['info'] = dataset_info
-            print(f"\n{'='*80}")
-            print(f"✅ All Splits Downloaded Successfully!")
-            print(f"{'='*80}")
-            print(f"🌐 Repository: https://huggingface.co/datasets/{repo_id}")
-            print(f"💾 Local cache: {cache_dir}")
-            print(f"\n📦 Available data:")
-            print(f"   data['train'] -> (X_train, y_train)")
-            print(f"   data['validation'] -> (X_val, y_val)")
-            print(f"   data['test'] -> (X_test, y_test)")
-            print(f"   data['info'] -> dataset_info_dict")
-            print(f"{'='*80}\n")
-            return result
-        else:
-            print(f"\n{'='*80}")
-            print(f"✅ {split.capitalize()} Split Downloaded Successfully!")
-            print(f"{'='*80}")
-            print(f"🌐 Repository: https://huggingface.co/datasets/{repo_id}")
-            print(f"💾 Local cache: {cache_dir}")
-            print(f"{'='*80}\n")
-            return result[split]
+        return X_train, X_val, X_test, y_train, y_val, y_test
         
     except Exception as e:
-        print(f"\n❌ Error downloading data: {e}")
-        print(f"\nTroubleshooting:")
-        print(f"1. Check repository exists: https://huggingface.co/datasets/{repo_id}")
-        print(f"2. Verify data files exist in repository (check splits/ folder)")
+        print(f"❌ Error loading Phase 1 splits: {e}")
+        print(f"\n💡 Troubleshooting:")
+        print(f"1. Ensure preprocessing script has uploaded data to HuggingFace")
+        print(f"2. Check repository: https://huggingface.co/datasets/{repo_id}")
         print(f"3. Check internet connection")
-        print(f"4. Try with force_download=True")
-        print(f"5. Ensure preprocessing script has uploaded data to HuggingFace")
         raise
 
 

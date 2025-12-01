@@ -53,7 +53,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from utilities import (
     download_model_from_hf,
-    download_data_from_hf,
+    load_phase1_splits,
     CalibrationMetrics,
     CalibrationVisualizer,
     calibrate_model_pipeline,
@@ -81,20 +81,20 @@ def load_and_preprocess_data(repo_id: str = "auphong2707/hospital-readmission-ri
                              cache_dir: str = "./data/downloaded",
                              force_download: bool = False):
     """
-    Load preprocessed data from HuggingFace Hub.
+    Load preprocessed data from HuggingFace Hub using Phase 1 splits.
     
-    This function downloads the preprocessed features and target from HuggingFace Hub.
-    The data has already been preprocessed using the pipeline from Phase 1 and split
-    into train/validation/test sets with the SAME split strategy as the training script.
+    This function uses the standardized load_phase1_splits() to ensure
+    Phase 3 uses the exact same data splits as Phase 2 training.
     
-    CRITICAL: Data is downloaded from HuggingFace Hub where it was uploaded by the
-    preprocessing script. This ensures calibration uses the exact same data splits
-    as the training process.
+    Phase 1 Split Strategy:
+    - Train: 73,526 samples (72.25%) - Used for calibrator training
+    - Validation: 12,975 samples (12.75%) - Not used in Phase 3
+    - Test: 15,265 samples (15%) - Used for calibration evaluation
     
     Args:
         repo_id: HuggingFace dataset repository ID
         cache_dir: Directory to cache downloaded files
-        force_download: Force re-download even if cached
+        force_download: Not used (kept for backward compatibility)
         
     Returns:
         tuple: (X_train, X_test, y_train, y_test)
@@ -102,40 +102,34 @@ def load_and_preprocess_data(repo_id: str = "auphong2707/hospital-readmission-ri
     print_section("📂 Loading Preprocessed Data from HuggingFace", "-")
     
     try:
-        # Download all splits from HuggingFace
-        print("⏳ Downloading preprocessed data from HuggingFace Hub...")
+        # Load Phase 1 splits using standardized function
+        print("⏳ Loading Phase 1 splits from HuggingFace Hub...")
         print(f"   Repository: {repo_id}")
-        print(f"   ⚠️  CRITICAL: Using same data splits as training!\n")
+        print(f"   ✅ Using standardized load_phase1_splits() function\n")
         
-        data = download_data_from_hf(
-            repo_id=repo_id,
-            split="all",
+        X_train, X_val, X_test, y_train, y_val, y_test = load_phase1_splits(
             cache_dir=cache_dir,
-            force_download=force_download
+            repo_id=repo_id
         )
         
-        # Extract train and test splits
-        X_train, y_train = data['train']
-        X_test, y_test = data['test']
-        
-        print("✅ Data loaded successfully from HuggingFace Hub")
-        print(f"\n📊 Final Split Summary:")
-        print(f"   Train set: {X_train.shape} features, {y_train.shape} target")
-        print(f"   Test set: {X_test.shape} features, {y_test.shape} target")
-        print(f"   Train class distribution: {dict(y_train.value_counts())}")
+        print("✅ Phase 1 splits loaded successfully")
+        print(f"\n📊 Calibration Data Usage:")
+        print(f"   Train set (for calibrator): {X_train.shape}")
+        print(f"   Test set (for evaluation): {X_test.shape}")
+        print(f"   Validation set: {X_val.shape} (not used in Phase 3)")
+        print(f"\n   Train class distribution: {dict(y_train.value_counts())}")
         print(f"   Test class distribution: {dict(y_test.value_counts())}")
         
         return X_train, X_test, y_train, y_test
         
     except Exception as e:
-        print(f"\n❌ Error loading data from HuggingFace: {e}")
+        print(f"\n❌ Error loading Phase 1 splits: {e}")
         print(f"\n💡 Troubleshooting:")
         print(f"   1. Ensure preprocessing script has uploaded data to HuggingFace")
         print(f"   2. Check repository exists: https://huggingface.co/datasets/{repo_id}")
-        print(f"   3. Verify data files exist in repository (check splits/ folder)")
+        print(f"   3. Verify splits exist: splits/train.csv, splits/validation.csv, splits/test.csv")
         print(f"   4. Try running preprocessing script first:")
         print(f"      python ./phase-1-data-explore-preprocessing/simple_preprocessing.py")
-        print(f"   5. Check HF_TOKEN and HF_REPO_ID in .env file")
         raise
 
 
