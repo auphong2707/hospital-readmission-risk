@@ -1340,7 +1340,7 @@ class CalibrationReport:
         model_name : str
             Name of the model (e.g., 'Logistic Regression', 'Random Forest')
         calibration_method : str
-            Calibration method used ('platt', 'isotonic', 'group-specific')
+            Calibration method used ('platt')
         output_dir : str
             Directory to save report outputs
         groups : np.ndarray, optional
@@ -1378,49 +1378,27 @@ class CalibrationReport:
         report['success_criteria'] = success_criteria
         report['meets_all_criteria'] = all(success_criteria.values())
         
-        # Generate visualizations
-        vis = CalibrationVisualizer()
-        
-        # Reliability diagram
-        reliability_fig = vis.plot_reliability_diagram(
-            y_true, y_pred_proba_uncalibrated, y_pred_proba_calibrated,
-            title=f"{model_name} - Reliability Diagram",
-            save_path=str(output_path / f"{model_name.replace(' ', '_')}_reliability_diagram.png")
+        # Generate visualizations using the static method
+        visualization_paths = CalibrationVisualizer.generate_all_calibration_visualizations(
+            y_true=y_true,
+            y_pred_proba_uncalibrated=y_pred_proba_uncalibrated,
+            y_pred_proba_calibrated=y_pred_proba_calibrated,
+            groups=groups,
+            group_name=group_name if group_name else "Demographic Group",
+            output_dir=str(output_path),
+            n_bins=10
         )
-        plt.close(reliability_fig)
-        
-        # Risk distribution
-        risk_fig = vis.plot_risk_distribution(
-            y_pred_proba_calibrated, risk_mapper,
-            title=f"{model_name} - Risk Distribution",
-            save_path=str(output_path / f"{model_name.replace(' ', '_')}_risk_distribution.png")
-        )
-        plt.close(risk_fig)
-        
-        # Group-specific calibration (if provided)
-        if groups is not None and group_name is not None:
-            group_fig = vis.plot_group_calibration(
-                y_true, y_pred_proba_calibrated, groups, group_name,
-                save_path=str(output_path / f"{model_name.replace(' ', '_')}_group_calibration.png")
-            )
-            plt.close(group_fig)
-        
-        # Save validation table
-        validation_table.to_csv(
-            output_path / f"{model_name.replace(' ', '_')}_risk_validation.csv",
-            index=False
-        )
+        report['visualization_paths'] = visualization_paths
         
         # Save metrics as JSON
         with open(output_path / f"{model_name.replace(' ', '_')}_metrics.json", 'w') as f:
             # Convert numpy types to Python types for JSON serialization
-            # Use recursive converter to avoid circular reference errors
             metrics_json = convert_to_serializable(metrics)
             json.dump(metrics_json, f, indent=2)
         
         # Generate text report
         report_text = CalibrationReport._generate_text_report(
-            model_name, calibration_method, metrics, validation_table, success_criteria
+            model_name, calibration_method, metrics, success_criteria
         )
         report['text_report'] = report_text
         
@@ -1431,8 +1409,7 @@ class CalibrationReport:
     
     @staticmethod
     def _generate_text_report(model_name: str, calibration_method: str,
-                             metrics: Dict, validation_table: pd.DataFrame,
-                             success_criteria: Dict) -> str:
+                             metrics: Dict, success_criteria: Dict) -> str:
         """Generate formatted text report."""
         
         report_lines = [
@@ -1484,19 +1461,13 @@ class CalibrationReport:
             f"  OVERALL: {'✓ ALL CRITERIA MET' if all(success_criteria.values()) else '✗ SOME CRITERIA NOT MET'}",
             "",
             "="*80,
-            "RISK SCORE VALIDATION",
+            "NEXT STEPS",
             "="*80,
             "",
-            validation_table.to_string(index=False),
-            "",
-            "="*80,
-            "CLINICAL DECISION SUPPORT",
-            "="*80,
-            "",
-            "Risk Categories:",
-            "  LOW (0-5%):       Standard discharge planning",
-            "  MEDIUM (5-15%):   Enhanced patient education + 1-week follow-up call",
-            "  HIGH (15%+):      Intensive case management + home health visit",
+            "Phase 4: Threshold Optimization",
+            "  - Determine optimal risk thresholds based on cost matrix",
+            "  - Map calibrated probabilities to clinical actions",
+            "  - Validate thresholds with domain experts",
             "",
             "="*80,
         ]
