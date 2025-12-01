@@ -541,7 +541,7 @@ def train_model(args: argparse.Namespace):
     # Main visualizations (ROC, PR, Confusion Matrix, Calibration, Feature Importance)
     save_visualizations(
         y_final_test, y_final_proba, y_final_pred, out_dir,
-        model=final_model, X=X_final_test, feature_names=X.columns.tolist()
+        model=final_model, X=X_final_test, feature_names=X_development.columns.tolist()
     )
     
     # Learning curves
@@ -589,10 +589,10 @@ def train_model(args: argparse.Namespace):
             "early_stopping_rounds": args.early_stopping_rounds
         },
         "data": {
-            "total_samples": len(X),
+            "total_samples": len(X_train) + len(X_val) + len(X_test),
             "development_size": len(X_development),
             "final_test_size": len(X_final_test),
-            "n_features": X.shape[1]
+            "n_features": X_development.shape[1]
         },
         "best_params": best_params,
         "cross_validation": {

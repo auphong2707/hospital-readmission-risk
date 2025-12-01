@@ -255,16 +255,16 @@ python phase-1-data-explore-preprocessing/simple_preprocessing.py
 
 ### Option 1: Load Data from HuggingFace Hub (Recommended)
 
-For Phase 2 modeling, preprocessed data is available on HuggingFace Hub:
+For Phase 2 modeling, Phase 1's preprocessed splits are available on HuggingFace Hub:
 
 ```python
-from phase-2-risk-modeling.utilities import load_data
+from phase-2-risk-modeling.utilities import load_phase1_splits
 
-# Automatically downloads from auphong2707/hospital-readmission-risk-data
-X, y = load_data(from_huggingface=True)
+# Automatically downloads Phase 1 splits from auphong2707/hospital-readmission-risk-data
+X_train, X_val, X_test, y_train, y_val, y_test = load_phase1_splits()
 
-# Data specs: 101,766 samples, 113 features
-# Class distribution: ~11.2% readmission rate
+# Data specs: Train: 73,526 | Val: 12,975 | Test: 15,265 (113 features)
+# Single source of truth for all phases (2-5)
 ```
 
 Training scripts automatically use HuggingFace data:

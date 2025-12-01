@@ -656,7 +656,7 @@ def main(hf_repo_id: Optional[str] = None,
             'cv_strategy': 'StratifiedKFold'
         },
         'data': {
-            'total_samples': len(X),
+            'total_samples': len(X_train) + len(X_val) + len(X_test),
             'development_size': len(X_development),
             'dev_train_size': len(X_dev_train),
             'dev_val_size': len(X_dev_val),

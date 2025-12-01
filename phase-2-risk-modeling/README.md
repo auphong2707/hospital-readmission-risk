@@ -96,19 +96,21 @@ python phase-2-risk-modeling/model_comparison.py
 
 ### Data Loading
 
-The training scripts use the `load_data()` utility which:
-- Downloads from `auphong2707/hospital-readmission-risk-data` by default
+The training scripts use the `load_phase1_splits()` utility which:
+- Downloads Phase 1's preprocessed splits from `auphong2707/hospital-readmission-risk-data`
 - Caches data locally for faster subsequent runs
-- Loads the complete preprocessed dataset (101,766 samples, 113 features)
+- Ensures all phases use the same data splits (single source of truth)
+- Returns: Train (73,526), Validation (12,975), Test (15,265) samples
 
 ```python
-from utilities import load_data
+from utilities import load_phase1_splits
 
-# Automatically loads from HuggingFace
-X, y = load_data(from_huggingface=True)
+# Load Phase 1's splits from HuggingFace
+X_train, X_val, X_test, y_train, y_val, y_test = load_phase1_splits()
 
-# Or load from local files (if available)
-X, y = load_data(from_huggingface=False, data_dir="data/processed")
+# Combine train + validation for development (K-fold CV)
+X_development = pd.concat([X_train, X_val], axis=0)
+y_development = pd.concat([y_train, y_val], axis=0)
 ```
 
 ## 📈 Expected Plots
