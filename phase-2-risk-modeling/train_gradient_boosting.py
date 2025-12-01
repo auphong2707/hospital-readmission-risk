@@ -99,7 +99,7 @@ from utilities import (
     detect_gpu,
     is_kaggle_environment,
     print_section,
-    load_data,
+    load_phase1_splits,
     get_lgbm_param_grid,
     upload_results_to_hf
 )
@@ -238,17 +238,21 @@ def train_model(args: argparse.Namespace):
     print(f"   - Device: {'GPU' if args.use_gpu else 'CPU'}")
     print(f"   - Environment: {'🏆 Kaggle' if args.environment == 'kaggle' else '💻 Local'}")
     
-    # Load data from HuggingFace
-    X, y = load_data(from_huggingface=True)
+    # Load Phase 1 splits from HuggingFace
+    X_train, X_val, X_test, y_train, y_val, y_test = load_phase1_splits()
 
-    # STEP 1: Final holdout split - create untouched test set
-    print_section("🔀 Step 1: Final Holdout Split", "-")
-    print(f"Splitting entire dataset into development_set ({1-args.test_size:.0%}) and final_test_set ({args.test_size:.0%})...")
-    X_development, X_final_test, y_development, y_final_test = train_test_split(
-        X, y, test_size=args.test_size, random_state=args.random_state, stratify=y
-    )
-    print(f"   ✅ Development set: {X_development.shape}")
-    print(f"   ✅ Final test set (untouched until end): {X_final_test.shape}")
+    # STEP 1: Combine train + validation for development set (K-fold CV)
+    print_section("🔀 Step 1: Prepare Development Set from Phase 1 Splits", "-")
+    print(f"Using Phase 1's preprocessed splits (single source of truth)")
+    print(f"Combining train + validation for development set (K-fold CV)...")
+    
+    X_development = pd.concat([X_train, X_val], axis=0).reset_index(drop=True)
+    y_development = pd.concat([y_train, y_val], axis=0).reset_index(drop=True)
+    X_final_test = X_test
+    y_final_test = y_test
+    
+    print(f"   ✅ Development set (train + val): {X_development.shape}")
+    print(f"   ✅ Final test set (Phase 1): {X_final_test.shape}")
     print(f"   📊 Development class distribution: {y_development.value_counts().to_dict()}")
     print(f"   📊 Final test class distribution: {y_final_test.value_counts().to_dict()}")
 
