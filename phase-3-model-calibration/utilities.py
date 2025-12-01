@@ -697,136 +697,6 @@ class CalibrationMetrics:
         return metrics
 
 
-class RiskScoreMapper:
-    """
-    Map calibrated probabilities to clinical risk categories.
-    
-    Risk Categories:
-    - Low (0-5%): Standard discharge
-    - Medium (5-15%): Enhanced education, 1-week follow-up
-    - High (15%+): Intensive case management, home visit
-    """
-    
-    def __init__(self, low_threshold: float = 0.05, high_threshold: float = 0.15):
-        """
-        Initialize risk score mapper.
-        
-        Parameters:
-        -----------
-        low_threshold : float
-            Threshold between low and medium risk (default: 5%)
-        high_threshold : float
-            Threshold between medium and high risk (default: 15%)
-        """
-        self.low_threshold = low_threshold
-        self.high_threshold = high_threshold
-        self.risk_labels = {0: 'Low', 1: 'Medium', 2: 'High'}
-        self.clinical_actions = {
-            'Low': 'Standard discharge',
-            'Medium': 'Enhanced education, 1-week follow-up',
-            'High': 'Intensive case management, home visit'
-        }
-    
-    def map_to_risk_category(self, probabilities: np.ndarray) -> np.ndarray:
-        """
-        Map probabilities to risk categories (0=Low, 1=Medium, 2=High).
-        
-        Parameters:
-        -----------
-        probabilities : np.ndarray
-            Calibrated probabilities
-            
-        Returns:
-        --------
-        risk_categories : np.ndarray
-            Risk category labels (0, 1, 2)
-        """
-        probabilities = np.array(probabilities).ravel()
-        
-        risk_categories = np.zeros(len(probabilities), dtype=int)
-        risk_categories[probabilities >= self.low_threshold] = 1
-        risk_categories[probabilities >= self.high_threshold] = 2
-        
-        return risk_categories
-    
-    def get_risk_labels(self, probabilities: np.ndarray) -> np.ndarray:
-        """
-        Get risk labels as strings.
-        
-        Parameters:
-        -----------
-        probabilities : np.ndarray
-            Calibrated probabilities
-            
-        Returns:
-        --------
-        risk_labels : np.ndarray
-            Risk labels ('Low', 'Medium', 'High')
-        """
-        categories = self.map_to_risk_category(probabilities)
-        return np.array([self.risk_labels[cat] for cat in categories])
-    
-    def get_clinical_actions(self, probabilities: np.ndarray) -> np.ndarray:
-        """
-        Get recommended clinical actions based on risk.
-        
-        Parameters:
-        -----------
-        probabilities : np.ndarray
-            Calibrated probabilities
-            
-        Returns:
-        --------
-        actions : np.ndarray
-            Recommended clinical actions
-        """
-        risk_labels = self.get_risk_labels(probabilities)
-        return np.array([self.clinical_actions[label] for label in risk_labels])
-    
-    def validate_risk_scores(self, y_true: np.ndarray, 
-                            probabilities: np.ndarray) -> pd.DataFrame:
-        """
-        Validate risk scores by comparing predicted vs. actual readmission rates.
-        
-        Parameters:
-        -----------
-        y_true : np.ndarray
-            True binary labels
-        probabilities : np.ndarray
-            Calibrated probabilities
-            
-        Returns:
-        --------
-        validation_table : pd.DataFrame
-            Risk category validation statistics
-        """
-        risk_categories = self.map_to_risk_category(probabilities)
-        risk_labels = self.get_risk_labels(probabilities)
-        
-        results = []
-        for cat in [0, 1, 2]:
-            mask = risk_categories == cat
-            n_patients = np.sum(mask)
-            
-            if n_patients > 0:
-                actual_rate = np.mean(y_true[mask])
-                predicted_rate = np.mean(probabilities[mask])
-                n_readmissions = np.sum(y_true[mask])
-                
-                results.append({
-                    'Risk Category': self.risk_labels[cat],
-                    'Probability Range': f"{self.low_threshold if cat > 0 else 0:.0%}-{self.high_threshold if cat == 1 else (1.0 if cat == 2 else self.low_threshold):.0%}",
-                    'N Patients': int(n_patients),
-                    'Actual Readmissions': int(n_readmissions),
-                    'Actual Rate': f"{actual_rate:.2%}",
-                    'Predicted Rate': f"{predicted_rate:.2%}",
-                    'Rate Difference': f"{abs(actual_rate - predicted_rate):.2%}",
-                    'Clinical Action': self.clinical_actions[self.risk_labels[cat]]
-                })
-        
-        return pd.DataFrame(results)
-
-
 class CalibrationVisualizer:
     """
     Create comprehensive calibration visualizations.
@@ -906,75 +776,6 @@ class CalibrationVisualizer:
         ax.set_xlim([0, 1])
         ax.set_ylim([0, 1])
         
-        plt.tight_layout()
-        
-        if save_path:
-            Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        
-        return fig
-    
-    @staticmethod
-    def plot_risk_distribution(probabilities: np.ndarray,
-                              risk_mapper: RiskScoreMapper,
-                              title: str = "Risk Score Distribution",
-                              save_path: Optional[str] = None) -> plt.Figure:
-        """
-        Plot distribution of patients across risk categories.
-        
-        Parameters:
-        -----------
-        probabilities : np.ndarray
-            Calibrated probabilities
-        risk_mapper : RiskScoreMapper
-            Risk score mapper instance
-        title : str
-            Plot title
-        save_path : str, optional
-            Path to save the figure
-            
-        Returns:
-        --------
-        fig : matplotlib.figure.Figure
-            The created figure
-        """
-        risk_categories = risk_mapper.map_to_risk_category(probabilities)
-        risk_labels = risk_mapper.get_risk_labels(probabilities)
-        
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-        
-        # Bar plot of risk categories
-        unique_labels, counts = np.unique(risk_labels, return_counts=True)
-        colors = {'Low': 'green', 'Medium': 'orange', 'High': 'red'}
-        bar_colors = [colors[label] for label in unique_labels]
-        
-        ax1.bar(unique_labels, counts, color=bar_colors, alpha=0.7, edgecolor='black')
-        ax1.set_xlabel('Risk Category', fontsize=12)
-        ax1.set_ylabel('Number of Patients', fontsize=12)
-        ax1.set_title('Patient Distribution by Risk Category', fontsize=12, fontweight='bold')
-        ax1.grid(axis='y', alpha=0.3)
-        
-        # Add percentage labels
-        total = len(probabilities)
-        for label, count in zip(unique_labels, counts):
-            idx = list(unique_labels).index(label)
-            percentage = (count / total) * 100
-            ax1.text(idx, count, f'{count}\n({percentage:.1f}%)', 
-                    ha='center', va='bottom', fontweight='bold')
-        
-        # Histogram of probabilities with risk thresholds
-        ax2.hist(probabilities, bins=50, color='skyblue', alpha=0.7, edgecolor='black')
-        ax2.axvline(risk_mapper.low_threshold, color='orange', linestyle='--', 
-                   linewidth=2, label=f'Low/Medium ({risk_mapper.low_threshold:.0%})')
-        ax2.axvline(risk_mapper.high_threshold, color='red', linestyle='--', 
-                   linewidth=2, label=f'Medium/High ({risk_mapper.high_threshold:.0%})')
-        ax2.set_xlabel('Predicted Probability', fontsize=12)
-        ax2.set_ylabel('Number of Patients', fontsize=12)
-        ax2.set_title('Probability Distribution with Risk Thresholds', fontsize=12, fontweight='bold')
-        ax2.legend()
-        ax2.grid(axis='y', alpha=0.3)
-        
-        plt.suptitle(title, fontsize=14, fontweight='bold', y=1.02)
         plt.tight_layout()
         
         if save_path:
@@ -1327,7 +1128,6 @@ class CalibrationVisualizer:
         y_pred_proba_uncalibrated: np.ndarray,
         y_pred_proba_calibrated: np.ndarray,
         probabilities_dict: Optional[Dict[str, np.ndarray]] = None,
-        risk_mapper: Optional[RiskScoreMapper] = None,
         groups: Optional[np.ndarray] = None,
         group_name: str = "Demographic Group",
         output_dir: str = "./calibration_outputs",
@@ -1350,8 +1150,6 @@ class CalibrationVisualizer:
         probabilities_dict : Dict[str, np.ndarray], optional
             Dictionary with multiple calibration methods for comparison
             If None, creates one with uncalibrated and calibrated
-        risk_mapper : RiskScoreMapper, optional
-            Risk mapper for risk distribution plots
         groups : np.ndarray, optional
             Group labels for fairness analysis
         group_name : str
@@ -1374,10 +1172,8 @@ class CalibrationVisualizer:
         ...     y_pred_proba_calibrated=calibrated_proba,
         ...     probabilities_dict={
         ...         'Uncalibrated': uncalibrated_proba,
-        ...         'Platt Scaling': platt_proba,
-        ...         'Isotonic Regression': isotonic_proba
+        ...         'Platt Scaling': platt_proba
         ...     },
-        ...     risk_mapper=risk_mapper,
         ...     groups=demographics['race'].values,
         ...     group_name='Race',
         ...     output_dir='./calibration_outputs/gradient_boosting'
@@ -1428,8 +1224,6 @@ class CalibrationVisualizer:
         print("3️⃣  Probability Distribution Changes...")
         save_path = str(output_path / "03_probability_distribution_changes.png")
         risk_thresholds = (0.05, 0.15)  # Default thresholds
-        if risk_mapper is not None:
-            risk_thresholds = (risk_mapper.low_threshold, risk_mapper.high_threshold)
         CalibrationVisualizer.plot_probability_distribution_changes(
             y_pred_proba_before=y_pred_proba_uncalibrated,
             y_pred_proba_after=y_pred_proba_calibrated,
@@ -1439,21 +1233,9 @@ class CalibrationVisualizer:
         )
         visualization_paths['probability_distribution'] = save_path
         
-        # 4. Risk Score Distribution (if risk_mapper provided)
-        if risk_mapper is not None:
-            print("4️⃣  Risk Score Distribution...")
-            save_path = str(output_path / "04_risk_score_distribution.png")
-            CalibrationVisualizer.plot_risk_distribution(
-                probabilities=y_pred_proba_calibrated,
-                risk_mapper=risk_mapper,
-                title="Risk Score Distribution (Calibrated Probabilities)",
-                save_path=save_path
-            )
-            visualization_paths['risk_distribution'] = save_path
-        
-        # 5. Group-Specific Calibration (if groups provided)
+        # 4. Group-Specific Calibration (if groups provided)
         if groups is not None:
-            print(f"5️⃣  Group-Specific Calibration by {group_name}...")
+            print(f"4️⃣  Group-Specific Calibration by {group_name}...")
             save_path = str(output_path / f"05_group_calibration_{group_name.lower().replace(' ', '_')}.png")
             CalibrationVisualizer.plot_group_calibration(
                 y_true=y_true,
@@ -1465,9 +1247,9 @@ class CalibrationVisualizer:
             )
             visualization_paths[f'group_calibration_{group_name.lower()}'] = save_path
             
-            # 6. Calibration Fairness Metrics
-            print(f"6️⃣  Calibration Fairness Metrics by {group_name}...")
-            save_path = str(output_path / f"06_calibration_fairness_{group_name.lower().replace(' ', '_')}.png")
+            # 5. Calibration Fairness Metrics
+            print(f"5️⃣  Calibration Fairness Metrics by {group_name}...")
+            save_path = str(output_path / f"05_calibration_fairness_{group_name.lower().replace(' ', '_')}.png")
             CalibrationVisualizer.plot_calibration_fairness_metrics(
                 y_true=y_true,
                 y_pred_proba=y_pred_proba_calibrated,
@@ -1586,11 +1368,6 @@ class CalibrationReport:
             y_true, y_pred_proba_uncalibrated, y_pred_proba_calibrated
         )
         report['metrics'] = metrics
-        
-        # Risk score validation
-        risk_mapper = RiskScoreMapper()
-        validation_table = risk_mapper.validate_risk_scores(y_true, y_pred_proba_calibrated)
-        report['risk_validation'] = validation_table.to_dict('records')
         
         # Success criteria checks
         success_criteria = {
@@ -1965,7 +1742,7 @@ import sys
 
 # Add utilities to path
 sys.path.append('./phase-3-model-calibration')
-from utilities import ModelCalibrator, RiskScoreMapper
+from utilities import ModelCalibrator
 
 # Load original model
 model = joblib.load('gradient_boosting_model_original.joblib')
@@ -1982,18 +1759,11 @@ uncalibrated_proba = model.predict_proba(X_new)[:, 1]
 # Step 2: Apply calibration
 calibrated_proba = calibrator.predict_proba(uncalibrated_proba)
 
-# Step 3: Map to clinical risk categories
-risk_mapper = RiskScoreMapper()
-risk_categories = risk_mapper.get_risk_labels(calibrated_proba)
-clinical_actions = risk_mapper.get_clinical_actions(calibrated_proba)
-
 # Create results DataFrame
 results = pd.DataFrame({{
     'patient_id': X_new.index,
     'uncalibrated_probability': uncalibrated_proba,
-    'calibrated_probability': calibrated_proba,
-    'risk_category': risk_categories,
-    'recommended_action': clinical_actions
+    'calibrated_probability': calibrated_proba
 }})
 
 # Display results
@@ -2017,22 +1787,19 @@ def predict_readmission_risk(patient_features):
         patient_features: DataFrame with preprocessed patient features
         
     Returns:
-        DataFrame with predictions and recommended actions
+        DataFrame with calibrated probabilities
     \"\"\"
     # Load models
     model = joblib.load('gradient_boosting_model_original.joblib')
     calibrator = ModelCalibrator.load('Gradient_Boosting_(LightGBM)_calibrator.pkl')
-    risk_mapper = RiskScoreMapper()
     
     # Generate calibrated predictions
     uncalibrated = model.predict_proba(patient_features)[:, 1]
     calibrated = calibrator.predict_proba(uncalibrated)
     
-    # Map to risk categories
+    # Return calibrated probabilities
     results = pd.DataFrame({{
-        'readmission_probability': calibrated,
-        'risk_category': risk_mapper.get_risk_labels(calibrated),
-        'clinical_action': risk_mapper.get_clinical_actions(calibrated)
+        'readmission_probability': calibrated
     }})
     
     return results
@@ -2347,7 +2114,5 @@ upload_calibrated_model_to_hf(
 )
 
 # Use calibrated probabilities for deployment
-risk_mapper = RiskScoreMapper()
-risk_categories = risk_mapper.map_to_risk_category(calibrated_proba)
-clinical_actions = risk_mapper.get_clinical_actions(calibrated_proba)
+# Risk thresholds will be determined in Phase 4 (Threshold Optimization)
 """
