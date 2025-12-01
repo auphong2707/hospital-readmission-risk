@@ -9,16 +9,13 @@ Calibration Pipeline:
 1. Download pre-trained model from HuggingFace Hub
 2. Download preprocessed data from HuggingFace Hub (same splits as training)
 3. Generate uncalibrated predictions
-4. Apply calibration methods (Platt Scaling, Isotonic Regression)
+4. Apply Platt Scaling calibration
 5. Evaluate calibration quality (Brier score, ECE, Hosmer-Lemeshow test)
-6. Generate risk score mappings (Low/Medium/High risk categories)
-7. Create comprehensive calibration reports and visualizations
-8. Save calibrated model for deployment
+6. Create calibration reports and visualizations
+7. Save calibrated model for Phase 4 threshold optimization
 
-Calibration Techniques:
-- Platt Scaling (Sigmoid/Logistic transformation)
-- Isotonic Regression (Non-parametric calibration)
-- Group-Specific Calibration (Optional: by demographics)
+Calibration Technique:
+- Platt Scaling: Logistic regression transformation of predicted probabilities
 
 Validation Methods:
 - Reliability Diagrams (Predicted vs Observed probabilities)
@@ -26,19 +23,12 @@ Validation Methods:
 - Expected Calibration Error/ECE (target < 0.05 for ±5% diagonal)
 - Hosmer-Lemeshow Test (target p-value > 0.05)
 
-Clinical Risk Categories:
-- Low Risk (0-5%): Standard discharge planning
-- Medium Risk (5-15%): Enhanced patient education + 1-week follow-up
-- High Risk (15%+): Intensive case management + home health visit
+Note:
+- Risk thresholds and categories will be determined in Phase 4
+- This phase focuses purely on calibration quality validation
 
 Usage (from project root):
     python ./phase-3-model-calibration/calibrate_gradient_boosting.py
-    
-    # With custom calibration method
-    python ./phase-3-model-calibration/calibrate_gradient_boosting.py --method isotonic
-    
-    # With group-specific calibration
-    python ./phase-3-model-calibration/calibrate_gradient_boosting.py --group-calibration
 
 Requirements:
     pip install lightgbm scikit-learn pandas numpy matplotlib seaborn huggingface_hub joblib
@@ -64,14 +54,11 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 from utilities import (
     download_model_from_hf,
     download_data_from_hf,
-    ModelCalibrator,
-    GroupSpecificCalibrator,
     CalibrationMetrics,
-    RiskScoreMapper,
     CalibrationVisualizer,
-    CalibrationReport,
     calibrate_model_pipeline,
-    upload_calibrated_model_to_hf
+    upload_calibrated_model_to_hf,
+    convert_to_serializable
 )
 
 warnings.filterwarnings('ignore')
@@ -217,25 +204,15 @@ def generate_uncalibrated_predictions(model, X_train, X_test, y_train, y_test):
 
 def calibrate_model(predictions, y_test, method='platt', output_dir='./calibration_outputs'):
     """
-    Apply calibration to model predictions.
+    Apply Platt Scaling calibration to model predictions.
     
-    This is the core calibration step that transforms uncalibrated probabilities
-    into calibrated probabilities that better reflect true readmission risk.
-    
-    Calibration Methods:
-    - 'platt': Platt Scaling (logistic regression on predictions)
-        * Fast, parametric
-        * Works well with limited data
-        * Assumes sigmoid relationship
-    - 'isotonic': Isotonic Regression (piecewise-constant calibration)
-        * Non-parametric, more flexible
-        * Can model complex relationships
-        * Requires more data
+    Transforms uncalibrated probabilities into calibrated probabilities
+    using logistic regression on the validation set.
     
     Args:
         predictions: Dictionary with train/test predictions
         y_test: Test labels
-        method: Calibration method ('platt' or 'isotonic')
+        method: Calibration method (default: 'platt')
         output_dir: Directory to save calibration outputs
         
     Returns:
@@ -259,74 +236,6 @@ def calibrate_model(predictions, y_test, method='platt', output_dir='./calibrati
     )
     
     return calibrated_proba, report
-
-
-def perform_risk_assessment(y_test, uncalibrated_proba, calibrated_proba, output_dir):
-    """
-    Perform clinical risk assessment and validation.
-    
-    This maps calibrated probabilities to clinical risk categories and validates
-    that the risk categories align with actual readmission rates.
-    
-    Risk Categories:
-    - Low (0-5%): Standard discharge planning
-    - Medium (5-15%): Enhanced patient education + 1-week follow-up call
-    - High (15%+): Intensive case management + home health visit
-    
-    Args:
-        y_test: True labels
-        uncalibrated_proba: Uncalibrated probabilities
-        calibrated_proba: Calibrated probabilities
-        output_dir: Directory to save outputs
-        
-    Returns:
-        pd.DataFrame: Risk validation table
-    """
-    print_section("🏥 Clinical Risk Assessment", "-")
-    
-    # Initialize risk score mapper
-    risk_mapper = RiskScoreMapper(low_threshold=0.05, high_threshold=0.15)
-    
-    # Map calibrated probabilities to risk categories
-    print("📊 Mapping probabilities to risk categories...")
-    risk_categories = risk_mapper.map_to_risk_category(calibrated_proba)
-    risk_labels = risk_mapper.get_risk_labels(calibrated_proba)
-    clinical_actions = risk_mapper.get_clinical_actions(calibrated_proba)
-    
-    # Display risk distribution
-    print(f"\n📈 Risk Distribution:")
-    unique_labels, counts = np.unique(risk_labels, return_counts=True)
-    total = len(risk_labels)
-    for label, count in zip(unique_labels, counts):
-        percentage = (count / total) * 100
-        print(f"   {label:8s}: {count:6d} patients ({percentage:5.1f}%)")
-    
-    # Validate risk scores
-    print(f"\n✅ Validating risk scores...")
-    validation_table = risk_mapper.validate_risk_scores(y_test, calibrated_proba)
-    
-    print(f"\n{'='*80}")
-    print("📋 Risk Score Validation Table")
-    print(f"{'='*80}")
-    print(validation_table.to_string(index=False))
-    print(f"{'='*80}\n")
-    
-    # Save validation table
-    output_path = Path(output_dir)
-    validation_path = output_path / "risk_validation_detailed.csv"
-    validation_table.to_csv(validation_path, index=False)
-    print(f"✅ Risk validation table saved: {validation_path}")
-    
-    # Create risk distribution visualization
-    vis = CalibrationVisualizer()
-    vis.plot_risk_distribution(
-        calibrated_proba,
-        risk_mapper,
-        title="Clinical Risk Distribution - Calibrated Model",
-        save_path=str(output_path / "risk_distribution_detailed.png")
-    )
-    
-    return validation_table
 
 
 def generate_comparison_report(y_test, uncalibrated_proba, calibrated_proba, output_dir):
@@ -417,8 +326,6 @@ def generate_comparison_report(y_test, uncalibrated_proba, calibrated_proba, out
     comparison_path = output_path / "calibration_comparison_metrics.json"
     with open(comparison_path, 'w') as f:
         # Convert numpy types to Python types for JSON
-        # Import the safe converter to avoid circular reference errors
-        from utilities import convert_to_serializable
         metrics_json = convert_to_serializable(metrics)
         json.dump(metrics_json, f, indent=2)
     print(f"   ✅ Comparison metrics saved: {comparison_path}")
@@ -464,8 +371,9 @@ The model has been calibrated using {method.upper()} to ensure reliable probabil
 - `Gradient_Boosting_(LightGBM)_calibrator.pkl`: Calibration transformer ({method})
 - `Gradient_Boosting_(LightGBM)_report.txt`: Detailed calibration report
 - `Gradient_Boosting_(LightGBM)_metrics.json`: Calibration metrics (JSON)
-- `risk_validation_detailed.csv`: Risk category validation table
-- Various PNG files: Visualization plots
+- `calibration_comparison_metrics.json`: Before/after comparison metrics
+- `reliability_diagram_comparison.png`: Calibration visualization
+- Various PNG files: Additional visualization plots
 
 ## Usage
 
@@ -480,9 +388,6 @@ from pathlib import Path
 model = joblib.load('gradient_boosting_model_original.joblib')
 
 # Load calibrator
-import sys
-sys.path.append('../phase-3-model-calibration')
-from utilities import ModelCalibrator
 calibrator = ModelCalibrator.load('Gradient_Boosting_(LightGBM)_calibrator.pkl')
 
 # Load your preprocessed features
@@ -492,30 +397,16 @@ X_new = pd.read_csv('your_features.csv')
 uncalibrated_proba = model.predict_proba(X_new)[:, 1]
 calibrated_proba = calibrator.predict_proba(uncalibrated_proba)
 
-# Map to risk categories
-from utilities import RiskScoreMapper
-risk_mapper = RiskScoreMapper()
-risk_categories = risk_mapper.get_risk_labels(calibrated_proba)
-clinical_actions = risk_mapper.get_clinical_actions(calibrated_proba)
-
-# Create results DataFrame
+# Create results DataFrame with calibrated probabilities
 results = pd.DataFrame({{
     'patient_id': X_new.index,
-    'readmission_probability': calibrated_proba,
-    'risk_category': risk_categories,
-    'recommended_action': clinical_actions
+    'readmission_probability': calibrated_proba
 }})
 
 print(results.head())
+
+# Note: Risk categories and thresholds will be determined in Phase 4
 ```
-
-### Risk Categories
-
-| Risk Level | Probability Range | Clinical Action |
-|-----------|------------------|-----------------|
-| Low | 0-5% | Standard discharge planning |
-| Medium | 5-15% | Enhanced patient education + 1-week follow-up call |
-| High | 15%+ | Intensive case management + home health visit |
 
 ### Model Performance
 
@@ -536,9 +427,6 @@ Key Success Criteria:
 
 3. **Regular Recalibration**: Model should be recalibrated periodically as
    patient populations and healthcare practices evolve
-
-4. **Clinical Validation**: Risk categories and thresholds should be validated
-   with clinical experts before deployment
 
 ## Contact
 
@@ -562,19 +450,13 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    # Default: Platt scaling calibration (downloads from HuggingFace)
+    # Default: Platt Scaling calibration (downloads from HuggingFace)
     python calibrate_gradient_boosting.py
-    
-    # Use isotonic regression
-    python calibrate_gradient_boosting.py --method isotonic
-    
-    # Custom data repository
-    python calibrate_gradient_boosting.py --data-repo-id username/my-dataset
     
     # Custom output directory
     python calibrate_gradient_boosting.py --output-dir ./my_calibration_results
     
-    # Force re-download model and data from HuggingFace
+    # Force re-download from HuggingFace
     python calibrate_gradient_boosting.py --force-download
         """
     )
@@ -583,8 +465,8 @@ Examples:
         '--method',
         type=str,
         default='platt',
-        choices=['platt', 'isotonic'],
-        help='Calibration method: platt (sigmoid) or isotonic (default: platt)'
+        choices=['platt'],
+        help='Calibration method (default: platt)'
     )
     
     parser.add_argument(
@@ -665,17 +547,8 @@ Examples:
             output_dir=args.output_dir
         )
         
-        # STEP 5: Clinical risk assessment
-        print_section("🏥 Step 5: Clinical Risk Assessment", "=")
-        validation_table = perform_risk_assessment(
-            y_test, 
-            predictions['test']['y_pred_proba'],
-            calibrated_proba,
-            args.output_dir
-        )
-        
-        # STEP 6: Generate comparison report
-        print_section("📊 Step 6: Generate Comparison Report", "=")
+        # STEP 5: Generate comparison report
+        print_section("📊 Step 5: Generate Comparison Report", "=")
         generate_comparison_report(
             y_test,
             predictions['test']['y_pred_proba'],
@@ -683,8 +556,8 @@ Examples:
             args.output_dir
         )
         
-        # STEP 7: Save calibrated model
-        print_section("💾 Step 7: Save Calibrated Model", "=")
+        # STEP 6: Save calibrated model
+        print_section("💾 Step 6: Save Calibrated Model", "=")
         # Load calibrator (already saved by calibration pipeline)
         from utilities import ModelCalibrator
         calibrator = ModelCalibrator.load(
@@ -692,8 +565,8 @@ Examples:
         )
         save_calibrated_model(model, calibrator, args.output_dir, args.method)
         
-        # STEP 8: Upload to HuggingFace Hub (optional, automatic if HF_TOKEN set)
-        print_section("📤 Step 8: Upload to HuggingFace Hub", "=")
+        # STEP 7: Upload to HuggingFace Hub (optional, automatic if HF_TOKEN set)
+        print_section("📤 Step 7: Upload to HuggingFace Hub", "=")
         upload_success = upload_calibrated_model_to_hf(
             report=report,
             output_dir=args.output_dir,
@@ -721,16 +594,14 @@ Examples:
         print(f"   - Calibrated model and calibrator")
         print(f"   - Detailed calibration report")
         print(f"   - Reliability diagrams")
-        print(f"   - Risk distribution plots")
-        print(f"   - Risk validation tables")
+        print(f"   - Calibration comparison metrics")
         print(f"   - Deployment instructions")
         
         print(f"\n🚀 Next Steps:")
         print(f"   1. Review calibration report: {args.output_dir}/Gradient_Boosting_(LightGBM)_report.txt")
         print(f"   2. Examine visualizations in: {args.output_dir}/")
-        print(f"   3. Validate risk categories with clinical experts")
-        print(f"   4. Follow deployment instructions: {args.output_dir}/DEPLOYMENT_INSTRUCTIONS.md")
-        print(f"   5. Consider fairness evaluation (Phase 4)")
+        print(f"   3. Follow deployment instructions: {args.output_dir}/DEPLOYMENT_INSTRUCTIONS.md")
+        print(f"   4. Proceed to Phase 4: Threshold Optimization and Risk Stratification")
         
         print(f"\n{'='*80}")
         print("🎉 Ready for clinical deployment!")
