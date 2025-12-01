@@ -1192,6 +1192,625 @@ class CalibrationVisualizer:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
         
         return fig
+    
+    @staticmethod
+    def plot_multi_method_calibration_comparison(
+        y_true: np.ndarray,
+        probabilities_dict: Dict[str, np.ndarray],
+        n_bins: int = 10,
+        title: str = "Multi-Method Calibration Comparison",
+        save_path: Optional[str] = None
+    ) -> plt.Figure:
+        """
+        Compare multiple calibration methods on same plot.
+        
+        Parameters:
+        -----------
+        y_true : np.ndarray
+            True binary labels
+        probabilities_dict : Dict[str, np.ndarray]
+            Dictionary mapping method names to predicted probabilities
+            Example: {'Uncalibrated': proba_uncal, 'Platt': proba_platt, 'Isotonic': proba_iso}
+        n_bins : int
+            Number of bins for calibration curve
+        title : str
+            Plot title
+        save_path : str, optional
+            Path to save the figure
+            
+        Returns:
+        --------
+        fig : matplotlib.figure.Figure
+            The created figure
+        """
+        fig, ax = plt.subplots(figsize=(10, 8))
+        
+        # Plot perfect calibration line
+        ax.plot([0, 1], [0, 1], 'k--', label='Perfect Calibration', linewidth=2, alpha=0.8)
+        
+        # Color palette for methods
+        colors = ['#E63946', '#2E86AB', '#06A77D', '#F18F01', '#9D4EDD']
+        markers = ['s', 'o', '^', 'D', 'v']
+        
+        # Plot each calibration method
+        metrics_text_parts = []
+        for i, (method_name, y_pred_proba) in enumerate(probabilities_dict.items()):
+            prob_true, prob_pred = calibration_curve(
+                y_true, y_pred_proba, n_bins=n_bins, strategy='uniform'
+            )
+            
+            # Calculate metrics
+            brier = brier_score_loss(y_true, y_pred_proba)
+            ece = CalibrationMetrics.expected_calibration_error(y_true, y_pred_proba, n_bins)
+            
+            # Plot
+            color = colors[i % len(colors)]
+            marker = markers[i % len(markers)]
+            ax.plot(prob_pred, prob_true, marker=marker, linestyle='-',
+                   color=color, label=method_name, 
+                   linewidth=2, markersize=8, alpha=0.8)
+            
+            # Collect metrics
+            metrics_text_parts.append(f"{method_name}: Brier={brier:.4f}, ECE={ece:.4f}")
+        
+        # Add metrics text box
+        metrics_text = '\n'.join(metrics_text_parts)
+        ax.text(0.05, 0.95, metrics_text, transform=ax.transAxes,
+                fontsize=9, verticalalignment='top', family='monospace',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+        
+        ax.set_xlabel('Mean Predicted Probability', fontsize=12, fontweight='bold')
+        ax.set_ylabel('Fraction of Positives (Observed)', fontsize=12, fontweight='bold')
+        ax.set_title(title, fontsize=14, fontweight='bold')
+        ax.legend(loc='lower right', fontsize=10, framealpha=0.9)
+        ax.grid(True, alpha=0.3, linestyle='--')
+        ax.set_xlim([0, 1])
+        ax.set_ylim([0, 1])
+        
+        plt.tight_layout()
+        
+        if save_path:
+            Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"   ✅ Multi-method calibration comparison saved: {save_path}")
+        
+        return fig
+    
+    @staticmethod
+    def plot_brier_score_comparison(
+        y_true: np.ndarray,
+        probabilities_dict: Dict[str, np.ndarray],
+        title: str = "Brier Score Comparison Across Methods",
+        save_path: Optional[str] = None
+    ) -> plt.Figure:
+        """
+        Bar chart comparing Brier scores across different calibration methods.
+        
+        Parameters:
+        -----------
+        y_true : np.ndarray
+            True binary labels
+        probabilities_dict : Dict[str, np.ndarray]
+            Dictionary mapping method names to predicted probabilities
+        title : str
+            Plot title
+        save_path : str, optional
+            Path to save the figure
+            
+        Returns:
+        --------
+        fig : matplotlib.figure.Figure
+            The created figure
+        """
+        # Calculate Brier scores
+        method_names = []
+        brier_scores = []
+        
+        for method_name, y_pred_proba in probabilities_dict.items():
+            brier = brier_score_loss(y_true, y_pred_proba)
+            method_names.append(method_name)
+            brier_scores.append(brier)
+        
+        # Create figure
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        # Color bars based on performance
+        colors = ['#E63946' if score > 0.15 else '#06A77D' if score < 0.10 else '#F18F01' 
+                 for score in brier_scores]
+        
+        bars = ax.bar(method_names, brier_scores, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
+        
+        # Add value labels on bars
+        for bar, score in zip(bars, brier_scores):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                   f'{score:.4f}',
+                   ha='center', va='bottom', fontweight='bold', fontsize=11)
+        
+        # Add reference line for target threshold
+        ax.axhline(y=0.15, color='red', linestyle='--', linewidth=2, 
+                  label='Target Threshold (< 0.15)', alpha=0.7)
+        ax.axhline(y=0.10, color='green', linestyle='--', linewidth=2, 
+                  label='Excellent (< 0.10)', alpha=0.7)
+        
+        ax.set_ylabel('Brier Score (Lower is Better)', fontsize=12, fontweight='bold')
+        ax.set_xlabel('Calibration Method', fontsize=12, fontweight='bold')
+        ax.set_title(title, fontsize=14, fontweight='bold')
+        ax.legend(loc='upper right', fontsize=10)
+        ax.grid(axis='y', alpha=0.3, linestyle='--')
+        ax.set_ylim([0, max(brier_scores) * 1.2])
+        
+        # Rotate x-axis labels if needed
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        
+        if save_path:
+            Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"   ✅ Brier score comparison saved: {save_path}")
+        
+        return fig
+    
+    @staticmethod
+    def plot_ece_comparison(
+        y_true: np.ndarray,
+        probabilities_dict: Dict[str, np.ndarray],
+        n_bins: int = 10,
+        title: str = "Expected Calibration Error (ECE) Comparison",
+        save_path: Optional[str] = None
+    ) -> plt.Figure:
+        """
+        Bar chart comparing Expected Calibration Error across methods.
+        
+        Parameters:
+        -----------
+        y_true : np.ndarray
+            True binary labels
+        probabilities_dict : Dict[str, np.ndarray]
+            Dictionary mapping method names to predicted probabilities
+        n_bins : int
+            Number of bins for ECE calculation
+        title : str
+            Plot title
+        save_path : str, optional
+            Path to save the figure
+            
+        Returns:
+        --------
+        fig : matplotlib.figure.Figure
+            The created figure
+        """
+        # Calculate ECE scores
+        method_names = []
+        ece_scores = []
+        
+        for method_name, y_pred_proba in probabilities_dict.items():
+            ece = CalibrationMetrics.expected_calibration_error(y_true, y_pred_proba, n_bins)
+            method_names.append(method_name)
+            ece_scores.append(ece)
+        
+        # Create figure
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        # Color bars based on performance
+        colors = ['#E63946' if score > 0.05 else '#06A77D' if score < 0.02 else '#F18F01' 
+                 for score in ece_scores]
+        
+        bars = ax.bar(method_names, ece_scores, color=colors, alpha=0.8, edgecolor='black', linewidth=1.5)
+        
+        # Add value labels on bars
+        for bar, score in zip(bars, ece_scores):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                   f'{score:.4f}',
+                   ha='center', va='bottom', fontweight='bold', fontsize=11)
+        
+        # Add reference lines
+        ax.axhline(y=0.05, color='red', linestyle='--', linewidth=2, 
+                  label='Target Threshold (< 0.05)', alpha=0.7)
+        ax.axhline(y=0.02, color='green', linestyle='--', linewidth=2, 
+                  label='Excellent (< 0.02)', alpha=0.7)
+        
+        ax.set_ylabel('Expected Calibration Error (Lower is Better)', fontsize=12, fontweight='bold')
+        ax.set_xlabel('Calibration Method', fontsize=12, fontweight='bold')
+        ax.set_title(title, fontsize=14, fontweight='bold')
+        ax.legend(loc='upper right', fontsize=10)
+        ax.grid(axis='y', alpha=0.3, linestyle='--')
+        ax.set_ylim([0, max(ece_scores) * 1.2])
+        
+        # Rotate x-axis labels if needed
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        
+        if save_path:
+            Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"   ✅ ECE comparison saved: {save_path}")
+        
+        return fig
+    
+    @staticmethod
+    def plot_probability_distribution_changes(
+        y_pred_proba_before: np.ndarray,
+        y_pred_proba_after: np.ndarray,
+        risk_thresholds: Tuple[float, float] = (0.05, 0.15),
+        title: str = "Probability Distribution: Before vs After Calibration",
+        save_path: Optional[str] = None
+    ) -> plt.Figure:
+        """
+        Histogram showing how predicted probabilities changed after calibration.
+        
+        Parameters:
+        -----------
+        y_pred_proba_before : np.ndarray
+            Uncalibrated probabilities
+        y_pred_proba_after : np.ndarray
+            Calibrated probabilities
+        risk_thresholds : Tuple[float, float]
+            (low_threshold, high_threshold) for risk categories
+        title : str
+            Plot title
+        save_path : str, optional
+            Path to save the figure
+            
+        Returns:
+        --------
+        fig : matplotlib.figure.Figure
+            The created figure
+        """
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 10))
+        
+        bins = np.linspace(0, 1, 51)
+        
+        # Before calibration
+        ax1.hist(y_pred_proba_before, bins=bins, color='#E63946', alpha=0.7, 
+                edgecolor='black', linewidth=0.5, label='Uncalibrated')
+        ax1.axvline(risk_thresholds[0], color='orange', linestyle='--', linewidth=2, 
+                   label=f'Low/Medium ({risk_thresholds[0]:.0%})')
+        ax1.axvline(risk_thresholds[1], color='red', linestyle='--', linewidth=2, 
+                   label=f'Medium/High ({risk_thresholds[1]:.0%})')
+        ax1.set_xlabel('Predicted Probability', fontsize=11, fontweight='bold')
+        ax1.set_ylabel('Frequency', fontsize=11, fontweight='bold')
+        ax1.set_title('Before Calibration', fontsize=12, fontweight='bold')
+        ax1.legend(loc='upper right', fontsize=9)
+        ax1.grid(axis='y', alpha=0.3)
+        
+        # After calibration
+        ax2.hist(y_pred_proba_after, bins=bins, color='#06A77D', alpha=0.7, 
+                edgecolor='black', linewidth=0.5, label='Calibrated')
+        ax2.axvline(risk_thresholds[0], color='orange', linestyle='--', linewidth=2, 
+                   label=f'Low/Medium ({risk_thresholds[0]:.0%})')
+        ax2.axvline(risk_thresholds[1], color='red', linestyle='--', linewidth=2, 
+                   label=f'Medium/High ({risk_thresholds[1]:.0%})')
+        ax2.set_xlabel('Predicted Probability', fontsize=11, fontweight='bold')
+        ax2.set_ylabel('Frequency', fontsize=11, fontweight='bold')
+        ax2.set_title('After Calibration', fontsize=12, fontweight='bold')
+        ax2.legend(loc='upper right', fontsize=9)
+        ax2.grid(axis='y', alpha=0.3)
+        
+        # Overlay comparison
+        ax3.hist(y_pred_proba_before, bins=bins, color='#E63946', alpha=0.5, 
+                edgecolor='black', linewidth=0.5, label='Before (Uncalibrated)')
+        ax3.hist(y_pred_proba_after, bins=bins, color='#06A77D', alpha=0.5, 
+                edgecolor='black', linewidth=0.5, label='After (Calibrated)')
+        ax3.axvline(risk_thresholds[0], color='orange', linestyle='--', linewidth=2, alpha=0.7)
+        ax3.axvline(risk_thresholds[1], color='red', linestyle='--', linewidth=2, alpha=0.7)
+        ax3.set_xlabel('Predicted Probability', fontsize=11, fontweight='bold')
+        ax3.set_ylabel('Frequency', fontsize=11, fontweight='bold')
+        ax3.set_title('Overlay Comparison', fontsize=12, fontweight='bold')
+        ax3.legend(loc='upper right', fontsize=9)
+        ax3.grid(axis='y', alpha=0.3)
+        
+        plt.suptitle(title, fontsize=14, fontweight='bold', y=0.995)
+        plt.tight_layout()
+        
+        if save_path:
+            Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"   ✅ Probability distribution changes saved: {save_path}")
+        
+        return fig
+    
+    @staticmethod
+    def plot_calibration_fairness_metrics(
+        y_true: np.ndarray,
+        y_pred_proba: np.ndarray,
+        groups: np.ndarray,
+        group_name: str = "Demographic Group",
+        n_bins: int = 10,
+        save_path: Optional[str] = None
+    ) -> plt.Figure:
+        """
+        Bar charts showing calibration metrics (ECE, Brier) by demographic group.
+        
+        Parameters:
+        -----------
+        y_true : np.ndarray
+            True binary labels
+        y_pred_proba : np.ndarray
+            Calibrated probabilities
+        groups : np.ndarray
+            Group labels
+        group_name : str
+            Name of the grouping variable
+        n_bins : int
+            Number of bins for ECE calculation
+        save_path : str, optional
+            Path to save the figure
+            
+        Returns:
+        --------
+        fig : matplotlib.figure.Figure
+            The created figure
+        """
+        unique_groups = np.unique(groups)
+        
+        # Calculate metrics per group
+        group_labels = []
+        brier_scores = []
+        ece_scores = []
+        sample_sizes = []
+        
+        for group in unique_groups:
+            mask = groups == group
+            if np.sum(mask) > n_bins:  # Only process if enough samples
+                group_labels.append(str(group))
+                brier_scores.append(brier_score_loss(y_true[mask], y_pred_proba[mask]))
+                ece_scores.append(CalibrationMetrics.expected_calibration_error(
+                    y_true[mask], y_pred_proba[mask], n_bins))
+                sample_sizes.append(np.sum(mask))
+        
+        # Create subplots
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+        
+        # Brier score by group
+        colors_brier = ['#06A77D' if score < 0.15 else '#F18F01' if score < 0.20 else '#E63946' 
+                       for score in brier_scores]
+        bars1 = ax1.bar(range(len(group_labels)), brier_scores, color=colors_brier, 
+                       alpha=0.8, edgecolor='black', linewidth=1.5)
+        
+        # Add value labels and sample sizes
+        for i, (bar, score, n) in enumerate(zip(bars1, brier_scores, sample_sizes)):
+            height = bar.get_height()
+            ax1.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{score:.3f}\n(n={n})',
+                    ha='center', va='bottom', fontsize=9, fontweight='bold')
+        
+        ax1.axhline(y=0.15, color='red', linestyle='--', linewidth=2, 
+                   label='Target < 0.15', alpha=0.7)
+        ax1.set_ylabel('Brier Score', fontsize=11, fontweight='bold')
+        ax1.set_xlabel(group_name, fontsize=11, fontweight='bold')
+        ax1.set_title(f'Brier Score by {group_name}', fontsize=12, fontweight='bold')
+        ax1.set_xticks(range(len(group_labels)))
+        ax1.set_xticklabels(group_labels, rotation=45, ha='right')
+        ax1.legend(fontsize=9)
+        ax1.grid(axis='y', alpha=0.3)
+        
+        # ECE by group
+        colors_ece = ['#06A77D' if score < 0.05 else '#F18F01' if score < 0.10 else '#E63946' 
+                     for score in ece_scores]
+        bars2 = ax2.bar(range(len(group_labels)), ece_scores, color=colors_ece, 
+                       alpha=0.8, edgecolor='black', linewidth=1.5)
+        
+        # Add value labels
+        for i, (bar, score, n) in enumerate(zip(bars2, ece_scores, sample_sizes)):
+            height = bar.get_height()
+            ax2.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{score:.3f}\n(n={n})',
+                    ha='center', va='bottom', fontsize=9, fontweight='bold')
+        
+        ax2.axhline(y=0.05, color='red', linestyle='--', linewidth=2, 
+                   label='Target < 0.05', alpha=0.7)
+        ax2.set_ylabel('Expected Calibration Error (ECE)', fontsize=11, fontweight='bold')
+        ax2.set_xlabel(group_name, fontsize=11, fontweight='bold')
+        ax2.set_title(f'ECE by {group_name}', fontsize=12, fontweight='bold')
+        ax2.set_xticks(range(len(group_labels)))
+        ax2.set_xticklabels(group_labels, rotation=45, ha='right')
+        ax2.legend(fontsize=9)
+        ax2.grid(axis='y', alpha=0.3)
+        
+        plt.suptitle(f'Calibration Fairness: {group_name}', fontsize=14, fontweight='bold')
+        plt.tight_layout()
+        
+        if save_path:
+            Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"   ✅ Calibration fairness metrics saved: {save_path}")
+        
+        return fig
+    
+    @staticmethod
+    def generate_all_calibration_visualizations(
+        y_true: np.ndarray,
+        y_pred_proba_uncalibrated: np.ndarray,
+        y_pred_proba_calibrated: np.ndarray,
+        probabilities_dict: Optional[Dict[str, np.ndarray]] = None,
+        risk_mapper: Optional[RiskScoreMapper] = None,
+        groups: Optional[np.ndarray] = None,
+        group_name: str = "Demographic Group",
+        output_dir: str = "./calibration_outputs",
+        n_bins: int = 10
+    ) -> Dict[str, str]:
+        """
+        Generate all calibration visualizations and save to output directory.
+        
+        This is a convenience function that generates all recommended Phase 3 visualizations
+        in a single call, saving them to the specified output directory.
+        
+        Parameters:
+        -----------
+        y_true : np.ndarray
+            True binary labels
+        y_pred_proba_uncalibrated : np.ndarray
+            Uncalibrated predicted probabilities
+        y_pred_proba_calibrated : np.ndarray
+            Calibrated predicted probabilities
+        probabilities_dict : Dict[str, np.ndarray], optional
+            Dictionary with multiple calibration methods for comparison
+            If None, creates one with uncalibrated and calibrated
+        risk_mapper : RiskScoreMapper, optional
+            Risk mapper for risk distribution plots
+        groups : np.ndarray, optional
+            Group labels for fairness analysis
+        group_name : str
+            Name of the grouping variable for fairness plots
+        output_dir : str
+            Directory to save all visualizations
+        n_bins : int
+            Number of bins for calibration curves
+            
+        Returns:
+        --------
+        Dict[str, str] : Dictionary mapping visualization names to file paths
+        
+        Example:
+        --------
+        >>> # After calibration
+        >>> vis_paths = CalibrationVisualizer.generate_all_calibration_visualizations(
+        ...     y_true=y_test,
+        ...     y_pred_proba_uncalibrated=uncalibrated_proba,
+        ...     y_pred_proba_calibrated=calibrated_proba,
+        ...     probabilities_dict={
+        ...         'Uncalibrated': uncalibrated_proba,
+        ...         'Platt Scaling': platt_proba,
+        ...         'Isotonic Regression': isotonic_proba
+        ...     },
+        ...     risk_mapper=risk_mapper,
+        ...     groups=demographics['race'].values,
+        ...     group_name='Race',
+        ...     output_dir='./calibration_outputs/gradient_boosting'
+        ... )
+        >>> print(f"Generated {len(vis_paths)} visualizations")
+        """
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        visualization_paths = {}
+        
+        print("\n" + "="*80)
+        print("📊 GENERATING COMPREHENSIVE CALIBRATION VISUALIZATIONS")
+        print("="*80)
+        
+        # Create default probabilities_dict if not provided
+        if probabilities_dict is None:
+            probabilities_dict = {
+                'Uncalibrated': y_pred_proba_uncalibrated,
+                'Calibrated': y_pred_proba_calibrated
+            }
+        
+        # 1. Before/After Reliability Diagram
+        print("\n1️⃣  Before/After Reliability Diagram...")
+        save_path = str(output_path / "01_reliability_diagram_before_after.png")
+        CalibrationVisualizer.plot_reliability_diagram(
+            y_true=y_true,
+            y_pred_proba_uncalibrated=y_pred_proba_uncalibrated,
+            y_pred_proba_calibrated=y_pred_proba_calibrated,
+            n_bins=n_bins,
+            title="Reliability Diagram: Before vs After Calibration",
+            save_path=save_path
+        )
+        visualization_paths['reliability_diagram'] = save_path
+        
+        # 2. Multi-Method Calibration Comparison
+        if len(probabilities_dict) > 1:
+            print("2️⃣  Multi-Method Calibration Comparison...")
+            save_path = str(output_path / "02_multi_method_calibration_comparison.png")
+            CalibrationVisualizer.plot_multi_method_calibration_comparison(
+                y_true=y_true,
+                probabilities_dict=probabilities_dict,
+                n_bins=n_bins,
+                title="Multi-Method Calibration Comparison",
+                save_path=save_path
+            )
+            visualization_paths['multi_method_comparison'] = save_path
+        
+        # 3. Brier Score Comparison
+        print("3️⃣  Brier Score Comparison...")
+        save_path = str(output_path / "03_brier_score_comparison.png")
+        CalibrationVisualizer.plot_brier_score_comparison(
+            y_true=y_true,
+            probabilities_dict=probabilities_dict,
+            title="Brier Score Comparison Across Calibration Methods",
+            save_path=save_path
+        )
+        visualization_paths['brier_comparison'] = save_path
+        
+        # 4. ECE Comparison
+        print("4️⃣  Expected Calibration Error (ECE) Comparison...")
+        save_path = str(output_path / "04_ece_comparison.png")
+        CalibrationVisualizer.plot_ece_comparison(
+            y_true=y_true,
+            probabilities_dict=probabilities_dict,
+            n_bins=n_bins,
+            title="Expected Calibration Error (ECE) Comparison",
+            save_path=save_path
+        )
+        visualization_paths['ece_comparison'] = save_path
+        
+        # 5. Probability Distribution Changes
+        print("5️⃣  Probability Distribution Changes...")
+        save_path = str(output_path / "05_probability_distribution_changes.png")
+        risk_thresholds = (0.05, 0.15)  # Default thresholds
+        if risk_mapper is not None:
+            risk_thresholds = (risk_mapper.low_threshold, risk_mapper.high_threshold)
+        CalibrationVisualizer.plot_probability_distribution_changes(
+            y_pred_proba_before=y_pred_proba_uncalibrated,
+            y_pred_proba_after=y_pred_proba_calibrated,
+            risk_thresholds=risk_thresholds,
+            title="Probability Distribution: Before vs After Calibration",
+            save_path=save_path
+        )
+        visualization_paths['probability_distribution'] = save_path
+        
+        # 6. Risk Score Distribution (if risk_mapper provided)
+        if risk_mapper is not None:
+            print("6️⃣  Risk Score Distribution...")
+            save_path = str(output_path / "06_risk_score_distribution.png")
+            CalibrationVisualizer.plot_risk_distribution(
+                probabilities=y_pred_proba_calibrated,
+                risk_mapper=risk_mapper,
+                title="Risk Score Distribution (Calibrated Probabilities)",
+                save_path=save_path
+            )
+            visualization_paths['risk_distribution'] = save_path
+        
+        # 7. Group-Specific Calibration (if groups provided)
+        if groups is not None:
+            print(f"7️⃣  Group-Specific Calibration by {group_name}...")
+            save_path = str(output_path / f"07_group_calibration_{group_name.lower().replace(' ', '_')}.png")
+            CalibrationVisualizer.plot_group_calibration(
+                y_true=y_true,
+                y_pred_proba=y_pred_proba_calibrated,
+                groups=groups,
+                group_name=group_name,
+                n_bins=n_bins,
+                save_path=save_path
+            )
+            visualization_paths[f'group_calibration_{group_name.lower()}'] = save_path
+            
+            # 8. Calibration Fairness Metrics
+            print(f"8️⃣  Calibration Fairness Metrics by {group_name}...")
+            save_path = str(output_path / f"08_calibration_fairness_{group_name.lower().replace(' ', '_')}.png")
+            CalibrationVisualizer.plot_calibration_fairness_metrics(
+                y_true=y_true,
+                y_pred_proba=y_pred_proba_calibrated,
+                groups=groups,
+                group_name=group_name,
+                n_bins=n_bins,
+                save_path=save_path
+            )
+            visualization_paths[f'fairness_metrics_{group_name.lower()}'] = save_path
+        
+        print("\n" + "="*80)
+        print(f"✅ GENERATED {len(visualization_paths)} VISUALIZATIONS")
+        print("="*80)
+        print(f"📁 Output directory: {output_dir}")
+        print("\nGenerated files:")
+        for name, path in visualization_paths.items():
+            print(f"   • {name}: {Path(path).name}")
+        print("="*80 + "\n")
+        
+        return visualization_paths
 
 
 def convert_to_serializable(obj):

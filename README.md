@@ -90,64 +90,54 @@ The dataset represents 10 years (1999-2008) of clinical care at 130 US hospitals
   - **Early stopping** to prevent overfitting
 
 #### 3. Model Calibration
-- 🔲 **Calibrate probability predictions for reliable risk scores**
-- **Calibration techniques:**
-  - **Platt scaling**: Sigmoid function fitting for probability calibration
-  - **Isotonic regression**: Non-parametric calibration for non-linear relationships
-  - **Group-specific calibration**: Separate calibration by demographic groups
+- 🔲 **Calibrate probability predictions using Platt Scaling**
+- **Calibration technique:**
+  - **Platt scaling**: Logistic regression transformation of predicted probabilities
+  - Simple, interpretable, and widely used in healthcare applications
 - 🔲 **Validation methods:**
-  - **Reliability diagrams**: Plot predicted vs actual probabilities
-  - **Brier score**: Measure calibration quality
-  - **Hosmer-Lemeshow test**: Statistical calibration assessment
-- 🔲 **Clinical risk score mapping:**
-  - Map probabilities to risk categories (Low: 0-5%, Medium: 5-15%, High: 15%+)
-  - Validate risk score interpretability with clinical experts
+  - **Reliability diagrams**: Plot predicted vs actual probabilities (before and after calibration)
+  - **Brier score**: Measure calibration quality (target: < 0.15)
+  - **Expected Calibration Error (ECE)**: Target < 0.05
+  - **Hosmer-Lemeshow test**: Statistical calibration assessment (p-value > 0.05)
+- 🔲 **Calibration quality assessment:**
+  - **Calibration improvement**: Verify Brier score and ECE improved vs uncalibrated
+  - **Calibration fairness**: Evaluate ECE and Brier score across demographic groups
+  - Ensure ROC-AUC preserved (calibration shouldn't hurt discrimination)
+  - **Output**: Platt-calibrated probabilities ready for threshold optimization
 
-#### 4. Fairness Checks
-- 🔲 **Evaluate model fairness across demographic groups**
-  - **Protected attributes**: Race, gender, age groups (based on EDA findings)
-  - **Subgroup analysis**: Separate performance metrics by demographic groups
-- **Fairness metrics implementation:**
-  - **Demographic parity**: Equal positive prediction rates across groups
-  - **Equalized odds**: Equal TPR and FPR across groups  
-  - **Equal opportunity**: Equal TPR for positive class across groups
-  - **Calibration fairness**: Equal calibration quality across groups
-- 🔲 **Bias identification and mitigation:**
-  - **Statistical significance testing**: Chi-square tests for group differences
-  - **Fairness constraints**: Add fairness penalties to loss functions
-  - **Post-processing**: Threshold optimization by group
-  - **Re-sampling**: Balanced training data across demographics
-- 🔲 **Healthcare compliance:**
-  - **Documentation**: Bias testing reports for regulatory compliance
-  - **Monitoring**: Ongoing fairness tracking in production
+#### 4. Optimal Threshold & ROI Analysis
+- 🔲 **Cost-sensitive threshold optimization:**
+  - **Input**: Calibrated probabilities from Phase 3
+  - **Cost matrix**: TP = +$14.5K, FP = -$500, TN = $0, FN = -$15K
+  - **Optimal threshold**: Find threshold that maximizes expected value
+  - **Expected value calculation**: EV = (TP × $14.5K) + (FP × -$500) + (FN × -$15K)
+  - **Threshold search**: Test thresholds from 0.05 to 0.95 to find optimal point
+  - **Break-even analysis**: Validate that intervention cost ($500) < expected benefit
+  - **Sensitivity analysis**: Test ROI under different cost assumptions (conservative/aggressive)
+- 🔲 **Risk category definition (derived from optimal threshold):**
+  - **Low risk**: 0 to ~0.67 × optimal_threshold → Standard discharge
+  - **Medium risk**: ~0.67×1.5 × optimal_threshold → Enhanced follow-up call
+  - **High risk**: >1.5 × optimal_threshold → Intensive case management
+  - **Validation**: Confirm actual readmission rates align with risk categories
+  - **Resource allocation**: Calculate intervention volume per risk category
+  - **Output**: Optimal threshold + risk category thresholds ready for fairness evaluation
 
-#### 5. Intervention ROI Estimation
-- 🔲 **Optimal threshold calculation (BA7):**
-  - **Cost-sensitive threshold optimization**: Find decision threshold that maximizes expected value
-  - **Cost matrix definition**: 
-    - True Positive (intervene on readmission): -$500 (intervention) + $15K (prevented readmission) = +$14.5K
-    - False Positive (unnecessary intervention): -$500 (wasted intervention cost)
-    - True Negative (correctly no intervention): $0
-    - False Negative (missed readmission): -$15K (readmission cost)
-  - **Expected value calculation**: EV = (TP × $14.5K) + (FP × -$500) + (TN × $0) + (FN × -$15K)
-  - **Threshold tuning**: Test thresholds from 0.05 to 0.95 to find optimal balance
-  - **Sensitivity analysis**: Evaluate ROI across different cost assumptions
-- 🔲 **Cost-benefit analysis framework:**
-  - **Baseline costs**: $15K average per 30-day readmission (from EDA)
-  - **Intervention costs**: $500 per patient program cost estimate
-  - **Break-even analysis**: Need >3.3% readmission reduction for positive ROI
-- 🔲 **High-risk patient prioritization:**
-  - **Risk stratification**: Top 20-30% risk patients for maximum ROI
-  - **Resource allocation**: Budget optimization across risk categories
-  - **Intervention targeting**: Focus on modifiable risk factors
-- 🔲 **ROI scenarios and projections:**
-  - **Conservative (5-10% reduction)**: Basic care coordination
-  - **Moderate (10-15% reduction)**: Enhanced discharge planning
-  - **Aggressive (15-25% reduction)**: Comprehensive care pathways
-- 🔲 **Business case development:**
-  - **Implementation timeline**: Phased rollout plan (pilot → full deployment)
-  - **Success metrics**: Clinical, operational, and financial KPIs
-  - **Stakeholder presentation**: Executive summary with ROI projections
+#### 5. Fairness Evaluation & Deployment Readiness
+- 🔲 **Threshold fairness evaluation:**
+  - **Input**: Optimal threshold and risk categories from Phase 4
+  - **Protected attributes**: Race, gender, age groups
+  - **Performance by group**: Calculate TPR, FPR, precision, recall per demographic group at optimal threshold
+  - **Threshold fairness metrics**: Demographic parity, equalized odds, equal opportunity
+  - **Risk category distribution**: Check if interventions allocated fairly across groups
+  - **Statistical testing**: Chi-square tests for significant group differences
+- 🔲 **Threshold bias mitigation (if needed):**
+  - **Group-specific decision thresholds**: Adjust thresholds per group to equalize TPR/FPR
+  - **Fairness-ROI trade-off**: Document impact of fairness adjustments on overall ROI
+  - **Decision**: Accept global threshold or implement group-specific decision thresholds
+- 🔲 **Deployment preparation:**
+  - **Final model package**: Calibrated model + optimal thresholds + risk category mapping
+  - **Documentation**: Model card with performance, fairness, and limitation disclosures
+  - **Validation report**: Clinical review of risk categories and recommended actions
 
 ### Immediate Next Steps (Priority Order)
 
@@ -162,22 +152,26 @@ The dataset represents 10 years (1999-2008) of clinical care at 130 US hospitals
 #### **Phase 2: Baseline Modeling (Week 3)**
 1. **Implement Logistic Regression baseline** (`notebooks/03_modeling.ipynb`)
 2. **Establish evaluation framework** (metrics, cross-validation)
-3. **Initial fairness assessment** across demographic groups
 
 #### **Phase 3: Advanced Modeling (Week 4-5)**
 1. **Train ensemble models** (Random Forest, XGBoost, LightGBM)
 2. **Hyperparameter optimization** with cross-validation
 3. **Model comparison and selection**
 
-#### **Phase 4: Calibration & Fairness (Week 6)**
-1. **Implement calibration techniques** (Platt scaling, isotonic regression)
-2. **Comprehensive fairness evaluation** with bias mitigation
-3. **Final model validation** and documentation
+#### **Phase 4: Model Calibration (Week 6)**
+1. **Apply Platt Scaling calibration** to model probabilities
+2. **Validate calibration quality** (Brier score, ECE, H-L test)
+3. **Check calibration fairness** across demographic groups
 
-#### **Phase 5: Business Impact (Week 7-8)**
-1. **ROI analysis implementation** with scenario modeling
-2. **Dashboard prototype** for risk scoring and intervention guidance
-3. **Final presentation** and deployment strategy
+#### **Phase 5: Threshold Optimization & Risk Scoring (Week 7)**
+1. **Calculate optimal decision threshold** using cost matrix and expected value
+2. **Define risk categories** derived from optimal threshold
+3. **Validate risk categories** with actual readmission rates and ROI projections
+
+#### **Phase 6: Fairness Evaluation & Deployment (Week 8)**
+1. **Evaluate fairness** at optimal threshold across demographic groups
+2. **Apply bias mitigation** if unfairness detected (group-specific thresholds)
+3. **Package final model** with documentation and clinical validation report
 
 ## Deliverables
 
