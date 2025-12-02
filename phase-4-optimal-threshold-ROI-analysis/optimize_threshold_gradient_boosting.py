@@ -49,7 +49,7 @@ Requirements:
 Phase 3 Output Required:
     - Calibrated model uploaded to HuggingFace Hub (Phase 3 does this automatically)
     - Phase 1 data splits uploaded to HuggingFace Hub (Phase 1 does this automatically)
-    - Files: gradient_boosting_calibrated.pkl, Gradient_Boosting_(LightGBM)_calibrator.pkl
+    - Files: gradient_boosting_model_original.joblib, Gradient_Boosting_(LightGBM)_calibrator.pkl
 
 Output:
     - Optimal threshold and risk category thresholds

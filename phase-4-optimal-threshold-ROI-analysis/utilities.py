@@ -160,7 +160,7 @@ def load_calibrated_model(
     across all phases.
     
     Phase 3 uploads:
-    - gradient_boosting_calibrated.pkl: The base LightGBM model
+    - gradient_boosting_model_original.joblib: The base LightGBM model
     - Gradient_Boosting_(LightGBM)_calibrator.pkl: The Platt calibrator
     - Calibration metrics and visualizations
     
@@ -202,10 +202,10 @@ def load_calibrated_model(
         import joblib
         
         # Download model file
-        print(f"\n⏳ Downloading calibrated model...")
+        print(f"\n⏳ Downloading original model...")
         model_path = hf_hub_download(
             repo_id=repo_id,
-            filename="gradient_boosting_calibrated.pkl",
+            filename="gradient_boosting_model_original.joblib",
             cache_dir=cache_dir,
             force_download=force_download
         )
