@@ -44,8 +44,10 @@ warnings.filterwarnings('ignore')
 # DATA LOADING UTILITIES
 # ============================================================================
 
-def load_phase1_splits(cache_dir: str = "./data/downloaded",
-                       repo_id: str = "auphong2707/hospital-readmission-risk-data"):
+def load_phase1_splits(
+    repo_id: str,
+    cache_dir: str = "./data/downloaded"
+):
     """Load Phase 1 splits from HuggingFace.
     
     This ensures all phases (2-5) use the exact same preprocessed data from Phase 1.
@@ -57,8 +59,8 @@ def load_phase1_splits(cache_dir: str = "./data/downloaded",
     - Stratification: Yes (on target variable)
     
     Args:
+        repo_id: HuggingFace repository ID for Phase 1 data (e.g., 'username/hospital-readmission-risk-data')
         cache_dir: Directory to cache downloaded files
-        repo_id: HuggingFace repository ID
     
     Returns:
         tuple: (X_train, X_val, X_test, y_train, y_val, y_test)
@@ -66,6 +68,11 @@ def load_phase1_splits(cache_dir: str = "./data/downloaded",
     Raises:
         ImportError: If huggingface_hub is not installed
         Exception: If splits cannot be loaded from HuggingFace
+    
+    Example:
+        >>> X_train, X_val, X_test, y_train, y_val, y_test = load_phase1_splits(
+        ...     repo_id='your-username/hospital-readmission-risk-data'
+        ... )
     """
     try:
         from huggingface_hub import hf_hub_download
@@ -142,46 +149,113 @@ def load_phase1_splits(cache_dir: str = "./data/downloaded",
 
 
 def load_calibrated_model(
-    model_path: str = "./phase-3-model-calibration/models/gradient_boosting_calibrated.pkl",
-    calibrator_path: str = "./phase-3-model-calibration/models/platt_calibrator.pkl"
+    repo_id: str,
+    cache_dir: str = "./models/downloaded",
+    force_download: bool = False
 ) -> Tuple[Any, Any]:
-    """Load calibrated model and calibrator from Phase 3.
+    """Load calibrated model and calibrator from HuggingFace Hub (Phase 3 output).
+    
+    This function downloads the calibrated model and Platt calibrator that were
+    uploaded to HuggingFace Hub in Phase 3. This ensures consistent model artifacts
+    across all phases.
+    
+    Phase 3 uploads:
+    - gradient_boosting_calibrated.pkl: The base LightGBM model
+    - Gradient_Boosting_(LightGBM)_calibrator.pkl: The Platt calibrator
+    - Calibration metrics and visualizations
     
     Args:
-        model_path: Path to the trained model
-        calibrator_path: Path to the fitted calibrator
+        repo_id: HuggingFace repository ID for calibrated model (e.g., 'username/hospital-readmission-lgbm-calibrated')
+        cache_dir: Directory to cache downloaded files
+        force_download: If True, re-download even if files exist locally
         
     Returns:
         tuple: (model, calibrator)
+        
+    Raises:
+        ImportError: If huggingface_hub is not installed
+        FileNotFoundError: If model files not found in repository
+        
+    Example:
+        >>> model, calibrator = load_calibrated_model(
+        ...     repo_id='your-username/hospital-readmission-lgbm-calibrated'
+        ... )
+        >>> # Use for predictions
+        >>> y_pred = model.predict_proba(X_test)[:, 1]
+        >>> y_calibrated = calibrator.predict_proba(y_pred)
     """
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError:
+        raise ImportError(
+            "huggingface_hub library required. "
+            "Install with: pip install huggingface_hub"
+        )
+    
     print("\n" + "="*80)
-    print("📥 Loading Calibrated Model from Phase 3")
+    print("📥 Loading Calibrated Model from HuggingFace Hub")
     print("="*80)
+    print(f"Repository: {repo_id}")
+    print(f"Cache directory: {cache_dir}")
     
     try:
         import joblib
         
+        # Download model file
+        print(f"\n⏳ Downloading calibrated model...")
+        model_path = hf_hub_download(
+            repo_id=repo_id,
+            filename="gradient_boosting_calibrated.pkl",
+            cache_dir=cache_dir,
+            force_download=force_download
+        )
+        print(f"✅ Model downloaded: {model_path}")
+        
         # Load model
-        print(f"⏳ Loading model from: {model_path}")
+        print(f"⏳ Loading model...")
         model = joblib.load(model_path)
         print(f"✅ Model loaded successfully")
         
+        # Download calibrator file
+        print(f"\n⏳ Downloading Platt calibrator...")
+        calibrator_path = hf_hub_download(
+            repo_id=repo_id,
+            filename="Gradient_Boosting_(LightGBM)_calibrator.pkl",
+            cache_dir=cache_dir,
+            force_download=force_download
+        )
+        print(f"✅ Calibrator downloaded: {calibrator_path}")
+        
         # Load calibrator
-        print(f"⏳ Loading calibrator from: {calibrator_path}")
+        print(f"⏳ Loading calibrator...")
         with open(calibrator_path, 'rb') as f:
             calibrator = pickle.load(f)
         print(f"✅ Calibrator loaded successfully")
         
+        print("\n" + "="*80)
+        print("✅ Calibrated Model & Calibrator Loaded from HuggingFace")
+        print("="*80)
+        print(f"🌐 Repository: https://huggingface.co/{repo_id}")
+        print(f"💾 Local cache: {cache_dir}")
         print("="*80 + "\n")
+        
         return model, calibrator
         
     except FileNotFoundError as e:
-        print(f"❌ Error: File not found - {e}")
-        print(f"\n💡 Please run Phase 3 calibration first:")
+        print(f"\n❌ Error: Model files not found in HuggingFace repository")
+        print(f"   {e}")
+        print(f"\n💡 Troubleshooting:")
+        print(f"1. Ensure Phase 3 calibration has been run and uploaded:")
         print(f"   python ./phase-3-model-calibration/calibrate_gradient_boosting.py")
+        print(f"2. Check repository exists: https://huggingface.co/{repo_id}")
+        print(f"3. Verify HF_TOKEN and HF_USERNAME are set in .env for Phase 3 upload")
+        print(f"4. Check internet connection")
         raise
     except Exception as e:
-        print(f"❌ Error loading model: {e}")
+        print(f"\n❌ Error loading model: {e}")
+        print(f"\nIf you have local Phase 3 outputs, you can use them directly:")
+        print(f"   model = joblib.load('./phase-3-model-calibration/models/gradient_boosting_calibrated.pkl')")
+        print(f"   calibrator = pickle.load(open('./phase-3-model-calibration/models/platt_calibrator.pkl', 'rb'))")
         raise
 
 

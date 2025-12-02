@@ -27,14 +27,30 @@ Business Goal:
 - Ensure intervention volume is operationally feasible
 
 Usage (from project root):
-    python ./phase-4-optimal-threshold-ROI-analysis/optimize_threshold_gradient_boosting.py
+    # Basic usage with HuggingFace repositories
+    python ./phase-4-optimal-threshold-ROI-analysis/optimize_threshold_gradient_boosting.py \
+        --data-repo-id your-username/hospital-readmission-risk-data \
+        --model-repo-id your-username/hospital-readmission-lgbm-calibrated
+    
+    # With custom cost parameters
+    python ./phase-4-optimal-threshold-ROI-analysis/optimize_threshold_gradient_boosting.py \
+        --data-repo-id your-username/hospital-readmission-risk-data \
+        --model-repo-id your-username/hospital-readmission-lgbm-calibrated \
+        --readmission-cost 20000 --intervention-cost 1000
+    
+    # With operational constraints
+    python ./phase-4-optimal-threshold-ROI-analysis/optimize_threshold_gradient_boosting.py \
+        --data-repo-id your-username/hospital-readmission-risk-data \
+        --model-repo-id your-username/hospital-readmission-lgbm-calibrated \
+        --max-intervention-rate 0.25
 
 Requirements:
     pip install pandas numpy scikit-learn matplotlib seaborn huggingface_hub joblib
 
 Phase 3 Output Required:
-    - Calibrated model: ./phase-3-model-calibration/models/gradient_boosting_calibrated.pkl
-    - Calibrator: ./phase-3-model-calibration/models/platt_calibrator.pkl
+    - Calibrated model uploaded to HuggingFace Hub (Phase 3 does this automatically)
+    - Phase 1 data splits uploaded to HuggingFace Hub (Phase 1 does this automatically)
+    - Files: gradient_boosting_calibrated.pkl, Gradient_Boosting_(LightGBM)_calibrator.pkl
 
 Output:
     - Optimal threshold and risk category thresholds
@@ -118,19 +134,32 @@ def parse_arguments():
         help='Maximum intervention rate constraint (0-1, optional)'
     )
     
-    # Paths
+    # HuggingFace Repositories
     parser.add_argument(
-        '--model-path',
+        '--data-repo-id',
         type=str,
-        default='./phase-3-model-calibration/models/gradient_boosting_calibrated.pkl',
-        help='Path to calibrated model'
+        required=True,
+        help='HuggingFace repository ID for Phase 1 data (e.g., username/hospital-readmission-risk-data)'
     )
     parser.add_argument(
-        '--calibrator-path',
+        '--model-repo-id',
         type=str,
-        default='./phase-3-model-calibration/models/platt_calibrator.pkl',
-        help='Path to calibrator'
+        required=True,
+        help='HuggingFace repository ID for calibrated model (e.g., username/hospital-readmission-lgbm-calibrated)'
     )
+    parser.add_argument(
+        '--cache-dir',
+        type=str,
+        default='./models/downloaded',
+        help='Directory to cache downloaded models (default: ./models/downloaded)'
+    )
+    parser.add_argument(
+        '--force-download',
+        action='store_true',
+        help='Force re-download of model files even if cached'
+    )
+    
+    # Output paths
     parser.add_argument(
         '--output-dir',
         type=str,
@@ -166,23 +195,31 @@ def main():
     
     # Load Phase 1 test data (consistent with all phases)
     print("📥 Loading Phase 1 test data...")
-    X_train, X_val, X_test, y_train, y_val, y_test = load_phase1_splits()
+    X_train, X_val, X_test, y_train, y_val, y_test = load_phase1_splits(
+        repo_id=args.data_repo_id
+    )
     
     print(f"✅ Test data loaded: {X_test.shape}")
     print(f"   Test samples: {len(X_test):,}")
     print(f"   Readmission rate: {y_test.mean():.1%}")
     
-    # Load calibrated model
-    print("\n📥 Loading calibrated model from Phase 3...")
+    # Load calibrated model from HuggingFace Hub
+    print("\n📥 Loading calibrated model from HuggingFace Hub...")
     try:
         model, calibrator = load_calibrated_model(
-            model_path=args.model_path,
-            calibrator_path=args.calibrator_path
+            repo_id=args.model_repo_id,
+            cache_dir=args.cache_dir,
+            force_download=args.force_download
         )
     except FileNotFoundError:
-        print("\n❌ ERROR: Calibrated model not found!")
-        print("Please run Phase 3 calibration first:")
+        print("\n❌ ERROR: Calibrated model not found in HuggingFace Hub!")
+        print("Please ensure Phase 3 calibration has been run and uploaded:")
         print("   python ./phase-3-model-calibration/calibrate_gradient_boosting.py")
+        print(f"\nExpected repository: {args.model_repo_id}")
+        sys.exit(1)
+    except ImportError:
+        print("\n❌ ERROR: huggingface_hub library not installed!")
+        print("Install with: pip install huggingface_hub")
         sys.exit(1)
     
     # Generate calibrated predictions
