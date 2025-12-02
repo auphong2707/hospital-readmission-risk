@@ -109,20 +109,20 @@ def parse_arguments():
     parser.add_argument(
         '--threshold-min',
         type=float,
-        default=0.05,
-        help='Minimum threshold to test (default: 0.05)'
+        default=0.01,
+        help='Minimum threshold to test (default: 0.01)'
     )
     parser.add_argument(
         '--threshold-max',
         type=float,
-        default=0.95,
-        help='Maximum threshold to test (default: 0.95)'
+        default=0.99,
+        help='Maximum threshold to test (default: 0.99)'
     )
     parser.add_argument(
         '--num-thresholds',
         type=int,
-        default=200,
-        help='Number of thresholds to test (default: 200)'
+        default=10000,
+        help='Number of thresholds to test (default: 10000)'
     )
     
     # Constraints
