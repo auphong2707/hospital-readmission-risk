@@ -1017,6 +1017,21 @@ class ROIAnalyzer:
 # SAVE/LOAD UTILITIES
 # ============================================================================
 
+def _convert_to_serializable(obj):
+    """Convert numpy types to Python native types for JSON serialization."""
+    if isinstance(obj, (np.integer, np.int64, np.int32)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float64, np.float32)):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: _convert_to_serializable(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [_convert_to_serializable(item) for item in obj]
+    return obj
+
+
 def save_threshold_results(
     threshold_optimizer: ThresholdOptimizer,
     risk_mapper: RiskCategoryMapper,
@@ -1045,11 +1060,11 @@ def save_threshold_results(
     
     # Save optimal threshold and risk thresholds
     thresholds = {
-        'optimal_threshold': threshold_optimizer.optimal_threshold,
-        'optimal_expected_value': threshold_optimizer.optimal_ev,
-        'low_risk_threshold': risk_mapper.low_threshold,
-        'high_risk_threshold': risk_mapper.high_threshold,
-        'cost_parameters': threshold_optimizer.cost_params
+        'optimal_threshold': float(threshold_optimizer.optimal_threshold),
+        'optimal_expected_value': float(threshold_optimizer.optimal_ev),
+        'low_risk_threshold': float(risk_mapper.low_threshold),
+        'high_risk_threshold': float(risk_mapper.high_threshold),
+        'cost_parameters': _convert_to_serializable(threshold_optimizer.cost_params)
     }
     
     thresholds_path = output_path / "optimal_thresholds.json"
@@ -1059,9 +1074,10 @@ def save_threshold_results(
     
     # Save ROI metrics
     roi_metrics = roi_analyzer.calculate_roi_metrics()
+    roi_metrics_serializable = _convert_to_serializable(roi_metrics)
     roi_path = output_path / "roi_metrics.json"
     with open(roi_path, 'w') as f:
-        json.dump(roi_metrics, f, indent=2)
+        json.dump(roi_metrics_serializable, f, indent=2)
     print(f"   ✅ ROI metrics: {roi_path}")
     
     # Save ROI report
@@ -1071,6 +1087,182 @@ def save_threshold_results(
     print(f"   ✅ ROI report: {report_path}")
     
     print(f"✅ All results saved successfully!\n")
+
+
+def upload_results_to_hf(
+    output_dir: str,
+    viz_dir: str,
+    repo_id: str,
+    commit_message: str = "Upload Phase 4 threshold optimization results",
+    token: Optional[str] = None
+):
+    """
+    Upload Phase 4 results to HuggingFace Hub.
+    
+    Args:
+        output_dir: Directory containing output files (JSON, CSV, TXT)
+        viz_dir: Directory containing visualization files
+        repo_id: HuggingFace repository ID (e.g., 'username/hospital-readmission-threshold-results')
+        commit_message: Commit message for the upload
+        token: HuggingFace API token (if None, will use HF_TOKEN environment variable)
+        
+    Returns:
+        str: URL to the uploaded repository
+        
+    Raises:
+        ImportError: If huggingface_hub is not installed
+        ValueError: If required files are missing
+        
+    Example:
+        >>> upload_results_to_hf(
+        ...     output_dir='./phase-4-optimal-threshold-ROI-analysis/outputs',
+        ...     viz_dir='./phase-4-optimal-threshold-ROI-analysis/visualizations',
+        ...     repo_id='username/hospital-readmission-threshold-results'
+        ... )
+    """
+    try:
+        from huggingface_hub import HfApi, create_repo
+    except ImportError:
+        raise ImportError(
+            "huggingface_hub library required for uploading. "
+            "Install with: pip install huggingface_hub"
+        )
+    
+    import os
+    
+    # Get token from environment if not provided
+    if token is None:
+        token = os.getenv('HF_TOKEN')
+        if token is None:
+            raise ValueError(
+                "HuggingFace token not provided. Set HF_TOKEN environment variable or pass token parameter."
+            )
+    
+    print("\n" + "="*80)
+    print("📤 Uploading Phase 4 Results to HuggingFace Hub")
+    print("="*80)
+    print(f"Repository: {repo_id}")
+    
+    # Initialize API
+    api = HfApi(token=token)
+    
+    # Create repository if it doesn't exist
+    try:
+        create_repo(repo_id, token=token, repo_type="model", exist_ok=True)
+        print(f"✅ Repository ready: https://huggingface.co/{repo_id}")
+    except Exception as e:
+        print(f"⚠️  Repository may already exist: {e}")
+    
+    # Collect files to upload
+    files_to_upload = []
+    
+    # Output files
+    output_path = Path(output_dir)
+    if output_path.exists():
+        for file_path in output_path.glob('*'):
+            if file_path.is_file():
+                files_to_upload.append((str(file_path), f"outputs/{file_path.name}"))
+    
+    # Visualization files
+    viz_path = Path(viz_dir)
+    if viz_path.exists():
+        for file_path in viz_path.glob('*.png'):
+            if file_path.is_file():
+                files_to_upload.append((str(file_path), f"visualizations/{file_path.name}"))
+    
+    if len(files_to_upload) == 0:
+        raise ValueError(f"No files found to upload in {output_dir} or {viz_dir}")
+    
+    print(f"\n📦 Uploading {len(files_to_upload)} files...")
+    
+    # Upload files
+    uploaded_count = 0
+    for local_path, remote_path in files_to_upload:
+        try:
+            api.upload_file(
+                path_or_fileobj=local_path,
+                path_in_repo=remote_path,
+                repo_id=repo_id,
+                repo_type="model",
+                commit_message=f"{commit_message}: {Path(local_path).name}",
+                token=token
+            )
+            uploaded_count += 1
+            print(f"   ✅ Uploaded: {remote_path}")
+        except Exception as e:
+            print(f"   ❌ Failed to upload {remote_path}: {e}")
+    
+    # Create README if it doesn't exist
+    try:
+        readme_content = f"""---
+license: apache-2.0
+tags:
+- healthcare
+- hospital-readmission
+- threshold-optimization
+- roi-analysis
+---
+
+# Hospital Readmission Risk - Phase 4: Threshold Optimization Results
+
+This repository contains the results from Phase 4: Optimal Threshold & ROI Analysis.
+
+## Contents
+
+### Outputs
+- `outputs/optimal_thresholds.json`: Optimal decision threshold and risk category thresholds
+- `outputs/roi_metrics.json`: Comprehensive ROI metrics
+- `outputs/roi_report.txt`: Human-readable ROI analysis report
+- `outputs/threshold_results.csv`: Expected value across all tested thresholds
+
+### Visualizations
+1. Expected Value vs Threshold Curve
+2. Cost-Benefit Analysis
+3. Classification Metrics vs Threshold
+4. Confusion Matrix at Optimal Threshold
+5. Risk Category Distribution
+6. ROI Sensitivity Analysis
+7. Intervention Volume Forecast
+8. Cost Savings Projection
+
+## Usage
+
+These results can be used for:
+- Implementing the optimal decision threshold in production
+- Defining risk categories for clinical decision support
+- Justifying intervention programs to stakeholders
+- Planning resource allocation
+- Proceeding to Phase 5: Fairness Evaluation
+
+## Citation
+
+If you use these results, please cite the hospital readmission risk prediction project.
+"""
+        
+        readme_path = Path(output_dir) / "README.md"
+        with open(readme_path, 'w') as f:
+            f.write(readme_content)
+        
+        api.upload_file(
+            path_or_fileobj=str(readme_path),
+            path_in_repo="README.md",
+            repo_id=repo_id,
+            repo_type="model",
+            commit_message="Add README",
+            token=token
+        )
+        print(f"   ✅ Uploaded: README.md")
+        uploaded_count += 1
+    except Exception as e:
+        print(f"   ⚠️  Could not create/upload README: {e}")
+    
+    print("\n" + "="*80)
+    print(f"✅ Upload Complete: {uploaded_count} files uploaded")
+    print("="*80)
+    print(f"🌐 Repository URL: https://huggingface.co/{repo_id}")
+    print("="*80 + "\n")
+    
+    return f"https://huggingface.co/{repo_id}"
 
 
 def print_section(title: str, char: str = "=", width: int = 80):
