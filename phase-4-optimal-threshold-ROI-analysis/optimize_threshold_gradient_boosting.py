@@ -80,7 +80,8 @@ from utilities import (
     ROIVisualizer,
     save_threshold_results,
     upload_results_to_hf,
-    print_section
+    print_section,
+    _convert_to_serializable
 )
 
 warnings.filterwarnings('ignore')
@@ -475,6 +476,9 @@ def main():
             'positive_roi': roi_metrics['roi_percentage'] > 0
         }
     }
+    
+    # Convert to JSON-serializable format
+    phase5_summary = _convert_to_serializable(phase5_summary)
     
     summary_path = Path(args.output_dir) / "phase4_summary_for_phase5.json"
     with open(summary_path, 'w') as f:
