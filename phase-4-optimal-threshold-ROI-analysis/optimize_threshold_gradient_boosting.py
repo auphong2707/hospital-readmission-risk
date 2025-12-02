@@ -27,22 +27,21 @@ Business Goal:
 - Ensure intervention volume is operationally feasible
 
 Usage (from project root):
-    # Basic usage with HuggingFace repositories
-    python ./phase-4-optimal-threshold-ROI-analysis/optimize_threshold_gradient_boosting.py \
-        --data-repo-id your-username/hospital-readmission-risk-data \
-        --model-repo-id your-username/hospital-readmission-lgbm-calibrated
+    # Basic usage with default repositories
+    python ./phase-4-optimal-threshold-ROI-analysis/optimize_threshold_gradient_boosting.py
     
     # With custom cost parameters
     python ./phase-4-optimal-threshold-ROI-analysis/optimize_threshold_gradient_boosting.py \
-        --data-repo-id your-username/hospital-readmission-risk-data \
-        --model-repo-id your-username/hospital-readmission-lgbm-calibrated \
         --readmission-cost 20000 --intervention-cost 1000
     
     # With operational constraints
     python ./phase-4-optimal-threshold-ROI-analysis/optimize_threshold_gradient_boosting.py \
-        --data-repo-id your-username/hospital-readmission-risk-data \
-        --model-repo-id your-username/hospital-readmission-lgbm-calibrated \
         --max-intervention-rate 0.25
+    
+    # With custom repositories (if you forked the project)
+    python ./phase-4-optimal-threshold-ROI-analysis/optimize_threshold_gradient_boosting.py \
+        --data-repo-id your-username/hospital-readmission-risk-data \
+        --model-repo-id your-username/hospital-readmission-lgbm-calibrated
 
 Requirements:
     pip install pandas numpy scikit-learn matplotlib seaborn huggingface_hub joblib
@@ -138,14 +137,14 @@ def parse_arguments():
     parser.add_argument(
         '--data-repo-id',
         type=str,
-        required=True,
-        help='HuggingFace repository ID for Phase 1 data (e.g., username/hospital-readmission-risk-data)'
+        default='auphong2707/hospital-readmission-risk-data',
+        help='HuggingFace repository ID for Phase 1 data (default: auphong2707/hospital-readmission-risk-data)'
     )
     parser.add_argument(
         '--model-repo-id',
         type=str,
-        required=True,
-        help='HuggingFace repository ID for calibrated model (e.g., username/hospital-readmission-lgbm-calibrated)'
+        default='auphong2707/hospital-readmission-lgbm-calibrated',
+        help='HuggingFace repository ID for calibrated model (default: auphong2707/hospital-readmission-lgbm-calibrated)'
     )
     parser.add_argument(
         '--cache-dir',
