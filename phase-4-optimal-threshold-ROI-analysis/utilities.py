@@ -28,16 +28,117 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
     f1_score,
+    accuracy_score,
     roc_curve,
     precision_recall_curve,
     roc_auc_score
 )
+from sklearn.linear_model import LogisticRegression
 from pathlib import Path
 import json
 import pickle
 import warnings
 
 warnings.filterwarnings('ignore')
+
+
+# ============================================================================
+# MODEL CALIBRATOR CLASS (for pickle compatibility)
+# ============================================================================
+
+class ModelCalibrator:
+    """
+    Platt Scaling calibration for hospital readmission models.
+    
+    Uses logistic regression to transform uncalibrated probabilities.
+    
+    Note: This class must be defined here for pickle compatibility when loading
+    calibrators saved from Phase 3.
+    """
+    
+    def __init__(self, method: str = 'platt', cv: int = 5):
+        """
+        Initialize the calibrator.
+        
+        Parameters:
+        -----------
+        method : str
+            Calibration method - only 'platt' is supported
+        cv : int
+            Number of cross-validation folds (unused, kept for compatibility)
+        """
+        if method not in ['platt', 'sigmoid']:
+            raise ValueError("method must be 'platt' or 'sigmoid'")
+        
+        self.method = 'platt'
+        self.cv = cv
+        self.calibrator = None
+        self.is_fitted = False
+        
+    def fit(self, y_true: np.ndarray, y_pred_proba: np.ndarray) -> 'ModelCalibrator':
+        """
+        Fit Platt Scaling calibration on validation data.
+        
+        Parameters:
+        -----------
+        y_true : np.ndarray
+            True binary labels
+        y_pred_proba : np.ndarray
+            Uncalibrated predicted probabilities
+            
+        Returns:
+        --------
+        self : ModelCalibrator
+            Fitted calibrator instance
+        """
+        y_true = np.array(y_true).ravel()
+        y_pred_proba = np.array(y_pred_proba).ravel()
+        
+        # Platt scaling: fit logistic regression on predicted probabilities
+        self.calibrator = LogisticRegression(penalty=None, solver='lbfgs', max_iter=1000)
+        X = y_pred_proba.reshape(-1, 1)
+        self.calibrator.fit(X, y_true)
+        
+        self.is_fitted = True
+        return self
+    
+    def predict_proba(self, y_pred_proba: np.ndarray) -> np.ndarray:
+        """
+        Apply Platt Scaling calibration to uncalibrated probabilities.
+        
+        Parameters:
+        -----------
+        y_pred_proba : np.ndarray
+            Uncalibrated predicted probabilities
+            
+        Returns:
+        --------
+        calibrated_proba : np.ndarray
+            Calibrated probabilities
+        """
+        if not self.is_fitted:
+            raise ValueError("Calibrator must be fitted before prediction")
+        
+        y_pred_proba = np.array(y_pred_proba).ravel()
+        X = y_pred_proba.reshape(-1, 1)
+        calibrated = self.calibrator.predict_proba(X)[:, 1]
+        
+        return calibrated
+    
+    def save(self, filepath: str):
+        """Save the fitted calibrator to disk."""
+        if not self.is_fitted:
+            raise ValueError("Cannot save unfitted calibrator")
+        
+        Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+        with open(filepath, 'wb') as f:
+            pickle.dump(self, f)
+    
+    @staticmethod
+    def load(filepath: str) -> 'ModelCalibrator':
+        """Load a fitted calibrator from disk."""
+        with open(filepath, 'rb') as f:
+            return pickle.load(f)
 
 
 # ============================================================================
@@ -509,21 +610,27 @@ class ThresholdOptimizer:
         
         total = tn + fp + fn + tp
         
+        # Use sklearn functions for standard metrics
+        precision = precision_score(self.y_true, y_pred, zero_division=0)
+        recall = recall_score(self.y_true, y_pred, zero_division=0)
+        f1 = f1_score(self.y_true, y_pred, zero_division=0)
+        accuracy = accuracy_score(self.y_true, y_pred)
+        
         metrics = {
             'threshold': threshold,
             'tp': int(tp),
             'fp': int(fp),
             'tn': int(tn),
             'fn': int(fn),
-            'tpr': tp / (tp + fn) if (tp + fn) > 0 else 0,  # Sensitivity/Recall
-            'fpr': fp / (fp + tn) if (fp + tn) > 0 else 0,
-            'tnr': tn / (tn + fp) if (tn + fp) > 0 else 0,  # Specificity
-            'fnr': fn / (fn + tp) if (fn + tp) > 0 else 0,
-            'precision': tp / (tp + fp) if (tp + fp) > 0 else 0,  # PPV
-            'recall': tp / (tp + fn) if (tp + fn) > 0 else 0,    # Sensitivity
-            'f1_score': 2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) > 0 else 0,
-            'accuracy': (tp + tn) / total,
-            'intervention_rate': (tp + fp) / total,
+            'tpr': recall,  # Sensitivity/Recall (same as recall)
+            'fpr': fp / (fp + tn) if (fp + tn) > 0 else 0,  # No sklearn equivalent
+            'tnr': tn / (tn + fp) if (tn + fp) > 0 else 0,  # Specificity (no sklearn equivalent)
+            'fnr': fn / (fn + tp) if (fn + tp) > 0 else 0,  # No sklearn equivalent
+            'precision': precision,  # PPV
+            'recall': recall,    # Sensitivity
+            'f1_score': f1,
+            'accuracy': accuracy,
+            'intervention_rate': (tp + fp) / total,  # Domain-specific metric
             'expected_value': self.calculate_expected_value(threshold),
             'tp_benefit': tp * self.cost_params['tp_benefit'],
             'fp_cost': fp * self.cost_params['fp_cost'],
