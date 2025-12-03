@@ -174,19 +174,6 @@ def parse_arguments():
         help='Output directory for visualizations'
     )
     
-    # HuggingFace Upload
-    parser.add_argument(
-        '--upload-to-hf',
-        action='store_true',
-        help='Upload results to HuggingFace Hub'
-    )
-    parser.add_argument(
-        '--results-repo-id',
-        type=str,
-        default='auphong2707/hospital-readmission-threshold-results',
-        help='HuggingFace repository ID for Phase 4 results (default: auphong2707/hospital-readmission-threshold-results)'
-    )
-    
     return parser.parse_args()
 
 
@@ -486,32 +473,32 @@ def main():
     print(f"   ✅ Phase 5 summary: {summary_path}")
     
     # ========================================================================
-    # STEP 9: Upload to HuggingFace (Optional)
+    # STEP 9: Upload to HuggingFace Hub
     # ========================================================================
     
-    if args.upload_to_hf:
-        print_section("Step 9: Upload Results to HuggingFace Hub", "-")
-        
-        try:
-            repo_url = upload_results_to_hf(
-                output_dir=args.output_dir,
-                viz_dir=args.viz_dir,
-                repo_id=args.results_repo_id,
-                commit_message=f"Phase 4 results: Optimal threshold={optimal_threshold:.4f}, ROI={roi_metrics['roi_percentage']:.1f}%"
-            )
-            print(f"✅ Results successfully uploaded!")
-            print(f"🌐 View results at: {repo_url}")
-        except ImportError as e:
-            print(f"❌ Upload failed: {e}")
-            print(f"💡 Install huggingface_hub: pip install huggingface_hub")
-        except ValueError as e:
-            print(f"❌ Upload failed: {e}")
-            print(f"💡 Set HF_TOKEN environment variable or pass --hf-token")
-        except Exception as e:
-            print(f"❌ Upload failed: {e}")
-            print(f"💡 Results are still saved locally in {args.output_dir}")
-    else:
-        print("\nℹ️  Skipping HuggingFace upload (use --upload-to-hf to enable)")
+    print_section("Step 9: Upload Results to HuggingFace Hub", "-")
+    
+    # Hardcoded repository ID
+    results_repo_id = 'auphong2707/hospital-readmission-threshold-results'
+    
+    try:
+        repo_url = upload_results_to_hf(
+            output_dir=args.output_dir,
+            viz_dir=args.viz_dir,
+            repo_id=results_repo_id,
+            commit_message=f"Phase 4 results: Optimal threshold={optimal_threshold:.4f}, ROI={roi_metrics['roi_percentage']:.1f}%"
+        )
+        print(f"✅ Results successfully uploaded!")
+        print(f"🌐 View results at: {repo_url}")
+    except ImportError as e:
+        print(f"❌ Upload failed: {e}")
+        print(f"💡 Install huggingface_hub: pip install huggingface_hub")
+    except ValueError as e:
+        print(f"❌ Upload failed: {e}")
+        print(f"💡 Set HF_TOKEN environment variable or pass --hf-token")
+    except Exception as e:
+        print(f"❌ Upload failed: {e}")
+        print(f"💡 Results are still saved locally in {args.output_dir}")
     
     # ========================================================================
     # FINAL SUMMARY
@@ -536,10 +523,7 @@ def main():
     print(f"\n🎯 Next Steps:")
     print(f"   1. Review visualizations in: {args.viz_dir}")
     print(f"   2. Validate business assumptions with stakeholders")
-    if not args.upload_to_hf:
-        print(f"   3. (Optional) Upload results to HuggingFace:")
-        print(f"      python ./phase-4-optimal-threshold-ROI-analysis/optimize_threshold_gradient_boosting.py --upload-to-hf")
-    print(f"   4. Proceed to Phase 5: Fairness Evaluation")
+    print(f"   3. Proceed to Phase 5: Fairness Evaluation")
     print(f"      python ./phase-5-fairness-evaluation/evaluate_fairness_gradient_boosting.py")
     
     print("\n" + "="*80)
