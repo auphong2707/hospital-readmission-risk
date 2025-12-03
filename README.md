@@ -125,8 +125,9 @@ The dataset represents 10 years (1999-2008) of clinical care at 130 US hospitals
   - **Validation**: Confirm actual readmission rates align with risk categories
   - **Resource allocation**: Calculate intervention volume per risk category
   - **Output**: Optimal threshold + risk category thresholds ready for fairness evaluation
+  - **📝 Note**: Phase 4 saves results locally (`phase4_summary_for_phase5.json`) - Phase 5 requires this file to be present
 
-#### 5. Fairness Evaluation & Deployment Readiness
+#### 5. Fairness Evaluation
 - 🔲 **Threshold fairness evaluation:**
   - **Input**: Optimal threshold and risk categories from Phase 4 + demographics from Phase 1
   - **Protected attributes**: Race, gender, age groups
@@ -135,14 +136,33 @@ The dataset represents 10 years (1999-2008) of clinical care at 130 US hospitals
   - **Risk category distribution**: Check if interventions allocated fairly across groups
   - **Statistical testing**: Chi-square tests for significant group differences
   - **Note**: Demographics files (`*_demographics.csv`) now exported by Phase 1 preprocessing
-- 🔲 **Threshold bias mitigation (if needed):**
-  - **Group-specific decision thresholds**: Adjust thresholds per group to equalize TPR/FPR
-  - **Fairness-ROI trade-off**: Document impact of fairness adjustments on overall ROI
-  - **Decision**: Accept global threshold or implement group-specific decision thresholds
-- 🔲 **Deployment preparation:**
-  - **Final model package**: Calibrated model + optimal thresholds + risk category mapping
-  - **Documentation**: Model card with performance, fairness, and limitation disclosures
-  - **Validation report**: Clinical review of risk categories and recommended actions
+  - **📝 Note**: Phase 5 requires Phase 4 results (`phase4_summary_for_phase5.json`) to be present locally
+- 🔲 **Bias detection and analysis:**
+  - **Group-specific decision thresholds**: Analyze if adjustments needed per group to equalize TPR/FPR
+  - **Fairness-ROI trade-off**: Document impact of potential fairness adjustments on overall ROI
+  - **Recommendations**: Determine if global threshold is acceptable or if bias mitigation required
+  - **Output**: Fairness assessment report for deployment decision-making
+
+#### 6. Deployment Preparation & Final Report
+- 🔲 **Aggregate results from all phases:**
+  - **Phase 1 outputs**: Preprocessing statistics, feature engineering summary, data quality report
+  - **Phase 2 outputs**: Model comparison (Logistic Regression, Random Forest, Gradient Boosting), cross-validation metrics, feature importance
+  - **Phase 3 outputs**: Calibration metrics (Brier score, ECE, Hosmer-Lemeshow), reliability diagrams, before/after comparison
+  - **Phase 4 outputs**: Optimal threshold, expected value, ROI analysis, sensitivity analysis, break-even analysis
+  - **Phase 5 outputs**: Fairness metrics (demographic parity, equalized odds, equal opportunity), group-specific performance, bias assessment
+- 🔲 **Create deployment package:**
+  - **Model artifacts**: Calibrated model + calibrator + optimal thresholds + risk category mapping (`.joblib`/`.pkl` files)
+  - **Model card**: Comprehensive documentation with performance, fairness, calibration metrics, and limitations
+  - **Validation report**: Clinical review summary of risk categories and recommended intervention actions
+  - **API specification**: Integration guidelines and endpoint documentation for healthcare systems
+  - **Monitoring plan**: Real-time performance tracking and drift detection specifications
+- 🔲 **Generate final report:**
+  - **Executive Summary**: Key findings, business impact, ROI projections, deployment readiness
+  - **Technical Documentation**: Model architecture, training process, performance metrics, calibration quality
+  - **Business Analysis**: Cost-benefit analysis, intervention recommendations, resource allocation strategy
+  - **Fairness & Ethics**: Bias evaluation, equity considerations, mitigation strategies
+  - **Implementation Guide**: Deployment strategy, integration steps, clinical workflow procedures
+  - **Risk Management**: Known limitations, monitoring requirements, contingency plans
 
 ## Deliverables
 
@@ -193,13 +213,30 @@ hospital-readmission-risk/
 │           └── split_info.txt                    # Split details
 ├── phase-1-data-explore-preprocessing/           # ✅ Phase 1: EDA & Preprocessing
 │   ├── eda.ipynb                                 # Exploratory data analysis
-│   ├── simple_preprocessing.py                   # Complete preprocessing pipeline
-│   ├── test_simple_pipeline.py                   # Unit tests
-│   └── utilities.py                              # Helper functions
-├── phase-2-risk-modeling/                        # ✅ Phase 2: Model Training
-│   ├── train_gradient_boosting.py                # LightGBM training script
-│   ├── train_logistic_regression.py              # Logistic regression baseline
-│   ├── train_random_forest.py                    # Random forest training
+├── phase-5-fairness-evaluation-deployment-readiness/  # 🔲 Phase 5: Fairness & Deployment
+│   ├── evaluate_fairness_gradient_boosting.py    # Fairness evaluation script (TBD)
+│   ├── utilities.py                              # Fairness metrics utilities (TBD)
+│   ├── outputs/                                  # Phase 5 results (TBD)
+│   │   ├── fairness_report.json                  # Comprehensive fairness metrics
+│   │   ├── group_metrics_*.csv                   # Performance by demographic group
+│   │   ├── statistical_tests.json                # Significance tests
+│   │   ├── risk_categories_*.csv                 # Risk distribution by group
+│   │   └── visualizations/                       # Fairness assessment plots
+│   ├── PHASE1_UPDATES.md                         # Phase 1 demographics changes
+│   └── README.md                                 # Phase 5 documentation
+├── phase-6-final-report/                         # 🔲 Phase 6: Results & Documentation
+│   ├── collect_results.py                        # Aggregate all phase outputs (TBD)
+│   ├── generate_final_report.py                  # Create comprehensive report (TBD)
+│   ├── final_report.pdf                          # Executive & technical report (TBD)
+│   ├── model_card.md                             # Model documentation (TBD)
+│   ├── deployment_package/                       # Deployment artifacts (TBD)
+│   │   ├── model.joblib                          # Trained model
+│   │   ├── calibrator.pkl                        # Calibrator
+│   │   ├── thresholds.json                       # Optimal thresholds
+│   │   └── deployment_guide.md                   # Implementation guide
+│   └── README.md                                 # Phase 6 documentation
+├── requirements.txt                              # Python dependencies
+└── README.md                                     # This file (project overview)
 │   ├── utilities.py                              # Training utilities
 │   └── README.md                                 # Phase 2 documentation
 ├── phase-3-model-calibration/                    # ✅ Phase 3: Probability Calibration
