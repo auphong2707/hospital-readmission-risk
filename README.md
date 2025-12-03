@@ -90,23 +90,23 @@ The dataset represents 10 years (1999-2008) of clinical care at 130 US hospitals
   - **Early stopping** to prevent overfitting
 
 #### 3. Model Calibration
-- 🔲 **Calibrate probability predictions using Platt Scaling**
+- ✅ **Calibrate probability predictions using Platt Scaling**
 - **Calibration technique:**
   - **Platt scaling**: Logistic regression transformation of predicted probabilities
   - Simple, interpretable, and widely used in healthcare applications
-- 🔲 **Validation methods:**
+- ✅ **Validation methods:**
   - **Reliability diagrams**: Plot predicted vs actual probabilities (before and after calibration)
   - **Brier score**: Measure calibration quality (target: < 0.15)
   - **Expected Calibration Error (ECE)**: Target < 0.05
   - **Hosmer-Lemeshow test**: Statistical calibration assessment (p-value > 0.05)
-- 🔲 **Calibration quality assessment:**
+- ✅ **Calibration quality assessment:**
   - **Calibration improvement**: Verify Brier score and ECE improved vs uncalibrated
   - **Calibration fairness**: Evaluate ECE and Brier score across demographic groups
   - Ensure ROC-AUC preserved (calibration shouldn't hurt discrimination)
   - **Output**: Platt-calibrated probabilities ready for threshold optimization
 
 #### 4. Optimal Threshold & ROI Analysis
-- 🔲 **Cost-sensitive threshold optimization:**
+- ✅ **Cost-sensitive threshold optimization:**
   - **Input**: Calibrated probabilities from Phase 3
   - **Cost matrix**: TP = +$14.5K, FP = -$500, TN = $0, FN = -$15K
   - **Optimal threshold**: Find threshold that maximizes expected value
@@ -114,7 +114,7 @@ The dataset represents 10 years (1999-2008) of clinical care at 130 US hospitals
   - **Threshold search**: Test thresholds from 0.05 to 0.95 to find optimal point
   - **Break-even analysis**: Validate that intervention cost ($500) < expected benefit
   - **Sensitivity analysis**: Test ROI under different cost assumptions (conservative/aggressive)
-- 🔲 **Risk category definition (derived from optimal threshold):**
+- ✅ **Risk category definition (derived from optimal threshold):**
   - **Low risk**: 0 to ~0.67 × optimal_threshold → Standard discharge
   - **Medium risk**: ~0.67×1.5 × optimal_threshold → Enhanced follow-up call
   - **High risk**: >1.5 × optimal_threshold → Intensive case management
