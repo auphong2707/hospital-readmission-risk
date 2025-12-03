@@ -1108,7 +1108,7 @@ def upload_results_to_hf(
     Args:
         output_dir: Directory containing output files (JSON, CSV, TXT)
         viz_dir: Directory containing visualization files
-        repo_id: HuggingFace repository ID (e.g., 'username/hospital-readmission-threshold-results')
+        repo_id: HuggingFace repository ID (e.g., 'username/hospital-readmission-gradient-boosting-threshold-results')
         commit_message: Commit message for the upload
         token: HuggingFace API token (if None, will use HF_TOKEN environment variable)
         
@@ -1123,7 +1123,7 @@ def upload_results_to_hf(
         >>> upload_results_to_hf(
         ...     output_dir='./phase-4-optimal-threshold-ROI-analysis/outputs',
         ...     viz_dir='./phase-4-optimal-threshold-ROI-analysis/visualizations',
-        ...     repo_id='username/hospital-readmission-threshold-results'
+        ...     repo_id='username/hospital-readmission-gradient-boosting-threshold-results'
         ... )
     """
     try:

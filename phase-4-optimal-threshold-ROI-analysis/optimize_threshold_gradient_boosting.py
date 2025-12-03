@@ -479,7 +479,7 @@ def main():
     print_section("Step 9: Upload Results to HuggingFace Hub", "-")
     
     # Hardcoded repository ID
-    results_repo_id = 'auphong2707/hospital-readmission-threshold-results'
+    results_repo_id = 'auphong2707/hospital-readmission-gradient-boosting-threshold-results'
     
     try:
         repo_url = upload_results_to_hf(
