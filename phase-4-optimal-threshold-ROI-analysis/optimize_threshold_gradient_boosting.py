@@ -76,7 +76,6 @@ from utilities import (
     ThresholdOptimizer,
     RiskCategoryMapper,
     ROIAnalyzer,
-    ThresholdVisualizer,
     ROIVisualizer,
     save_threshold_results,
     upload_results_to_hf,
