@@ -38,8 +38,12 @@ from pathlib import Path
 import json
 import pickle
 import warnings
+from dotenv import load_dotenv
 
 warnings.filterwarnings('ignore')
+
+# Load environment variables
+load_dotenv()
 
 
 # ============================================================================
