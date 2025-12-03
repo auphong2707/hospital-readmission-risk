@@ -457,6 +457,41 @@ class CompletePreprocessor:
         print(f"Encoded {total_features} categorical features total")
         return data
     
+    def _store_demographics(self, data):
+        """
+        Store demographic columns (race, gender, age) before encoding.
+        
+        These demographics are critical for Phase 5 fairness evaluation.
+        Must be called BEFORE encode_features() to preserve original values.
+        
+        Args:
+            data: DataFrame with unencoded demographic columns
+        """
+        print("Storing demographics for Phase 5 fairness evaluation...")
+        
+        demographic_cols = ['race', 'gender', 'age']
+        available_cols = [col for col in demographic_cols if col in data.columns]
+        
+        if not available_cols:
+            print("⚠️  Warning: No demographic columns found! Phase 5 will be blocked.")
+            self.original_demographics = None
+            return
+        
+        # Extract demographics with original index for alignment with splits
+        self.original_demographics = data[available_cols].copy()
+        
+        # Add encounter_id if available for additional tracking
+        if 'encounter_id' in data.columns:
+            self.original_demographics['encounter_id'] = data['encounter_id']
+        
+        print(f"✅ Stored demographics: {available_cols}")
+        print(f"   Total records: {len(self.original_demographics):,}")
+        
+        # Show demographic distributions
+        for col in available_cols:
+            unique_count = self.original_demographics[col].nunique()
+            print(f"   {col}: {unique_count} unique values")
+    
     def sanitize_column_names(self, data):
         """Sanitize column names to remove special JSON characters that LightGBM doesn't support.
         
