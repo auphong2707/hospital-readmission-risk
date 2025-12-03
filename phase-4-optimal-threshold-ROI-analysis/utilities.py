@@ -38,6 +38,8 @@ from pathlib import Path
 import json
 import pickle
 import warnings
+import os
+import joblib
 from dotenv import load_dotenv
 
 warnings.filterwarnings('ignore')
@@ -304,8 +306,6 @@ def load_calibrated_model(
     print(f"Cache directory: {cache_dir}")
     
     try:
-        import joblib
-        
         # Download model file
         print(f"\n⏳ Downloading original model...")
         model_path = hf_hub_download(
@@ -1133,8 +1133,6 @@ def upload_results_to_hf(
             "huggingface_hub library required for uploading. "
             "Install with: pip install huggingface_hub"
         )
-    
-    import os
     
     # Get token from environment if not provided
     if token is None:
