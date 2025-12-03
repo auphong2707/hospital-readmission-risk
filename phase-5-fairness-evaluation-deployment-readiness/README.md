@@ -120,25 +120,32 @@ Note: All inputs should be versioned and stored in `phase-4-optimal-threshold-RO
 
 ---
 
-**Critical Problem (Blocker) — Demographic Preservation**
+**Critical Problem (Blocker) — Demographic Preservation** ✅ **RESOLVED**
 
-- **Current state**: The Phase 1 preprocessing pipeline encodes `race`, `gender`, and `age` into engineered features (one-hot / target encoding / numeric codes) and by default does NOT preserve the original categorical columns in the exported splits used by Phases 2–4.
-- **Why this is critical**: Fairness evaluation requires the ORIGINAL categorical demographic labels for grouping. Encoded features are insufficient because group membership may be distributed across multiple encoded columns and some encoding (target encoding) may leak target information or be difficult to invert reliably.
+- **Previous state**: The Phase 1 preprocessing pipeline encoded `race`, `gender`, and `age` into engineered features without preserving the original categorical columns.
+- **Why it was critical**: Fairness evaluation requires the ORIGINAL categorical demographic labels for grouping. Encoded features are insufficient because group membership may be distributed across multiple encoded columns and some encoding (target encoding) may leak target information or be difficult to invert reliably.
 
-**Required Fix** (Actionable):
+**Resolution Applied** ✅:
 
-1. Update Phase 1 preprocessing to save a demographics file aligned with the split rows, e.g. `data/processed/splits/test_demographics.csv` containing at minimum: `encounter_id`, `patient_nbr` (if available), `race`, `gender`, `age`.
-2. Upload `test_demographics.csv` (and `train_demographics.csv`, `val_demographics.csv` if desired) to the Phase 1 HuggingFace dataset repo so later phases can download the file using `hf_hub_download()`.
+Phase 1 preprocessing (`simple_preprocessing.py`) has been updated to:
+1. **Store demographics before encoding**: Added `_store_demographics()` method that captures original `race`, `gender`, `age` values before any encoding transforms
+2. **Save demographics files**: Modified `create_train_test_split()` to save three demographics files aligned with splits:
+   - `data/processed/splits/train_demographics.csv`
+   - `data/processed/splits/validation_demographics.csv`
+   - `data/processed/splits/test_demographics.csv`
+3. **Upload to HuggingFace**: Updated `_upload_to_huggingface()` to include demographics files in the Phase 1 dataset repo
 
-**Example snippet to add to `simple_preprocessing.py` (Phase 1)**
+**To regenerate demographics files**:
 
-```python
-# After creating splits and before saving CSVs
-splits['X_test_demographics'] = raw_test[['encounter_id','patient_nbr','race','gender','age']]
-splits['X_test_demographics'].to_csv(os.path.join(output_dir,'splits','test_demographics.csv'), index=False)
+```powershell
+# Rerun Phase 1 preprocessing
+.venv\Scripts\activate
+python phase-1-data-explore-preprocessing/simple_preprocessing.py
 ```
 
-**Without this fix, Phase 5 cannot compute group-specific metrics and is blocked.**
+This will create the demographics files in `data/processed/splits/` and upload them to HuggingFace Hub (if `HF_TOKEN` is configured).
+
+**Note**: Existing Phase 1 outputs remain unchanged. Demographics files are **additional** files that supplement the feature splits.
 
 ---
 

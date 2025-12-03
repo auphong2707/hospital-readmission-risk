@@ -545,6 +545,9 @@ class CompletePreprocessor:
         # Step 6: Engineer features (diagnosis aggregation, utilization stats)
         data = self.engineer_features(data)
         
+        # Step 6.5: Store demographics BEFORE encoding (for Phase 5 fairness evaluation)
+        self._store_demographics(data)
+        
         # Step 7: Encode features (one-hot + CV-safe target encoding)
         data = self.encode_features(data, is_training=True)
         
@@ -716,6 +719,31 @@ class CompletePreprocessor:
         test_data['target'] = y_test
         test_data.to_csv(test_file, index=False)
         print(f"💾 Saved test set: {test_file}")
+        
+        # Save demographics files (CRITICAL for Phase 5 fairness evaluation)
+        if hasattr(self, 'original_demographics') and self.original_demographics is not None:
+            print(f"\n📊 Saving demographics files for Phase 5...")
+            
+            # Split demographics according to the same indices as X splits
+            demo_train = self.original_demographics.loc[X_train.index].copy()
+            demo_val = self.original_demographics.loc[X_val.index].copy()
+            demo_test = self.original_demographics.loc[X_test.index].copy()
+            
+            # Save demographics files
+            demo_train_file = os.path.join(splits_dir, "train_demographics.csv")
+            demo_val_file = os.path.join(splits_dir, "validation_demographics.csv")
+            demo_test_file = os.path.join(splits_dir, "test_demographics.csv")
+            
+            demo_train.to_csv(demo_train_file, index=False)
+            demo_val.to_csv(demo_val_file, index=False)
+            demo_test.to_csv(demo_test_file, index=False)
+            
+            print(f"   ✅ train_demographics.csv: {len(demo_train):,} rows")
+            print(f"   ✅ validation_demographics.csv: {len(demo_val):,} rows")
+            print(f"   ✅ test_demographics.csv: {len(demo_test):,} rows")
+            print(f"   📋 Columns: {list(demo_test.columns)}")
+        else:
+            print(f"\n⚠️  Warning: Demographics not available - Phase 5 will be blocked!")
         
         # Save split info
         split_info_file = os.path.join(splits_dir, "split_info.txt")
@@ -953,9 +981,14 @@ class CompletePreprocessor:
                     )
                     print(f"   ✅ Uploaded: {filename}")
             
-            # Upload splits folder
+            # Upload splits folder (including demographics files for Phase 5)
             if os.path.exists(splits_dir):
-                for filename in ['train.csv', 'validation.csv', 'test.csv', 'split_info.txt']:
+                split_files = [
+                    'train.csv', 'validation.csv', 'test.csv', 
+                    'train_demographics.csv', 'validation_demographics.csv', 'test_demographics.csv',
+                    'split_info.txt'
+                ]
+                for filename in split_files:
                     file_path = os.path.join(splits_dir, filename)
                     if os.path.exists(file_path):
                         api.upload_file(
