@@ -46,12 +46,17 @@ import joblib
 from sklearn.linear_model import LogisticRegression
 import pickle
 
+from dotenv import load_dotenv
+
 # Configure plotting
 sns.set_style("whitegrid")
 plt.rcParams['figure.figsize'] = (12, 8)
 plt.rcParams['font.size'] = 10
 
 warnings.filterwarnings('ignore')
+
+# Load environment variables
+load_dotenv()
 
 
 # ============================================================================
