@@ -14,9 +14,9 @@ Usage:
     # Basic usage
     python calculate_group_thresholds_gradient_boosting.py
     
-    # With custom threshold search range
+    # With custom threshold search configuration
     python calculate_group_thresholds_gradient_boosting.py \
-        --threshold-min 0.01 --threshold-max 0.99 --threshold-step 0.01
+        --threshold-min 0.01 --threshold-max 0.99 --num-thresholds 10000
 
 Inputs:
     - Phase 5 summary (phase5_summary_for_phase6.json)
@@ -344,7 +344,8 @@ def main():
             y_pred_proba=y_pred_proba,
             demographics=demographics,
             attribute=attribute,
-            overall_metrics=overall_metrics
+            overall_metrics=overall_metrics,
+            global_threshold=global_threshold
         )
         
         group_thresholds[attribute] = thresholds

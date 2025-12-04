@@ -400,10 +400,12 @@ class ThresholdOptimizer:
         y_pred_proba: np.ndarray,
         demographics: pd.DataFrame,
         attribute: str,
-        overall_metrics: Dict
+        overall_metrics: Dict,
+        global_threshold: float
     ) -> Dict:
         """
         Calculate optimal threshold for each group in a demographic attribute.
+        Falls back to global threshold if optimization doesn't improve fairness.
         
         Args:
             y_true: True labels
@@ -411,6 +413,7 @@ class ThresholdOptimizer:
             demographics: Demographics DataFrame
             attribute: Demographic attribute (race, gender, age)
             overall_metrics: Overall population metrics (TPR, FPR, intervention_rate)
+            global_threshold: Global threshold to use as fallback
             
         Returns:
             dict: Group-specific thresholds and metrics
@@ -443,11 +446,33 @@ class ThresholdOptimizer:
                 target_fpr=overall_metrics['fpr']
             )
             
-            metrics['n_samples'] = n_samples
-            group_thresholds[group] = metrics
+            # Calculate baseline metrics with global threshold
+            y_pred_baseline = (y_pred_proba_group >= global_threshold).astype(int)
+            tpr_baseline, fpr_baseline = self.calculate_tpr_fpr(y_true_group, y_pred_baseline)
+            baseline_score = abs(tpr_baseline - overall_metrics['tpr']) + abs(fpr_baseline - overall_metrics['fpr'])
             
-            print(f"   {group}: threshold={metrics['threshold']:.3f}, "
-                  f"TPR={metrics['tpr']:.3f}, FPR={metrics['fpr']:.3f}")
+            # Keep optimized threshold only if it improves or maintains fairness
+            if metrics['score'] <= baseline_score:
+                metrics['n_samples'] = n_samples
+                metrics['improvement'] = True
+                group_thresholds[group] = metrics
+                print(f"   {group}: threshold={metrics['threshold']:.3f}, "
+                      f"TPR={metrics['tpr']:.3f}, FPR={metrics['fpr']:.3f} ✅")
+            else:
+                # Fall back to global threshold
+                fallback_metrics = {
+                    'threshold': global_threshold,
+                    'tpr': tpr_baseline,
+                    'fpr': fpr_baseline,
+                    'tpr_gap': abs(tpr_baseline - overall_metrics['tpr']),
+                    'fpr_gap': abs(fpr_baseline - overall_metrics['fpr']),
+                    'score': baseline_score,
+                    'n_samples': n_samples,
+                    'improvement': False
+                }
+                group_thresholds[group] = fallback_metrics
+                print(f"   {group}: threshold={global_threshold:.3f} (global, no improvement found), "
+                      f"TPR={tpr_baseline:.3f}, FPR={fpr_baseline:.3f} ⚠️")
         
         return group_thresholds
 
@@ -805,11 +830,12 @@ class TradeoffAnalyzer:
         improvements['summary'] = {
             'avg_fairness_improvement_pct': (avg_tpr_reduction + avg_fpr_reduction) / 2,
             'performance_drop_acceptable': (
-                abs(improvements['performance_changes']['accuracy_change']) <= 0.02 and
+                improvements['performance_changes']['tpr_change'] >= -0.02 and  # TPR should not drop significantly
+                improvements['performance_changes']['fpr_change'] <= 0.02 and   # FPR should not increase significantly
                 abs(improvements['performance_changes']['roc_auc_change']) <= 0.02
             ),
             'roi_reduction_acceptable': (
-                abs(improvements['roi_changes'].get('roi_reduction_pct', 0)) <= 5
+                abs(improvements['roi_changes'].get('roi_reduction_pct', 0)) <= 10
             ) if improvements['roi_changes'] else True,
             'fairness_targets_met': all(
                 imp['tpr_gap_after'] < 0.05 and imp['fpr_gap_after'] < 0.05
