@@ -97,10 +97,10 @@ def parse_arguments():
         help='Maximum threshold to test (default: 0.99)'
     )
     parser.add_argument(
-        '--threshold-step',
-        type=float,
-        default=0.01,
-        help='Step size for threshold search (default: 0.01)'
+        '--num-thresholds',
+        type=int,
+        default=10000,
+        help='Number of thresholds to test (default: 10000)'
     )
     
     # Data sources
@@ -307,17 +307,19 @@ def main():
     
     print_section("Step 5: Calculate Group-Specific Thresholds (Equalized Odds)", "=")
     
+    # Calculate step size from num_thresholds
+    threshold_step = (args.threshold_max - args.threshold_min) / (args.num_thresholds - 1)
+    
     optimizer = ThresholdOptimizer(
         fairness_tolerance=args.fairness_tolerance,
         threshold_range=(args.threshold_min, args.threshold_max),
-        threshold_step=args.threshold_step
+        threshold_step=threshold_step
     )
     
     print(f"\n🔍 Threshold Search Configuration:")
     print(f"   Range: [{args.threshold_min:.2f}, {args.threshold_max:.2f}]")
-    print(f"   Step size: {args.threshold_step:.3f}")
-    num_thresholds = int((args.threshold_max - args.threshold_min) / args.threshold_step) + 1
-    print(f"   Total thresholds to test: {num_thresholds:,}")
+    print(f"   Number of thresholds: {args.num_thresholds:,}")
+    print(f"   Step size: {threshold_step:.6f}")
     
     group_thresholds = {}
     
@@ -356,7 +358,8 @@ def main():
         'threshold_search_config': {
             'min': args.threshold_min,
             'max': args.threshold_max,
-            'step': args.threshold_step
+            'num_thresholds': args.num_thresholds,
+            'step': threshold_step
         },
         'target_metrics': {
             'tpr': overall_metrics['tpr'],
