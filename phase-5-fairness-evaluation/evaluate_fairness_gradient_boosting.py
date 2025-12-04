@@ -282,7 +282,7 @@ def generate_fairness_summary(
         phase4_results: Phase 4 results
         
     Returns:
-        dict: Comprehensive fairness report
+        dict: Comprehensive fairness report with Phase 6 inputs
     """
     summary = {
         'phase': 5,
@@ -292,8 +292,18 @@ def generate_fairness_summary(
         'overall_performance': overall_metrics,
         'fairness_evaluation': {},
         'bias_detected': False,
-        'recommendations': []
+        'recommendations': [],
+        # Phase 6 decision inputs
+        'phase6_inputs': {
+            'requires_mitigation': False,
+            'group_metrics_summary': {},
+            'worst_violations': [],
+            'mitigation_priority': 'none'  # none, low, medium, high
+        }
     }
+    
+    # Track worst violations for Phase 6 prioritization
+    worst_violations = []
     
     # Evaluate fairness for each attribute
     for attribute, fairness_metrics in fairness_results.items():
@@ -313,6 +323,64 @@ def generate_fairness_summary(
         # Check for bias
         if not attr_summary['all_passed']:
             summary['bias_detected'] = True
+            
+            # Record violations for Phase 6
+            violations = []
+            if not fairness_metrics['demographic_parity']['passed']:
+                violations.append({
+                    'metric': 'demographic_parity',
+                    'gap': fairness_metrics['demographic_parity']['gap'],
+                    'threshold': 0.05
+                })
+            if not fairness_metrics['equalized_odds']['passed']:
+                violations.append({
+                    'metric': 'equalized_odds',
+                    'tpr_gap': fairness_metrics['equalized_odds']['tpr_gap'],
+                    'fpr_gap': fairness_metrics['equalized_odds']['fpr_gap'],
+                    'threshold': 0.05
+                })
+            if not fairness_metrics['equal_opportunity']['passed']:
+                violations.append({
+                    'metric': 'equal_opportunity',
+                    'gap': fairness_metrics['equal_opportunity']['gap'],
+                    'threshold': 0.05
+                })
+            
+            worst_violations.append({
+                'attribute': attribute,
+                'violations': violations
+            })
+        
+        # Collect group-level data for Phase 6
+        if attribute in all_group_metrics:
+            group_data = all_group_metrics[attribute].to_dict('records')
+            summary['phase6_inputs']['group_metrics_summary'][attribute] = group_data
+    
+    # Determine mitigation priority
+    summary['phase6_inputs']['requires_mitigation'] = summary['bias_detected']
+    summary['phase6_inputs']['worst_violations'] = worst_violations
+    
+    if summary['bias_detected']:
+        # Calculate severity based on number of violations and gap sizes
+        max_gap = 0.0
+        violation_count = sum(len(v['violations']) for v in worst_violations)
+        
+        for v in worst_violations:
+            for violation in v['violations']:
+                if 'gap' in violation:
+                    max_gap = max(max_gap, abs(violation['gap']))
+                if 'tpr_gap' in violation:
+                    max_gap = max(max_gap, abs(violation['tpr_gap']))
+                if 'fpr_gap' in violation:
+                    max_gap = max(max_gap, abs(violation['fpr_gap']))
+        
+        # Priority logic: high if many violations or large gaps
+        if max_gap > 0.10 or violation_count >= 6:
+            summary['phase6_inputs']['mitigation_priority'] = 'high'
+        elif max_gap > 0.07 or violation_count >= 3:
+            summary['phase6_inputs']['mitigation_priority'] = 'medium'
+        else:
+            summary['phase6_inputs']['mitigation_priority'] = 'low'
     
     # Add recommendations
     if summary['bias_detected']:
@@ -324,6 +392,9 @@ def generate_fairness_summary(
         )
         summary['recommendations'].append(
             "Consult with clinical and ethics teams before deployment."
+        )
+        summary['recommendations'].append(
+            f"Phase 6 mitigation priority: {summary['phase6_inputs']['mitigation_priority'].upper()}"
         )
     else:
         summary['recommendations'].append(
@@ -536,6 +607,27 @@ def main():
     tests_path = output_dir / "statistical_tests.json"
     save_results(statistical_tests, str(tests_path))
     
+    # Save Phase 6 decision inputs (compact summary for mitigation decisions)
+    phase6_summary_path = output_dir / "phase5_summary_for_phase6.json"
+    phase6_summary = {
+        'requires_mitigation': fairness_summary['phase6_inputs']['requires_mitigation'],
+        'mitigation_priority': fairness_summary['phase6_inputs']['mitigation_priority'],
+        'bias_detected': fairness_summary['bias_detected'],
+        'optimal_threshold': fairness_summary['optimal_threshold'],
+        'overall_performance': fairness_summary['overall_performance'],
+        'worst_violations': fairness_summary['phase6_inputs']['worst_violations'],
+        'group_metrics_summary': fairness_summary['phase6_inputs']['group_metrics_summary'],
+        'phase4_results': phase4_results,
+        'input_files': {
+            'fairness_report': str(report_path),
+            'statistical_tests': str(tests_path),
+            'group_metrics_csvs': [str(output_dir / f"group_metrics_{attr}.csv") for attr in all_group_metrics.keys()],
+            'risk_categories_csvs': [str(output_dir / f"risk_categories_{attr}.csv") for attr in risk_category_analysis.keys()]
+        }
+    }
+    save_results(phase6_summary, str(phase6_summary_path))
+    print(f"✅ Saved Phase 6 summary: {phase6_summary_path}")
+    
     # ========================================================================
     # STEP 8: Generate Visualizations
     # ========================================================================
@@ -569,6 +661,7 @@ def main():
     print(f"   Results: {args.output_dir}")
     print(f"   Fairness report: {report_path}")
     print(f"   Statistical tests: {tests_path}")
+    print(f"   Phase 6 summary: {phase6_summary_path}")
     print(f"   Group metrics: group_metrics_*.csv")
     print(f"   Risk categories: risk_categories_*.csv")
     print(f"   Visualizations: {output_dir / 'visualizations'}/*.png")
@@ -579,15 +672,19 @@ def main():
     
     print(f"\n🎯 Next Steps:")
     if fairness_summary['bias_detected']:
-        print(f"   1. Review group-specific metrics in detail")
-        print(f"   2. Consider implementing group-specific thresholds")
-        print(f"   3. Consult with clinical and ethics teams")
-        print(f"   4. Document fairness-ROI trade-offs")
+        priority = fairness_summary['phase6_inputs']['mitigation_priority'].upper()
+        print(f"   ⚠️  MITIGATION REQUIRED - Priority: {priority}")
+        print(f"   1. Proceed to Phase 6 (Fairness Mitigation)")
+        print(f"   2. Use phase5_summary_for_phase6.json as input")
+        print(f"   3. Calculate group-specific thresholds")
+        print(f"   4. Consult with clinical and ethics teams")
+        print(f"   5. Document fairness-ROI trade-offs")
     else:
-        print(f"   1. Prepare deployment package with global threshold")
-        print(f"   2. Create model card with fairness documentation")
-        print(f"   3. Implement production monitoring for fairness metrics")
-        print(f"   4. Obtain clinical validation and sign-off")
+        print(f"   ✅ NO MITIGATION NEEDED")
+        print(f"   1. Skip Phase 6 (no fairness violations)")
+        print(f"   2. Proceed to Phase 7 (Deployment Preparation)")
+        print(f"   3. Use global optimal threshold from Phase 4")
+        print(f"   4. Implement production monitoring for fairness metrics")
     
     # ========================================================================
     # Upload to HuggingFace Hub

@@ -143,26 +143,44 @@ The dataset represents 10 years (1999-2008) of clinical care at 130 US hospitals
   - **Recommendations**: Determine if global threshold is acceptable or if bias mitigation required
   - **Output**: Fairness assessment report for deployment decision-making
 
-#### 6. Deployment Preparation & Final Report
+#### 6. Fairness Mitigation & Bias Correction
+- 🔲 **Implement post-hoc fairness fixes:**
+  - **Group-specific thresholds**: Calculate optimal thresholds per demographic group to equalize TPR/FPR
+  - **Threshold optimization per group**: Use Phase 5 fairness metrics to determine adjustments needed
+  - **Fairness-performance trade-offs**: Analyze impact on overall performance, ROI, and intervention volume
+  - **Post-processing adjustments**: Apply threshold corrections or calibration adjustments per group
+  - **Validation**: Test group-specific thresholds on test data, verify fairness improvements
+  - **Output**: Fairness mitigation config with group-specific thresholds (`.json` file)
+- 🔲 **Clinical and ethics review:**
+  - **Fairness presentation**: Present mitigation strategies to clinical and ethics teams
+  - **Trade-off analysis**: Show performance vs fairness curves, intervention distribution changes
+  - **Approval process**: Document clinical team decision on threshold strategy (global vs group-specific)
+  - **Risk disclosure**: Identify patient groups affected by threshold changes
+  - **Mitigation documentation**: Record rationale, trade-offs, approval decisions, and audit trail
+  - **Decision rules**: Finalize and package threshold logic for deployment
+
+#### 7. Deployment Preparation & Final Report
 - 🔲 **Aggregate results from all phases:**
   - **Phase 1 outputs**: Preprocessing statistics, feature engineering summary, data quality report
   - **Phase 2 outputs**: Model comparison (Logistic Regression, Random Forest, Gradient Boosting), cross-validation metrics, feature importance
   - **Phase 3 outputs**: Calibration metrics (Brier score, ECE, Hosmer-Lemeshow), reliability diagrams, before/after comparison
   - **Phase 4 outputs**: Optimal threshold, expected value, ROI analysis, sensitivity analysis, break-even analysis
   - **Phase 5 outputs**: Fairness metrics (demographic parity, equalized odds, equal opportunity), group-specific performance, bias assessment
+  - **Phase 6 outputs**: Fairness mitigation strategy, group-specific thresholds, clinical approval, trade-off analysis
 - 🔲 **Create deployment package:**
-  - **Model artifacts**: Calibrated model + calibrator + optimal thresholds + risk category mapping (`.joblib`/`.pkl` files)
-  - **Model card**: Comprehensive documentation with performance, fairness, calibration metrics, and limitations
-  - **Validation report**: Clinical review summary of risk categories and recommended intervention actions
-  - **API specification**: Integration guidelines and endpoint documentation for healthcare systems
-  - **Monitoring plan**: Real-time performance tracking and drift detection specifications
+  - **Model artifacts**: Calibrated model + calibrator + optimal thresholds (global and/or group-specific) + risk category mapping (`.joblib`/`.pkl` files)
+  - **Fairness mitigation config**: Group-specific thresholds and decision rules (`.json` file)
+  - **Model card**: Comprehensive documentation with performance, fairness, calibration metrics, mitigation strategies, and limitations
+  - **Validation report**: Clinical review summary of risk categories, fairness adjustments, and recommended intervention actions
+  - **API specification**: Integration guidelines and endpoint documentation for healthcare systems (including group-aware predictions)
+  - **Monitoring plan**: Real-time performance tracking, drift detection, and fairness monitoring specifications
 - 🔲 **Generate final report:**
-  - **Executive Summary**: Key findings, business impact, ROI projections, deployment readiness
+  - **Executive Summary**: Key findings, business impact, ROI projections, fairness compliance, deployment readiness
   - **Technical Documentation**: Model architecture, training process, performance metrics, calibration quality
   - **Business Analysis**: Cost-benefit analysis, intervention recommendations, resource allocation strategy
-  - **Fairness & Ethics**: Bias evaluation, equity considerations, mitigation strategies
-  - **Implementation Guide**: Deployment strategy, integration steps, clinical workflow procedures
-  - **Risk Management**: Known limitations, monitoring requirements, contingency plans
+  - **Fairness & Ethics**: Bias evaluation, equity considerations, implemented mitigation strategies, group-specific thresholds rationale
+  - **Implementation Guide**: Deployment strategy, integration steps, clinical workflow procedures, fairness-aware prediction logic
+  - **Risk Management**: Known limitations, monitoring requirements, contingency plans, fairness violation handling
 
 ## Deliverables
 
@@ -213,18 +231,27 @@ hospital-readmission-risk/
 │           └── split_info.txt                    # Split details
 ├── phase-1-data-explore-preprocessing/           # ✅ Phase 1: EDA & Preprocessing
 │   ├── eda.ipynb                                 # Exploratory data analysis
-├── phase-5-fairness-evaluation-deployment-readiness/  # 🔲 Phase 5: Fairness & Deployment
-│   ├── evaluate_fairness_gradient_boosting.py    # Fairness evaluation script (TBD)
-│   ├── utilities.py                              # Fairness metrics utilities (TBD)
-│   ├── outputs/                                  # Phase 5 results (TBD)
+├── phase-5-fairness-evaluation/                  # ✅ Phase 5: Fairness Evaluation
+│   ├── evaluate_fairness_gradient_boosting.py    # Fairness evaluation script
+│   ├── utilities.py                              # Fairness metrics utilities
+│   ├── outputs/                                  # Phase 5 results
 │   │   ├── fairness_report.json                  # Comprehensive fairness metrics
 │   │   ├── group_metrics_*.csv                   # Performance by demographic group
 │   │   ├── statistical_tests.json                # Significance tests
 │   │   ├── risk_categories_*.csv                 # Risk distribution by group
 │   │   └── visualizations/                       # Fairness assessment plots
-│   ├── PHASE1_UPDATES.md                         # Phase 1 demographics changes
 │   └── README.md                                 # Phase 5 documentation
-├── phase-6-final-report/                         # 🔲 Phase 6: Results & Documentation
+├── phase-6-fairness-mitigation/                  # 🔲 Phase 6: Bias Correction
+│   ├── calculate_group_thresholds.py             # Compute group-specific thresholds (TBD)
+│   ├── evaluate_mitigation_impact.py             # Test fairness improvements (TBD)
+│   ├── utilities.py                              # Mitigation utilities (TBD)
+│   ├── outputs/                                  # Phase 6 results (TBD)
+│   │   ├── group_thresholds.json                 # Group-specific thresholds
+│   │   ├── mitigation_impact.json                # Performance/fairness trade-offs
+│   │   ├── clinical_approval.md                  # Clinical review documentation
+│   │   └── visualizations/                       # Before/after fairness plots
+│   └── README.md                                 # Phase 6 documentation (TBD)
+├── phase-7-deployment-preparation/               # 🔲 Phase 7: Final Report & Deployment
 │   ├── collect_results.py                        # Aggregate all phase outputs (TBD)
 │   ├── generate_final_report.py                  # Create comprehensive report (TBD)
 │   ├── final_report.pdf                          # Executive & technical report (TBD)
