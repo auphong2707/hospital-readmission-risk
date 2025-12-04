@@ -134,7 +134,8 @@ def load_test_data_and_demographics(
         # Download test data
         test_path = hf_hub_download(
             repo_id=data_repo_id,
-            filename="test.csv",
+            filename="splits/test.csv",
+            repo_type="dataset",
             cache_dir=cache_dir
         )
         test_df = pd.read_csv(test_path)
@@ -142,7 +143,8 @@ def load_test_data_and_demographics(
         # Download demographics
         demographics_path = hf_hub_download(
             repo_id=data_repo_id,
-            filename="test_demographics.csv",
+            filename="splits/test_demographics.csv",
+            repo_type="dataset",
             cache_dir=cache_dir
         )
         demographics = pd.read_csv(demographics_path)
@@ -180,14 +182,16 @@ def load_model_and_calibrator(
         
         model_path = hf_hub_download(
             repo_id=model_repo_id,
-            filename="gradient_boosting_model.joblib",
+            filename="gradient_boosting_model_original.joblib",
+            repo_type="model",
             cache_dir=cache_dir
         )
         model = joblib.load(model_path)
         
         calibrator_path = hf_hub_download(
             repo_id=model_repo_id,
-            filename="calibrator.joblib",
+            filename="Gradient_Boosting_(LightGBM)_calibrator.pkl",
+            repo_type="model",
             cache_dir=cache_dir
         )
         calibrator = joblib.load(calibrator_path)
