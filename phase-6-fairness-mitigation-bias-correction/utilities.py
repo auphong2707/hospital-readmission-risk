@@ -900,8 +900,13 @@ class TradeoffAnalyzer:
         
         improvements['summary'] = {
             'avg_fairness_improvement_pct': (avg_tpr_reduction + avg_fpr_reduction) / 2,
-            'performance_drop_acceptable': abs(improvements['performance_changes']['tpr_change']) <= 0.05,
-            'roi_reduction_acceptable': (improvements['roi_changes'].get('roi_reduction_pct', 0) <= 10) if improvements['roi_changes'] else True,
+            'performance_drop_acceptable': (
+                abs(improvements['performance_changes']['accuracy_change']) <= 0.02 and
+                abs(improvements['performance_changes']['roc_auc_change']) <= 0.02
+            ),
+            'roi_reduction_acceptable': (
+                abs(improvements['roi_changes'].get('roi_reduction_pct', 0)) <= 5
+            ) if improvements['roi_changes'] else True,
             'fairness_targets_met': all(
                 imp['tpr_gap_after'] < 0.05 and imp['fpr_gap_after'] < 0.05
                 for imp in improvements['fairness_improvements'].values()
