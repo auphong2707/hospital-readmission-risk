@@ -21,6 +21,7 @@ import json
 import warnings
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Union, Any
+from dotenv import load_dotenv
 
 import numpy as np
 import pandas as pd
@@ -1107,3 +1108,242 @@ def save_results(results: Dict, output_path: str):
         json.dump(results_serializable, f, indent=2)
     
     print(f"✅ Saved results: {output_path}")
+
+
+# ============================================================================
+# HUGGINGFACE UPLOAD
+# ============================================================================
+
+def upload_results_to_hf(
+    output_dir: str,
+    repo_id: str,
+    commit_message: str = "Upload Phase 6 fairness mitigation results",
+    token: Optional[str] = None,
+    include_visualizations: bool = True
+):
+    """
+    Upload Phase 6 fairness mitigation results to HuggingFace Hub.
+    
+    Args:
+        output_dir: Directory containing output files (JSON, PNG)
+        repo_id: HuggingFace repository ID (e.g., 'username/hospital-readmission-gradient-boosting-mitigation-results')
+        commit_message: Commit message for the upload
+        token: HuggingFace API token (if None, will use HF_TOKEN environment variable)
+        include_visualizations: If True, upload visualization files
+        
+    Returns:
+        str: URL to the uploaded repository
+        
+    Raises:
+        ImportError: If huggingface_hub is not installed
+        ValueError: If required files are missing or token not provided
+        
+    Example:
+        >>> upload_results_to_hf(
+        ...     output_dir='./phase-6-fairness-mitigation-bias-correction/outputs',
+        ...     repo_id='username/hospital-readmission-gradient-boosting-mitigation-results'
+        ... )
+    """
+    try:
+        from huggingface_hub import HfApi, create_repo
+    except ImportError:
+        raise ImportError(
+            "huggingface_hub library required for uploading. "
+            "Install with: pip install huggingface_hub"
+        )
+    
+    # Load environment variables
+    load_dotenv()
+    
+    # Get token from environment if not provided
+    if token is None:
+        token = os.getenv('HF_TOKEN')
+        if token is None:
+            raise ValueError(
+                "HuggingFace token not provided. Set HF_TOKEN environment variable or pass token parameter."
+            )
+    
+    print("\n" + "="*80)
+    print("📤 Uploading Phase 6 Fairness Mitigation Results to HuggingFace Hub")
+    print("="*80)
+    print(f"Repository: {repo_id}")
+    
+    # Initialize API
+    api = HfApi(token=token)
+    
+    # Create repository if it doesn't exist
+    try:
+        create_repo(repo_id, token=token, repo_type="model", exist_ok=True)
+        print(f"✅ Repository ready: https://huggingface.co/{repo_id}")
+    except Exception as e:
+        print(f"⚠️  Repository may already exist: {e}")
+    
+    # Collect files to upload
+    files_to_upload = []
+    
+    # Output files
+    output_path = Path(output_dir)
+    if output_path.exists():
+        for file_path in output_path.glob('*'):
+            if file_path.is_file() and not file_path.name.startswith('.'):
+                files_to_upload.append((str(file_path), f"outputs/{file_path.name}"))
+    
+    # Visualization files
+    if include_visualizations:
+        viz_path = output_path / "visualizations"
+        if viz_path.exists():
+            for file_path in viz_path.glob('*.png'):
+                if file_path.is_file():
+                    files_to_upload.append((str(file_path), f"visualizations/{file_path.name}"))
+    
+    if len(files_to_upload) == 0:
+        raise ValueError(f"No files found to upload in {output_dir}")
+    
+    print(f"\n📦 Uploading {len(files_to_upload)} files...")
+    
+    # Upload files
+    uploaded_count = 0
+    for local_path, remote_path in files_to_upload:
+        try:
+            api.upload_file(
+                path_or_fileobj=local_path,
+                path_in_repo=remote_path,
+                repo_id=repo_id,
+                repo_type="model",
+                commit_message=f"{commit_message}: {Path(local_path).name}",
+                token=token
+            )
+            uploaded_count += 1
+            print(f"   ✅ Uploaded: {remote_path}")
+        except Exception as e:
+            print(f"   ❌ Failed to upload {remote_path}: {e}")
+    
+    # Create README if it doesn't exist
+    try:
+        readme_content = f"""---
+license: apache-2.0
+tags:
+- healthcare
+- hospital-readmission
+- fairness-mitigation
+- bias-correction
+- ai-ethics
+---
+
+# Hospital Readmission Risk - Phase 6: Fairness Mitigation Results
+
+This repository contains the results from Phase 6: Fairness Mitigation & Bias Correction.
+
+## Contents
+
+### Outputs
+- `outputs/group_thresholds.json`: Group-specific decision thresholds by demographic attribute
+- `outputs/mitigation_impact.json`: Comprehensive before/after fairness evaluation
+
+### Visualizations
+- `visualizations/tpr_comparison_*.png`: True Positive Rate comparison (baseline vs mitigated)
+- `visualizations/fpr_comparison_*.png`: False Positive Rate comparison (baseline vs mitigated)
+- `visualizations/fairness_gaps_*.png`: Fairness gap reductions with 5% threshold line
+- `visualizations/threshold_adjustments_*.png`: Group-specific threshold adjustments from global
+- `visualizations/tradeoff_summary_*.png`: Performance/fairness trade-off analysis
+
+## Mitigation Strategies
+
+### Equalized Odds (Default)
+Minimizes both TPR and FPR gaps across demographic groups. Balances false positives and false negatives.
+
+### Equal Opportunity
+Minimizes only TPR gaps across groups. Allows FPR variation if needed.
+
+### Demographic Parity
+Equalizes intervention rates across groups. May sacrifice individual fairness for group fairness.
+
+## Group-Specific Thresholds
+
+Each demographic group receives a tailored decision threshold to equalize fairness metrics while maintaining overall performance:
+
+- **Race**: African American, Asian, Caucasian, Hispanic, Other, Unknown
+- **Gender**: Female, Male, Unknown/Invalid
+- **Age**: [0-10), [10-20), [20-30), ..., [90-100)
+
+## Trade-off Analysis
+
+### Fairness Improvements
+- TPR gap reduction (max TPR - min TPR)
+- FPR gap reduction (max FPR - min FPR)
+- Intervention rate gap reduction
+
+### Performance Changes
+- Accuracy change
+- TPR change
+- FPR change
+- ROC-AUC change
+
+### ROI Impact
+- Expected value change per patient
+- Cost matrix: TP=$14.5K, FP=-$500, FN=-$15K, TN=$0
+
+## Deployment Recommendation
+
+The mitigation impact report includes a deployment recommendation based on:
+- Fairness targets met (gaps < 5%)
+- Acceptable performance drop (accuracy/ROC-AUC < 2%)
+- Acceptable ROI reduction (< 5%)
+
+If all criteria are met: **Use group-specific thresholds**  
+If criteria not met: **Use global threshold** or consider retraining
+
+## Model Information
+
+- **Model**: Gradient Boosting (LightGBM) with Platt Calibration
+- **Global Threshold**: From Phase 4 ROI optimization
+- **Test Set**: 15,265 patients
+- **Mitigation Type**: Post-hoc (threshold adjustment only, model unchanged)
+
+## Usage
+
+These results can be used for:
+- Deploying models with group-specific fairness thresholds
+- Clinical approval documentation
+- Meeting regulatory requirements for AI fairness
+- Creating model cards with bias mitigation documentation
+- Demonstrating commitment to equitable care
+
+## Clinical Approval Process
+
+1. Review fairness violations from Phase 5
+2. Review proposed group-specific thresholds
+3. Review trade-off analysis (fairness gains vs performance/ROI costs)
+4. Make deployment decision:
+   - **Option A**: Approve group-specific thresholds
+   - **Option B**: Use global threshold
+   - **Option C**: Retrain model with bias mitigation during training
+
+## Citation
+
+If you use these results, please cite the hospital readmission risk prediction project.
+"""
+        
+        readme_path = Path(output_dir) / "README.md"
+        with open(readme_path, 'w') as f:
+            f.write(readme_content)
+        
+        api.upload_file(
+            path_or_fileobj=str(readme_path),
+            path_in_repo="README.md",
+            repo_id=repo_id,
+            repo_type="model",
+            commit_message="Add README",
+            token=token
+        )
+        print(f"   ✅ Uploaded: README.md")
+        uploaded_count += 1
+    except Exception as e:
+        print(f"   ⚠️  Could not create/upload README: {e}")
+    
+    print("\n" + "="*80)
+    print(f"✅ Upload Complete: {uploaded_count} files uploaded")
+    print(f"🔗 Repository URL: https://huggingface.co/{repo_id}")
+    print("="*80)
+    
+    return f"https://huggingface.co/{repo_id}"

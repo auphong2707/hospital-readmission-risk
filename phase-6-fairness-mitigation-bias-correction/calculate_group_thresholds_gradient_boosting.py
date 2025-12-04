@@ -43,7 +43,8 @@ from utilities import (
     MitigationEvaluator,
     TradeoffAnalyzer,
     MitigationVisualizer,
-    save_results
+    save_results,
+    upload_results_to_hf
 )
 
 # Load environment variables
@@ -445,6 +446,26 @@ def main():
         print(f"   5. Proceed to Phase 7 (Deployment Preparation)")
     else:
         print(f"   5. Revisit mitigation strategy or retrain model")
+    
+    # ========================================================================
+    # Step 9: Upload to HuggingFace Hub
+    # ========================================================================
+    
+    print("\n" + "="*80)
+    print("Step 9: Upload Results to HuggingFace Hub")
+    print("="*80)
+    
+    try:
+        repo_url = upload_results_to_hf(
+            output_dir=args.output_dir,
+            repo_id='auphong2707/hospital-readmission-gradient-boosting-mitigation-results',
+            commit_message="Upload Phase 6 fairness mitigation results"
+        )
+        print(f"✅ Results uploaded successfully!")
+        print(f"🌐 View at: {repo_url}")
+    except Exception as e:
+        print(f"❌ Upload failed: {e}")
+        print(f"💡 You can upload manually later or set HF_TOKEN environment variable")
     
     print("\n" + "="*80)
     print("✅ Phase 6 Completed Successfully!")
