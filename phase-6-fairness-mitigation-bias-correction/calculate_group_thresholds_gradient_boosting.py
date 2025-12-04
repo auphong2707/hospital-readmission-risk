@@ -1,14 +1,22 @@
 """
 Phase 6: Calculate Group-Specific Thresholds for Fairness Mitigation
 
-This script implements post-hoc fairness mitigation by calculating optimal
-thresholds for each demographic group to equalize fairness metrics.
+This script implements post-hoc fairness mitigation using the equalized odds
+strategy by calculating optimal thresholds for each demographic group to
+equalize both True Positive Rate (TPR) and False Positive Rate (FPR).
+
+Strategy: Equalized Odds
+    - Aims to equalize TPR and FPR across all demographic groups
+    - Finds group-specific thresholds that minimize gaps from target metrics
+    - Balances both error rates to ensure fair treatment
 
 Usage:
+    # Basic usage
+    python calculate_group_thresholds_gradient_boosting.py
+    
+    # With custom threshold search range
     python calculate_group_thresholds_gradient_boosting.py \
-        --phase5-summary ./phase-5-fairness-evaluation/outputs/phase5_summary_for_phase6.json \
-        --mitigation-strategy equalized_odds \
-        --output-dir ./phase-6-fairness-mitigation/outputs
+        --threshold-min 0.01 --threshold-max 0.99 --threshold-step 0.01
 
 Inputs:
     - Phase 5 summary (phase5_summary_for_phase6.json)
@@ -67,20 +75,32 @@ def parse_arguments():
         help='Path to Phase 5 summary file'
     )
     
-    # Mitigation strategy
-    parser.add_argument(
-        '--mitigation-strategy',
-        type=str,
-        default='equalized_odds',
-        choices=['equalized_odds', 'equal_opportunity', 'demographic_parity'],
-        help='Fairness mitigation strategy'
-    )
-    
+    # Fairness configuration
     parser.add_argument(
         '--fairness-tolerance',
         type=float,
         default=0.05,
         help='Target fairness gap tolerance (default: 0.05 = 5%%)'
+    )
+    
+    # Threshold search configuration
+    parser.add_argument(
+        '--threshold-min',
+        type=float,
+        default=0.01,
+        help='Minimum threshold to test (default: 0.01)'
+    )
+    parser.add_argument(
+        '--threshold-max',
+        type=float,
+        default=0.99,
+        help='Maximum threshold to test (default: 0.99)'
+    )
+    parser.add_argument(
+        '--threshold-step',
+        type=float,
+        default=0.01,
+        help='Step size for threshold search (default: 0.01)'
     )
     
     # Data sources
@@ -226,7 +246,7 @@ def main():
     priority = phase5_summary['mitigation_priority']
     print(f"\n⚠️  MITIGATION REQUIRED")
     print(f"   Priority: {priority.upper()}")
-    print(f"   Strategy: {args.mitigation_strategy}")
+    print(f"   Strategy: equalized_odds")
     
     if priority == 'high':
         print("   ⚠️  HIGH PRIORITY: Significant fairness violations detected")
@@ -285,12 +305,19 @@ def main():
     # STEP 5: Calculate Group-Specific Thresholds
     # ========================================================================
     
-    print_section("Step 5: Calculate Group-Specific Thresholds", "=")
+    print_section("Step 5: Calculate Group-Specific Thresholds (Equalized Odds)", "=")
     
     optimizer = ThresholdOptimizer(
-        mitigation_strategy=args.mitigation_strategy,
-        fairness_tolerance=args.fairness_tolerance
+        fairness_tolerance=args.fairness_tolerance,
+        threshold_range=(args.threshold_min, args.threshold_max),
+        threshold_step=args.threshold_step
     )
+    
+    print(f"\n🔍 Threshold Search Configuration:")
+    print(f"   Range: [{args.threshold_min:.2f}, {args.threshold_max:.2f}]")
+    print(f"   Step size: {args.threshold_step:.3f}")
+    num_thresholds = int((args.threshold_max - args.threshold_min) / args.threshold_step) + 1
+    print(f"   Total thresholds to test: {num_thresholds:,}")
     
     group_thresholds = {}
     
@@ -322,10 +349,15 @@ def main():
     
     # Save group thresholds
     thresholds_output = {
-        'mitigation_strategy': args.mitigation_strategy,
+        'mitigation_strategy': 'equalized_odds',
         'fairness_tolerance': args.fairness_tolerance,
         'global_threshold': global_threshold,
         'group_specific_thresholds': group_thresholds,
+        'threshold_search_config': {
+            'min': args.threshold_min,
+            'max': args.threshold_max,
+            'step': args.threshold_step
+        },
         'target_metrics': {
             'tpr': overall_metrics['tpr'],
             'fpr': overall_metrics['fpr'],
@@ -360,7 +392,7 @@ def main():
     # Save mitigation impact
     mitigation_impact = {
         'phase': 6,
-        'mitigation_strategy': args.mitigation_strategy,
+        'mitigation_strategy': 'equalized_odds',
         'baseline_metrics': baseline,
         'mitigated_metrics': mitigated,
         'improvements': improvements,
@@ -399,7 +431,7 @@ def main():
     print_section("✅ Phase 6 Complete: Fairness Mitigation Summary", "=")
     
     print("\n📊 Key Findings:")
-    print(f"   Mitigation strategy: {args.mitigation_strategy}")
+    print(f"   Mitigation strategy: equalized_odds")
     print(f"   Fairness targets met: {'YES ✅' if improvements['summary']['fairness_targets_met'] else 'NO ❌'}")
     print(f"   Performance drop acceptable: {'YES ✅' if improvements['summary']['performance_drop_acceptable'] else 'NO ❌'}")
     print(f"   ROI reduction acceptable: {'YES ✅' if improvements['summary']['roi_reduction_acceptable'] else 'NO ❌'}")
@@ -429,12 +461,12 @@ def main():
         print(f"   ⚠️  Group-specific thresholds NOT RECOMMENDED")
         print(f"   Reasons: {', '.join(reasons)}")
         print(f"   1. Review mitigation impact and identify issues")
-        print(f"   2. Consider alternative mitigation strategies:")
-        if args.mitigation_strategy != 'equal_opportunity':
-            print(f"      - Try 'equal_opportunity' strategy")
-        if args.mitigation_strategy != 'demographic_parity':
-            print(f"      - Try 'demographic_parity' strategy")
-        print(f"   3. If no strategy works, consider Phase 1-3 retraining")
+        print(f"   2. Consider adjusting threshold search parameters:")
+        print(f"      - Widen search range (--threshold-min, --threshold-max)")
+        print(f"      - Increase fairness tolerance (--fairness-tolerance)")
+        print(f"   3. If no configuration works, consider Phase 1-3 retraining with:")
+        print(f"      - Fairness-aware sampling/reweighting")
+        print(f"      - Additional fairness regularization")
         print(f"   4. Document limitations and escalate to clinical team")
     
     print(f"\n🎯 Next Steps:")

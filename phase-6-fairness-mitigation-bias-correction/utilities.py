@@ -309,29 +309,22 @@ def load_model_and_calibrator(
 # ============================================================================
 
 class ThresholdOptimizer:
-    """Calculate optimal group-specific thresholds for fairness mitigation."""
+    """Calculate optimal group-specific thresholds using equalized odds strategy."""
     
     def __init__(
         self,
-        mitigation_strategy: str = 'equalized_odds',
         fairness_tolerance: float = 0.05,
-        threshold_range: Tuple[float, float] = (0.30, 0.70),
+        threshold_range: Tuple[float, float] = (0.01, 0.99),
         threshold_step: float = 0.01
     ):
         """
-        Initialize threshold optimizer.
+        Initialize threshold optimizer with equalized odds strategy.
         
         Args:
-            mitigation_strategy: 'equalized_odds', 'equal_opportunity', or 'demographic_parity'
             fairness_tolerance: Target gap tolerance (e.g., 0.05 = 5%)
             threshold_range: (min, max) threshold to search
             threshold_step: Step size for grid search
         """
-        valid_strategies = ['equalized_odds', 'equal_opportunity', 'demographic_parity']
-        if mitigation_strategy not in valid_strategies:
-            raise ValueError(f"mitigation_strategy must be one of {valid_strategies}")
-        
-        self.mitigation_strategy = mitigation_strategy
         self.fairness_tolerance = fairness_tolerance
         self.threshold_range = threshold_range
         self.threshold_step = threshold_step
@@ -348,10 +341,6 @@ class ThresholdOptimizer:
         fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
         
         return tpr, fpr
-    
-    def calculate_intervention_rate(self, y_pred: np.ndarray) -> float:
-        """Calculate proportion of positive predictions."""
-        return np.mean(y_pred)
     
     def optimize_equalized_odds(
         self,
@@ -405,80 +394,6 @@ class ThresholdOptimizer:
         
         return best_metrics
     
-    def optimize_equal_opportunity(
-        self,
-        y_true: np.ndarray,
-        y_pred_proba: np.ndarray,
-        target_tpr: float
-    ) -> Dict:
-        """Find threshold that minimizes TPR gap from target."""
-        best_threshold = None
-        best_score = float('inf')
-        best_metrics = {}
-        
-        thresholds = np.arange(
-            self.threshold_range[0],
-            self.threshold_range[1] + self.threshold_step,
-            self.threshold_step
-        )
-        
-        for threshold in thresholds:
-            y_pred = (y_pred_proba >= threshold).astype(int)
-            tpr, fpr = self.calculate_tpr_fpr(y_true, y_pred)
-            
-            tpr_gap = abs(tpr - target_tpr)
-            
-            if tpr_gap < best_score:
-                best_score = tpr_gap
-                best_threshold = threshold
-                best_metrics = {
-                    'threshold': threshold,
-                    'tpr': tpr,
-                    'fpr': fpr,
-                    'tpr_gap': tpr_gap,
-                    'score': tpr_gap
-                }
-        
-        return best_metrics
-    
-    def optimize_demographic_parity(
-        self,
-        y_true: np.ndarray,
-        y_pred_proba: np.ndarray,
-        target_intervention_rate: float
-    ) -> Dict:
-        """Find threshold that matches target intervention rate."""
-        best_threshold = None
-        best_score = float('inf')
-        best_metrics = {}
-        
-        thresholds = np.arange(
-            self.threshold_range[0],
-            self.threshold_range[1] + self.threshold_step,
-            self.threshold_step
-        )
-        
-        for threshold in thresholds:
-            y_pred = (y_pred_proba >= threshold).astype(int)
-            intervention_rate = self.calculate_intervention_rate(y_pred)
-            tpr, fpr = self.calculate_tpr_fpr(y_true, y_pred)
-            
-            gap = abs(intervention_rate - target_intervention_rate)
-            
-            if gap < best_score:
-                best_score = gap
-                best_threshold = threshold
-                best_metrics = {
-                    'threshold': threshold,
-                    'tpr': tpr,
-                    'fpr': fpr,
-                    'intervention_rate': intervention_rate,
-                    'intervention_rate_gap': gap,
-                    'score': gap
-                }
-        
-        return best_metrics
-    
     def calculate_group_thresholds(
         self,
         y_true: np.ndarray,
@@ -501,7 +416,9 @@ class ThresholdOptimizer:
             dict: Group-specific thresholds and metrics
         """
         print(f"\n🔍 Optimizing thresholds for: {attribute.upper()}")
-        print(f"   Strategy: {self.mitigation_strategy}")
+        print(f"   Strategy: equalized_odds")
+        print(f"   Target TPR: {overall_metrics['tpr']:.3f}")
+        print(f"   Target FPR: {overall_metrics['fpr']:.3f}")
         print(f"   Target tolerance: ±{self.fairness_tolerance:.1%}")
         
         group_thresholds = {}
@@ -518,26 +435,13 @@ class ThresholdOptimizer:
             y_true_group = y_true[mask]
             y_pred_proba_group = y_pred_proba[mask]
             
-            # Select optimization strategy
-            if self.mitigation_strategy == 'equalized_odds':
-                metrics = self.optimize_equalized_odds(
-                    y_true_group,
-                    y_pred_proba_group,
-                    target_tpr=overall_metrics['tpr'],
-                    target_fpr=overall_metrics['fpr']
-                )
-            elif self.mitigation_strategy == 'equal_opportunity':
-                metrics = self.optimize_equal_opportunity(
-                    y_true_group,
-                    y_pred_proba_group,
-                    target_tpr=overall_metrics['tpr']
-                )
-            else:  # demographic_parity
-                metrics = self.optimize_demographic_parity(
-                    y_true_group,
-                    y_pred_proba_group,
-                    target_intervention_rate=overall_metrics['intervention_rate']
-                )
+            # Optimize using equalized odds
+            metrics = self.optimize_equalized_odds(
+                y_true_group,
+                y_pred_proba_group,
+                target_tpr=overall_metrics['tpr'],
+                target_fpr=overall_metrics['fpr']
+            )
             
             metrics['n_samples'] = n_samples
             group_thresholds[group] = metrics

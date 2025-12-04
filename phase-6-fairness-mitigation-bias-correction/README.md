@@ -108,44 +108,50 @@ print(f"⚠️ Mitigation required - Priority: {priority.upper()}")
 
 ### Step 2: Calculate Group-Specific Thresholds
 
-**Optimization Goal:** Find threshold per group that equalizes fairness metrics
+**Strategy: Equalized Odds**
 
-#### Option A: Equalized Odds (Recommended)
-Minimize TPR and FPR disparities across groups:
+This phase uses the **equalized odds** strategy exclusively to minimize both TPR (True Positive Rate) and FPR (False Positive Rate) disparities across demographic groups.
 
+**Optimization Goal:**
 ```
-Objective: min(max_TPR_gap, max_FPR_gap)
-Constraint: TPR_gap < 0.05 AND FPR_gap < 0.05
+Objective: min(TPR_gap + FPR_gap)
+Constraint: |group_TPR - target_TPR| + |group_FPR - target_FPR| minimized
 ```
 
 **Algorithm:**
 ```python
 for each demographic_group:
-    # Grid search over threshold range [0.3, 0.7]
-    for threshold in np.arange(0.30, 0.71, 0.01):
+    # Grid search over wide threshold range [0.01, 0.99]
+    # Same range as Phase 4 for consistency
+    for threshold in np.arange(0.01, 1.00, 0.01):
         y_pred_group = (y_pred_proba[group_mask] >= threshold).astype(int)
         
         # Calculate group-specific TPR/FPR
         group_tpr = recall_score(y_true[group_mask], y_pred_group)
         group_fpr = false_positive_rate(y_true[group_mask], y_pred_group)
         
-        # Store threshold that brings group closer to overall TPR/FPR
+        # Calculate combined gap from target metrics
+        tpr_gap = abs(group_tpr - target_tpr)
+        fpr_gap = abs(group_fpr - target_fpr)
+        score = tpr_gap + fpr_gap
         
-    # Select threshold that minimizes gap to target TPR/FPR
+    # Select threshold with minimum combined gap
     optimal_threshold_per_group[group] = best_threshold
 ```
 
-#### Option B: Equal Opportunity
-Focus on equalizing True Positive Rate (TPR) only:
-- Ensures all groups have equal chance of receiving intervention when truly at risk
-- Less strict than equalized odds, may allow FPR differences
+**Threshold Search Configuration:**
+- **Range**: [0.01, 0.99] (99 thresholds tested)
+- **Step size**: 0.01 (configurable via `--threshold-step`)
+- **Why wide range?** Allows finding optimal thresholds for underperforming groups (e.g., lower thresholds to boost TPR for Asian patients)
 
-#### Option C: Demographic Parity
-Equalize intervention rates across groups:
-- `intervention_rate_group ≈ intervention_rate_overall`
-- May sacrifice individual fairness for group fairness
-
-**Default**: Use **Equalized Odds** (balances TPR and FPR fairness)
+**Command:**
+```bash
+python calculate_group_thresholds_gradient_boosting.py \
+    --threshold-min 0.01 \
+    --threshold-max 0.99 \
+    --threshold-step 0.01 \
+    --fairness-tolerance 0.05
+```
 
 ---
 
@@ -368,22 +374,25 @@ Comprehensive approval document with:
 ### Example 1: Full Phase 6 Pipeline
 
 ```bash
-# Step 1: Check if mitigation needed and calculate thresholds
-python phase-6-fairness-mitigation/calculate_group_thresholds.py \
+# Step 1: Calculate group-specific thresholds using equalized odds
+python phase-6-fairness-mitigation-bias-correction/calculate_group_thresholds_gradient_boosting.py \
     --phase5-summary ./phase-5-fairness-evaluation/outputs/phase5_summary_for_phase6.json \
-    --mitigation-strategy equalized_odds \
-    --output-dir ./phase-6-fairness-mitigation/outputs
+    --threshold-min 0.01 \
+    --threshold-max 0.99 \
+    --threshold-step 0.01 \
+    --fairness-tolerance 0.05 \
+    --output-dir ./phase-6-fairness-mitigation-bias-correction/outputs
 
 # Step 2: Evaluate mitigation impact
-python phase-6-fairness-mitigation/evaluate_mitigation_impact.py \
-    --group-thresholds ./phase-6-fairness-mitigation/outputs/group_thresholds.json \
+python phase-6-fairness-mitigation-bias-correction/evaluate_mitigation_impact.py \
+    --group-thresholds ./phase-6-fairness-mitigation-bias-correction/outputs/group_thresholds.json \
     --phase5-summary ./phase-5-fairness-evaluation/outputs/phase5_summary_for_phase6.json \
-    --output-dir ./phase-6-fairness-mitigation/outputs
+    --output-dir ./phase-6-fairness-mitigation-bias-correction/outputs
 
 # Step 3: Generate clinical approval package
-python phase-6-fairness-mitigation/generate_approval_package.py \
-    --mitigation-impact ./phase-6-fairness-mitigation/outputs/mitigation_impact.json \
-    --output-dir ./phase-6-fairness-mitigation/outputs/clinical_approval
+python phase-6-fairness-mitigation-bias-correction/generate_approval_package.py \
+    --mitigation-impact ./phase-6-fairness-mitigation-bias-correction/outputs/mitigation_impact.json \
+    --output-dir ./phase-6-fairness-mitigation-bias-correction/outputs/clinical_approval
 ```
 
 ### Example 2: Skip Phase 6 (No Mitigation Needed)
@@ -403,28 +412,20 @@ else:
 "
 ```
 
-### Example 3: Compare Multiple Mitigation Strategies
+### Example 3: Custom Threshold Search Configuration
 
 ```bash
-# Test equalized odds
-python phase-6-fairness-mitigation/calculate_group_thresholds.py \
-    --mitigation-strategy equalized_odds \
-    --output-dir ./outputs/strategy_comparison/equalized_odds
+# Use wider search range with finer granularity
+python phase-6-fairness-mitigation-bias-correction/calculate_group_thresholds_gradient_boosting.py \
+    --threshold-min 0.05 \
+    --threshold-max 0.95 \
+    --threshold-step 0.005 \
+    --fairness-tolerance 0.03 \
+    --output-dir ./phase-6-fairness-mitigation-bias-correction/outputs
 
-# Test equal opportunity
-python phase-6-fairness-mitigation/calculate_group_thresholds.py \
-    --mitigation-strategy equal_opportunity \
-    --output-dir ./outputs/strategy_comparison/equal_opportunity
-
-# Test demographic parity
-python phase-6-fairness-mitigation/calculate_group_thresholds.py \
-    --mitigation-strategy demographic_parity \
-    --output-dir ./outputs/strategy_comparison/demographic_parity
-
-# Compare results
-python phase-6-fairness-mitigation/compare_strategies.py \
-    --strategy-dirs ./outputs/strategy_comparison/* \
-    --output-dir ./outputs/strategy_comparison/summary
+# This will search 181 thresholds per group (vs default 99)
+# Finer granularity may find better group-specific thresholds
+# Lower tolerance (3% vs 5%) aims for stricter fairness
 ```
 
 ---
@@ -433,13 +434,16 @@ python phase-6-fairness-mitigation/compare_strategies.py \
 
 ### Decision 1: Mitigation Strategy
 
-| Strategy | Pro | Con | Use When |
-|----------|-----|-----|----------|
-| **Equalized Odds** | Balances TPR and FPR fairness | May require larger adjustments | Both false negatives and false positives matter |
-| **Equal Opportunity** | Simpler, focuses on TPR only | Ignores FPR disparities | False negatives are primary concern |
-| **Demographic Parity** | Equalizes intervention rates | May sacrifice individual fairness | Resource allocation fairness critical |
+**This phase uses Equalized Odds exclusively** - the most comprehensive fairness strategy that balances both True Positive Rate (TPR) and False Positive Rate (FPR) across demographic groups.
 
-**Recommendation**: Start with **Equalized Odds** (most comprehensive)
+**Why Equalized Odds?**
+- ✅ Addresses both types of errors (false negatives and false positives)
+- ✅ Ensures fair treatment for patients who need intervention (TPR)
+- ✅ Ensures fair treatment for patients who don't need intervention (FPR)
+- ✅ Clinically appropriate for hospital readmission prediction
+- ✅ Aligns with healthcare equity standards
+
+**Alternative strategies** (equal opportunity, demographic parity) were removed to simplify the implementation and focus on the most robust fairness criterion.
 
 ### Decision 2: Acceptable Trade-offs
 
