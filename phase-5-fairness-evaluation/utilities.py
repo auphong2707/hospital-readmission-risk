@@ -1183,7 +1183,9 @@ def save_results(results: Dict, output_path: str):
     
     # Convert numpy types to native Python types
     def convert_to_serializable(obj):
-        if isinstance(obj, np.integer):
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        elif isinstance(obj, np.integer):
             return int(obj)
         elif isinstance(obj, np.floating):
             return float(obj)
