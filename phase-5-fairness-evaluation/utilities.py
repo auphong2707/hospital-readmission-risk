@@ -397,13 +397,45 @@ def generate_calibrated_predictions(
     """
     print("🔮 Generating calibrated predictions...")
     
-    # Get uncalibrated probabilities
+    # Get uncalibrated probabilities (shape: (n_samples,))
     y_pred_proba_uncalibrated = model.predict_proba(X_test)[:, 1]
-    
-    # Apply calibration
-    y_pred_proba_calibrated = calibrator.predict_proba(
-        y_pred_proba_uncalibrated.reshape(-1, 1)
-    )[:, 1]
+
+    # Apply calibration. Different calibrator implementations expect
+    # different input shapes and return different output shapes:
+    # - Our `ModelCalibrator.predict_proba` expects a 1D array and
+    #   returns a 1D array of calibrated probabilities.
+    # - sklearn-style calibrators expect a 2D array (n_samples, n_features)
+    #   and return a 2D array of shape (n_samples, 2) with class probabilities.
+    # Try common call patterns and normalize output to a 1D array.
+    try:
+        # First try passing a 2D column (sklearn compatible)
+        pred = calibrator.predict_proba(y_pred_proba_uncalibrated.reshape(-1, 1))
+    except Exception:
+        # Fallback: try passing 1D array (our ModelCalibrator)
+        pred = calibrator.predict_proba(y_pred_proba_uncalibrated)
+
+    # Normalize output to 1D calibrated probabilities
+    if isinstance(pred, np.ndarray):
+        if pred.ndim == 1:
+            y_pred_proba_calibrated = pred.ravel()
+        elif pred.ndim == 2:
+            # If returned probabilities for two classes, take probability of class 1
+            if pred.shape[1] >= 2:
+                y_pred_proba_calibrated = pred[:, 1]
+            else:
+                y_pred_proba_calibrated = pred.ravel()
+        else:
+            # Unexpected shape, attempt to flatten
+            y_pred_proba_calibrated = pred.ravel()
+    else:
+        # Non-numpy return types (e.g., list), try converting
+        pred_arr = np.asarray(pred)
+        if pred_arr.ndim == 1:
+            y_pred_proba_calibrated = pred_arr.ravel()
+        elif pred_arr.ndim == 2 and pred_arr.shape[1] >= 2:
+            y_pred_proba_calibrated = pred_arr[:, 1]
+        else:
+            y_pred_proba_calibrated = pred_arr.ravel()
     
     print(f"✅ Generated calibrated predictions")
     print(f"   Mean probability: {y_pred_proba_calibrated.mean():.3f}")
