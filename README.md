@@ -144,20 +144,16 @@ The dataset represents 10 years (1999-2008) of clinical care at 130 US hospitals
   - **Output**: Fairness assessment report for deployment decision-making
 
 #### 6. Fairness Mitigation & Bias Correction
-- 🔲 **Implement post-hoc fairness fixes:**
-  - **Group-specific thresholds**: Calculate optimal thresholds per demographic group to equalize TPR/FPR
-  - **Threshold optimization per group**: Use Phase 5 fairness metrics to determine adjustments needed
-  - **Fairness-performance trade-offs**: Analyze impact on overall performance, ROI, and intervention volume
-  - **Post-processing adjustments**: Apply threshold corrections or calibration adjustments per group
-  - **Validation**: Test group-specific thresholds on test data, verify fairness improvements
-  - **Output**: Fairness mitigation config with group-specific thresholds (`.json` file)
-- 🔲 **Clinical and ethics review:**
-  - **Fairness presentation**: Present mitigation strategies to clinical and ethics teams
-  - **Trade-off analysis**: Show performance vs fairness curves, intervention distribution changes
-  - **Approval process**: Document clinical team decision on threshold strategy (global vs group-specific)
-  - **Risk disclosure**: Identify patient groups affected by threshold changes
-  - **Mitigation documentation**: Record rationale, trade-offs, approval decisions, and audit trail
-  - **Decision rules**: Finalize and package threshold logic for deployment
+- 🔲 **Calculate group-specific thresholds:**
+  - **Input**: Phase 5 fairness violations and group metrics (`phase5_summary_for_phase6.json`)
+  - **Optimization**: Calculate optimal thresholds per demographic group to equalize TPR/FPR
+  - **Trade-off analysis**: Measure impact on overall performance, ROI, and intervention volume
+  - **Validation**: Test thresholds on test data, verify fairness improvements vs baseline
+- 🔲 **Clinical and ethics approval:**
+  - **Presentation**: Show fairness violations, proposed thresholds, performance/fairness trade-offs
+  - **Decision**: Clinical team approves threshold strategy (global vs group-specific)
+  - **Documentation**: Record approval decision, rationale, affected groups, and audit trail
+  - **Output**: Fairness mitigation config (`.json`) + clinical approval document (`.md`)
 
 #### 7. Deployment Preparation & Final Report
 - 🔲 **Aggregate results from all phases:**
