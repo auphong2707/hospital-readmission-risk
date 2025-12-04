@@ -47,6 +47,109 @@ warnings.filterwarnings('ignore')
 
 
 # ============================================================================
+# MODEL CALIBRATOR CLASS (for unpickling Phase 3 calibrator)
+# ============================================================================
+
+class ModelCalibrator:
+    """
+    Platt Scaling calibration for hospital readmission models.
+    
+    This class is required to unpickle the calibrator trained in Phase 3.
+    Uses logistic regression to transform uncalibrated probabilities.
+    """
+    
+    def __init__(self, method: str = 'platt', cv: int = 5):
+        """
+        Initialize the calibrator.
+        
+        Parameters:
+        -----------
+        method : str
+            Calibration method - only 'platt' is supported
+        cv : int
+            Number of cross-validation folds (unused, kept for compatibility)
+        """
+        if method not in ['platt', 'sigmoid']:
+            raise ValueError("method must be 'platt' or 'sigmoid'")
+        
+        self.method = 'platt'
+        self.cv = cv
+        self.calibrator = None
+        self.is_fitted = False
+        
+    def fit(self, y_true: np.ndarray, y_pred_proba: np.ndarray) -> 'ModelCalibrator':
+        """
+        Fit Platt Scaling calibration on validation data.
+        
+        Parameters:
+        -----------
+        y_true : np.ndarray
+            True binary labels
+        y_pred_proba : np.ndarray
+            Uncalibrated predicted probabilities
+            
+        Returns:
+        --------
+        self : ModelCalibrator
+            Fitted calibrator instance
+        """
+        from sklearn.linear_model import LogisticRegression
+        
+        y_true = np.array(y_true).ravel()
+        y_pred_proba = np.array(y_pred_proba).ravel()
+        
+        # Platt scaling: fit logistic regression on predicted probabilities
+        self.calibrator = LogisticRegression(penalty=None, solver='lbfgs', max_iter=1000)
+        X = y_pred_proba.reshape(-1, 1)
+        self.calibrator.fit(X, y_true)
+        
+        self.is_fitted = True
+        return self
+    
+    def predict_proba(self, y_pred_proba: np.ndarray) -> np.ndarray:
+        """
+        Apply Platt Scaling calibration to uncalibrated probabilities.
+        
+        Parameters:
+        -----------
+        y_pred_proba : np.ndarray
+            Uncalibrated predicted probabilities
+            
+        Returns:
+        --------
+        calibrated_proba : np.ndarray
+            Calibrated probabilities
+        """
+        if not self.is_fitted:
+            raise ValueError("Calibrator must be fitted before prediction")
+        
+        y_pred_proba = np.array(y_pred_proba).ravel()
+        X = y_pred_proba.reshape(-1, 1)
+        calibrated = self.calibrator.predict_proba(X)[:, 1]
+        
+        return calibrated
+    
+    def save(self, filepath: str):
+        """Save the fitted calibrator to disk."""
+        import pickle
+        
+        if not self.is_fitted:
+            raise ValueError("Cannot save unfitted calibrator")
+        
+        Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+        with open(filepath, 'wb') as f:
+            pickle.dump(self, f)
+    
+    @staticmethod
+    def load(filepath: str) -> 'ModelCalibrator':
+        """Load a fitted calibrator from disk."""
+        import pickle
+        
+        with open(filepath, 'rb') as f:
+            return pickle.load(f)
+
+
+# ============================================================================
 # DATA LOADING FUNCTIONS
 # ============================================================================
 
