@@ -122,8 +122,8 @@ def parse_arguments():
     parser.add_argument(
         '--num-thresholds',
         type=int,
-        default=10000,
-        help='Number of thresholds to test (default: 10000)'
+        default=100000,
+        help='Number of thresholds to test (default: 100000)'
     )
     
     # Constraints
