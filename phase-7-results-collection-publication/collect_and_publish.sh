@@ -159,12 +159,16 @@ download_phase2_if_missing() {
         echo "  [x] ${desc}" | tee -a "${SUMMARY_FILE}"
         ((FILE_COUNT++))
     else
-        echo "  [ ] ${desc} not found locally, downloading from HuggingFace..." | tee -a "${SUMMARY_FILE}"
-        if huggingface-cli download "${hf_repo}" "${hf_path}" --local-dir "${COLLECTION_DIR}/temp" --quiet 2>/dev/null; then
-            mkdir -p "$(dirname ${dest_path})"
-            mv "${COLLECTION_DIR}/temp/${hf_path}" "${dest_path}"
-            echo "  [x] ${desc} (downloaded from HF)" | tee -a "${SUMMARY_FILE}"
-            ((FILE_COUNT++))
+        echo "  [ ] ${desc} not found locally, trying HuggingFace..." | tee -a "${SUMMARY_FILE}"
+        mkdir -p "$(dirname ${dest_path})"
+        if huggingface-cli download "${hf_repo}" "${hf_path}" --local-dir "${COLLECTION_DIR}/temp" 2>/dev/null; then
+            if [ -f "${COLLECTION_DIR}/temp/${hf_path}" ]; then
+                mv "${COLLECTION_DIR}/temp/${hf_path}" "${dest_path}"
+                echo "  [x] ${desc} (downloaded from HF)" | tee -a "${SUMMARY_FILE}"
+                ((FILE_COUNT++))
+            else
+                echo "  [ ] ${desc} (NOT FOUND - local or HF)" | tee -a "${SUMMARY_FILE}"
+            fi
         else
             echo "  [ ] ${desc} (NOT FOUND - local or HF)" | tee -a "${SUMMARY_FILE}"
         fi
@@ -184,12 +188,16 @@ download_phase3_if_missing() {
         echo "  [x] ${desc}" | tee -a "${SUMMARY_FILE}"
         ((FILE_COUNT++))
     else
-        echo "  [ ] ${desc} not found locally, downloading from HuggingFace..." | tee -a "${SUMMARY_FILE}"
-        if huggingface-cli download "${hf_repo}" "${hf_path}" --local-dir "${COLLECTION_DIR}/temp" --quiet 2>/dev/null; then
-            mkdir -p "$(dirname ${dest_path})"
-            mv "${COLLECTION_DIR}/temp/${hf_path}" "${dest_path}"
-            echo "  [x] ${desc} (downloaded from HF)" | tee -a "${SUMMARY_FILE}"
-            ((FILE_COUNT++))
+        echo "  [ ] ${desc} not found locally, trying HuggingFace..." | tee -a "${SUMMARY_FILE}"
+        mkdir -p "$(dirname ${dest_path})"
+        if huggingface-cli download "${hf_repo}" "${hf_path}" --local-dir "${COLLECTION_DIR}/temp" 2>/dev/null; then
+            if [ -f "${COLLECTION_DIR}/temp/${hf_path}" ]; then
+                mv "${COLLECTION_DIR}/temp/${hf_path}" "${dest_path}"
+                echo "  [x] ${desc} (downloaded from HF)" | tee -a "${SUMMARY_FILE}"
+                ((FILE_COUNT++))
+            else
+                echo "  [ ] ${desc} (NOT FOUND - local or HF)" | tee -a "${SUMMARY_FILE}"
+            fi
         else
             echo "  [ ] ${desc} (NOT FOUND - local or HF)" | tee -a "${SUMMARY_FILE}"
         fi
@@ -213,12 +221,16 @@ download_if_missing() {
         echo "  [x] ${desc}" | tee -a "${SUMMARY_FILE}"
         ((FILE_COUNT++))
     else
-        echo "  [ ] ${desc} not found locally, downloading from HuggingFace..." | tee -a "${SUMMARY_FILE}"
-        if huggingface-cli download "${hf_repo}" "${hf_path}" --local-dir "${COLLECTION_DIR}/temp" --quiet 2>/dev/null; then
-            mkdir -p "$(dirname ${dest_path})"
-            mv "${COLLECTION_DIR}/temp/${hf_path}" "${dest_path}"
-            echo "  [x] ${desc} (downloaded from HF)" | tee -a "${SUMMARY_FILE}"
-            ((FILE_COUNT++))
+        echo "  [ ] ${desc} not found locally, trying HuggingFace..." | tee -a "${SUMMARY_FILE}"
+        mkdir -p "$(dirname ${dest_path})"
+        if huggingface-cli download "${hf_repo}" "${hf_path}" --local-dir "${COLLECTION_DIR}/temp" --repo-type=dataset 2>/dev/null; then
+            if [ -f "${COLLECTION_DIR}/temp/${hf_path}" ]; then
+                mv "${COLLECTION_DIR}/temp/${hf_path}" "${dest_path}"
+                echo "  [x] ${desc} (downloaded from HF)" | tee -a "${SUMMARY_FILE}"
+                ((FILE_COUNT++))
+            else
+                echo "  [ ] ${desc} (NOT FOUND - local or HF)" | tee -a "${SUMMARY_FILE}"
+            fi
         else
             echo "  [ ] ${desc} (NOT FOUND - local or HF)" | tee -a "${SUMMARY_FILE}"
         fi
@@ -305,10 +317,12 @@ for viz in "ROC_Curve" "Precision_Recall_Curve" "Confusion_Matrix" "Feature_Impo
         ((VIZ_COUNT++))
         ((FILE_COUNT++))
     else
-        if huggingface-cli download "${PHASE2_HF_REPO}" "${hf_path}" --local-dir "${COLLECTION_DIR}/temp" --quiet 2>/dev/null; then
-            mv "${COLLECTION_DIR}/temp/${hf_path}" "${dest_path}"
-            ((VIZ_COUNT++))
-            ((FILE_COUNT++))
+        if huggingface-cli download "${PHASE2_HF_REPO}" "${hf_path}" --local-dir "${COLLECTION_DIR}/temp" 2>/dev/null; then
+            if [ -f "${COLLECTION_DIR}/temp/${hf_path}" ]; then
+                mv "${COLLECTION_DIR}/temp/${hf_path}" "${dest_path}"
+                ((VIZ_COUNT++))
+                ((FILE_COUNT++))
+            fi
         fi
     fi
 done
