@@ -52,10 +52,13 @@ This script will:
 
 ### Required Parameters
 
-The script requires you to specify which method to collect and publish:
+The script requires you to specify which method to collect and publish.
+
+**IMPORTANT**: Run the script from the **project root directory**, not from inside the phase-7 folder.
 
 ```bash
-bash collect_and_publish.sh --method <method_name> --repo-id <username/repo>
+# From project root (d:\Git\hospital-readmission-risk)
+./phase-7-results-collection-publication/collect_and_publish.sh --method <method_name> --repo-id <username/repo>
 ```
 
 **Available Methods:**
@@ -67,34 +70,37 @@ bash collect_and_publish.sh --method <method_name> --repo-id <username/repo>
 
 **Gradient Boosting** (recommended - includes all phases):
 ```bash
+# From project root
 ./phase-7-results-collection-publication/collect_and_publish.sh --method gradient_boosting --repo-id auphong2707/hospital-readmission-final-gb
 ```
 
 **Random Forest**:
 ```bash
+# From project root
 ./phase-7-results-collection-publication/collect_and_publish.sh --method random_forest --repo-id auphong2707/hospital-readmission-final-rf
 ```
 
 **Logistic Regression**:
 ```bash
+# From project root
 ./phase-7-results-collection-publication/collect_and_publish.sh --method logistic_regression --repo-id auphong2707/hospital-readmission-final-lr
 ```
 
 ### Optional Flags
 
 ```bash
-# Create private repository
-bash collect_and_publish.sh --method gradient_boosting --repo-id user/repo --private
+# Create private repository (from project root)
+./phase-7-results-collection-publication/collect_and_publish.sh --method gradient_boosting --repo-id user/repo --private
 
 # Preview without uploading (recommended first run)
-bash collect_and_publish.sh --method gradient_boosting --repo-id user/repo --dry-run
+./phase-7-results-collection-publication/collect_and_publish.sh --method gradient_boosting --repo-id user/repo --dry-run
 
 # Auto-generate repo name (if --repo-id not provided)
-bash collect_and_publish.sh --method gradient_boosting
+./phase-7-results-collection-publication/collect_and_publish.sh --method gradient_boosting
 # Creates: auphong2707/hospital-readmission-risk-gradient_boosting
 
 # Show help
-bash collect_and_publish.sh --help
+./phase-7-results-collection-publication/collect_and_publish.sh --help
 ```
 
 ### What the Script Does

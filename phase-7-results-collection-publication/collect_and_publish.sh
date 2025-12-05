@@ -13,7 +13,7 @@ REPO_TYPE="model"
 PRIVATE=false
 DRY_RUN=false
 METHOD=""  # Required: gradient_boosting, random_forest, or logistic_regression
-PROJECT_ROOT=".."
+PROJECT_ROOT="."
 OUTPUT_DIR="./outputs"
 COLLECTION_DIR="${OUTPUT_DIR}/collection"
 
@@ -439,7 +439,7 @@ from datetime import datetime
 from pathlib import Path
 
 # Configuration
-project_root = ".."
+project_root = "."
 output_dir = "./outputs"
 collection_dir = f"{output_dir}/collection"
 metrics_dir = f"{collection_dir}/metrics"
