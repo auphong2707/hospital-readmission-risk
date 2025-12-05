@@ -764,28 +764,33 @@ if ! command -v huggingface-cli &> /dev/null; then
     exit 1
 fi
 
-# Check if user is logged in
-if ! huggingface-cli whoami &> /dev/null; then
-    echo -e "${RED}Error: Not logged in to HuggingFace${NC}"
-    echo "Login with: huggingface-cli login"
+# Load HF_TOKEN from .env file
+if [ -f ".env" ]; then
+    export $(grep -v '^#' .env | grep HF_TOKEN | xargs)
+fi
+
+# Check if HF_TOKEN is set
+if [ -z "${HF_TOKEN}" ]; then
+    echo -e "${RED}Error: HF_TOKEN not found${NC}"
+    echo "Please add HF_TOKEN to .env file or login with: huggingface-cli login"
     exit 1
 fi
 
 # Create repository if it doesn't exist
 echo "Creating/updating repository: ${REPO_ID}"
 if [ "$PRIVATE" = true ]; then
-    huggingface-cli repo create "${REPO_ID}" --type "${REPO_TYPE}" --private || true
+    huggingface-cli repo create "${REPO_ID}" --type "${REPO_TYPE}" --private --token="${HF_TOKEN}" || true
 else
-    huggingface-cli repo create "${REPO_ID}" --type "${REPO_TYPE}" || true
+    huggingface-cli repo create "${REPO_ID}" --type "${REPO_TYPE}" --token="${HF_TOKEN}" || true
 fi
 
 # Upload all files from collection directory
 echo "Uploading files..."
-huggingface-cli upload "${REPO_ID}" "${COLLECTION_DIR}" --repo-type="${REPO_TYPE}" --commit-message="Phase 7: Complete results collection"
+huggingface-cli upload "${REPO_ID}" "${COLLECTION_DIR}" --repo-type="${REPO_TYPE}" --token="${HF_TOKEN}" --commit-message="Phase 7: Complete results collection"
 
 # Upload aggregated results and model card
-huggingface-cli upload "${REPO_ID}" "${OUTPUT_DIR}/aggregated_results.json" aggregated_results.json --repo-type="${REPO_TYPE}"
-huggingface-cli upload "${REPO_ID}" "${OUTPUT_DIR}/model_card.md" model_card.md --repo-type="${REPO_TYPE}"
+huggingface-cli upload "${REPO_ID}" "${OUTPUT_DIR}/aggregated_results.json" aggregated_results.json --repo-type="${REPO_TYPE}" --token="${HF_TOKEN}"
+huggingface-cli upload "${REPO_ID}" "${OUTPUT_DIR}/model_card.md" model_card.md --repo-type="${REPO_TYPE}" --token="${HF_TOKEN}"
 
 # Create README for HuggingFace
 cat > "${OUTPUT_DIR}/README.md" << EOF
