@@ -234,11 +234,13 @@ download_if_missing() {
     fi
 }
 
-# Phase 1 files - Only collect metadata, skip CSV files
-copy_if_exists "${PROJECT_ROOT}/data/processed/preprocessing_metadata.txt" \
+# Phase 1 files - Download from HuggingFace if not found locally (skip CSV files)
+download_if_missing "${PROJECT_ROOT}/data/processed/preprocessing_metadata.txt" \
     "${COLLECTION_DIR}/preprocessing_metadata.txt" \
+    "preprocessing_metadata.txt" \
     "Preprocessing metadata"
 echo "  [ ] Data splits skipped (CSV files not collected)" | tee -a "${SUMMARY_FILE}"
+rm -rf "${COLLECTION_DIR}/temp" 2>/dev/null
 
 # Cleanup temp directory
 rm -rf "${COLLECTION_DIR}/temp" 2>/dev/null
@@ -272,15 +274,19 @@ case "${METHOD}" in
         ;;
 esac
 
-# Copy model and metrics (HuggingFace download disabled)
-copy_if_exists "${PROJECT_ROOT}/models/${MODEL_FILE}" \
+# Download or copy model and metrics from HuggingFace
+download_phase2_if_missing "${PROJECT_ROOT}/models/${MODEL_FILE}" \
     "${COLLECTION_DIR}/models/${MODEL_FILE}" \
-    "${DISPLAY_NAME} model"
-copy_if_exists "${PROJECT_ROOT}/phase-2-risk-modeling/${METRICS_FILE}" \
+    "${MODEL_FILE}" \
+    "${DISPLAY_NAME} model" \
+    "${PHASE2_HF_REPO}"
+download_phase2_if_missing "${PROJECT_ROOT}/phase-2-risk-modeling/${METRICS_FILE}" \
     "${COLLECTION_DIR}/metrics/${METRICS_FILE}" \
-    "${DISPLAY_NAME} metrics"
+    "${METRICS_FILE}" \
+    "${DISPLAY_NAME} metrics" \
+    "${PHASE2_HF_REPO}"
 
-# Copy visualizations (HuggingFace download disabled)
+# Download or copy visualizations from HuggingFace
 VIZ_COUNT=0
 for viz in "ROC_Curve" "Precision_Recall_Curve" "Confusion_Matrix" "Feature_Importance_Top_20" \
            "Calibration_Plot" "Prediction_Distribution" "Threshold_Metrics" \
@@ -288,14 +294,25 @@ for viz in "ROC_Curve" "Precision_Recall_Curve" "Confusion_Matrix" "Feature_Impo
     viz_file="${FILE_PREFIX}_${viz}.png"
     local_path="${PROJECT_ROOT}/phase-2-risk-modeling/${viz_file}"
     dest_path="${COLLECTION_DIR}/visualizations/phase2_modeling/${viz_file}"
+    hf_path="${viz_file}"
     
     if [ -f "${local_path}" ]; then
         cp "${local_path}" "${dest_path}"
         ((VIZ_COUNT++))
         ((FILE_COUNT++))
+    else
+        mkdir -p "$(dirname ${dest_path})"
+        if huggingface-cli download "${PHASE2_HF_REPO}" "${hf_path}" --local-dir "${COLLECTION_DIR}/temp" 2>/dev/null; then
+            if [ -f "${COLLECTION_DIR}/temp/${hf_path}" ]; then
+                mv "${COLLECTION_DIR}/temp/${hf_path}" "${dest_path}"
+                ((VIZ_COUNT++))
+                ((FILE_COUNT++))
+            fi
+        fi
     fi
 done
 echo "  [x] Phase 2 visualizations (${VIZ_COUNT} plots)" | tee -a "${SUMMARY_FILE}"
+rm -rf "${COLLECTION_DIR}/temp" 2>/dev/null
 
 # Phase 3: Model Calibration (Gradient Boosting only)
 if [ "${METHOD}" = "gradient_boosting" ]; then
