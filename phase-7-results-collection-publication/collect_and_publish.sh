@@ -5,7 +5,7 @@
 # Single script to collect all outputs from Phases 1-6 and upload to HuggingFace
 ################################################################################
 
-set -e  # Exit on error
+# Note: Removed 'set -e' to allow script to continue even if some files are missing
 
 # Default configuration
 REPO_ID=""
