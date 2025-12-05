@@ -27,17 +27,17 @@ Statistical Tests:
 
 Usage (from project root):
     # Using HuggingFace Hub (recommended)
-    python ./phase-5-fairness-evaluation-deployment-readiness/evaluate_fairness_gradient_boosting.py
+    python ./phase-5-fairness-evaluation/evaluate_fairness_gradient_boosting.py
     
     # Using local files
-    python ./phase-5-fairness-evaluation-deployment-readiness/evaluate_fairness_gradient_boosting.py \
+    python ./phase-5-fairness-evaluation/evaluate_fairness_gradient_boosting.py \
         --use-local \
         --local-test ./data/processed/splits/test.csv \
         --local-demographics ./data/processed/splits/test_demographics.csv
     
     # Custom output directory
-    python ./phase-5-fairness-evaluation-deployment-readiness/evaluate_fairness_gradient_boosting.py \
-        --output-dir ./phase-5-fairness-evaluation-deployment-readiness/outputs
+    python ./phase-5-fairness-evaluation/evaluate_fairness_gradient_boosting.py \
+        --output-dir ./phase-5-fairness-evaluation/outputs
     
     Note: Results are automatically uploaded to HuggingFace Hub
           Repository: auphong2707/hospital-readmission-gradient-boosting-fairness-results
@@ -156,7 +156,7 @@ def parse_arguments():
     parser.add_argument(
         '--output-dir',
         type=str,
-        default='./phase-5-fairness-evaluation-deployment-readiness/outputs',
+        default='./phase-5-fairness-evaluation/outputs',
         help='Output directory for results'
     )
     

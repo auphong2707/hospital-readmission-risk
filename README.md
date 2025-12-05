@@ -144,16 +144,18 @@ The dataset represents 10 years (1999-2008) of clinical care at 130 US hospitals
   - **Output**: Fairness assessment report for deployment decision-making
 
 #### 6. Fairness Mitigation & Bias Correction
-- 🔲 **Calculate group-specific thresholds:**
+- 🔲 **Calculate group-specific thresholds using equalized odds:**
   - **Input**: Phase 5 fairness violations and group metrics (`phase5_summary_for_phase6.json`)
-  - **Optimization**: Calculate optimal thresholds per demographic group to equalize TPR/FPR
+  - **Strategy**: Equalized odds (minimize both TPR and FPR gaps across demographic groups)
+  - **Threshold search**: Wide range [0.01, 0.99] with 0.01 step size (99 thresholds tested per group)
+  - **Optimization**: Find threshold per group that minimizes combined TPR+FPR gap from target
   - **Trade-off analysis**: Measure impact on overall performance, ROI, and intervention volume
   - **Validation**: Test thresholds on test data, verify fairness improvements vs baseline
 - 🔲 **Clinical and ethics approval:**
-  - **Presentation**: Show fairness violations, proposed thresholds, performance/fairness trade-offs
+  - **Presentation**: Show fairness violations, proposed group-specific thresholds, performance/fairness trade-offs
   - **Decision**: Clinical team approves threshold strategy (global vs group-specific)
   - **Documentation**: Record approval decision, rationale, affected groups, and audit trail
-  - **Output**: Fairness mitigation config (`.json`) + clinical approval document (`.md`)
+  - **Output**: Fairness mitigation config with group-specific thresholds (`.json`) + clinical approval document (`.md`)
 
 #### 7. Deployment Preparation & Final Report
 - 🔲 **Aggregate results from all phases:**
