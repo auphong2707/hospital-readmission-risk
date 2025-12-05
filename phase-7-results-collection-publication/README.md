@@ -50,26 +50,50 @@ This script will:
 
 ## Usage
 
-### Basic Usage
+### Required Parameters
+
+The script requires you to specify which method to collect and publish:
 
 ```bash
-# Default: Upload to public repository
-bash collect_and_publish.sh
+bash collect_and_publish.sh --method <method_name> --repo-id <username/repo>
 ```
 
-### Advanced Options
+**Available Methods:**
+- `gradient_boosting` - Full pipeline (Phases 1-6): model, calibration, thresholds, fairness
+- `random_forest` - Phase 2 only: model and metrics
+- `logistic_regression` - Phase 2 only: model and metrics
+
+### Examples
+
+**Gradient Boosting** (recommended - includes all phases):
+```bash
+./phase-7-results-collection-publication/collect_and_publish.sh --method gradient_boosting --repo-id auphong2707/hospital-readmission-final-gb
+```
+
+**Random Forest**:
+```bash
+./phase-7-results-collection-publication/collect_and_publish.sh --method random_forest --repo-id auphong2707/hospital-readmission-final-rf
+```
+
+**Logistic Regression**:
+```bash
+./phase-7-results-collection-publication/collect_and_publish.sh --method logistic_regression --repo-id auphong2707/hospital-readmission-final-lr
+```
+
+### Optional Flags
 
 ```bash
-# Custom repository name
-bash collect_and_publish.sh --repo-id your-username/custom-repo-name
-
 # Create private repository
-bash collect_and_publish.sh --private
+bash collect_and_publish.sh --method gradient_boosting --repo-id user/repo --private
 
 # Preview without uploading (recommended first run)
-bash collect_and_publish.sh --dry-run
+bash collect_and_publish.sh --method gradient_boosting --repo-id user/repo --dry-run
 
-# Show all options
+# Auto-generate repo name (if --repo-id not provided)
+bash collect_and_publish.sh --method gradient_boosting
+# Creates: auphong2707/hospital-readmission-risk-gradient_boosting
+
+# Show help
 bash collect_and_publish.sh --help
 ```
 
@@ -125,34 +149,68 @@ outputs/
 +-- README.md                # HuggingFace README
 ```
 
-### HuggingFace Repository
+### HuggingFace Repository Structure
+
+Each method gets its **own separate repository**:
+
+**For Gradient Boosting** (complete pipeline - Phases 1-6):
 ```
-username/hospital-readmission-risk/
-|-- README.md                              # Repository overview
-|-- model_card.md                          # Comprehensive documentation
-|-- aggregated_results.json                # All metrics combined
+auphong2707/hospital-readmission-gb/
+|-- README.md                           # Auto-generated
+|-- model_card.md                       # Comprehensive documentation
+|-- aggregated_results.json             # All metrics combined
+|-- preprocessing_metadata.txt          # Phase 1 metadata
 |-- models/
 |   |-- gradient_boosting_model_original.joblib
-|   |-- logistic_regression_model.joblib
-|   |-- random_forest_model.joblib
 |   +-- Gradient_Boosting_calibrator.pkl
 |-- thresholds/
 |   |-- optimal_thresholds.json
 |   +-- group_thresholds.json (if Phase 6 applied)
 |-- metrics/
-|   |-- phase1_preprocessing_metadata.txt
-|   |-- phase2_*_metrics.json (3 files)
+|   |-- Gradient_Boosting_metrics.json  # Phase 2
 |   |-- phase3_calibration_metrics.json
 |   |-- phase4_roi_metrics.json
 |   |-- phase5_fairness_report.json
+|   |-- phase5_group_metrics_*.csv (3 files)
 |   +-- phase6_mitigation_impact.json (if applied)
+|-- data_splits/
+|   |-- train.csv
+|   |-- validation.csv
+|   |-- test.csv
+|   +-- test_demographics.csv
 +-- visualizations/
-    |-- phase2_modeling/         (27 plots)
-    |-- phase3_calibration/      (1 plot)
+    |-- phase2_modeling/                (9 plots)
+    |-- phase3_calibration/             (1 plot)
     |-- phase4_threshold_optimization/  (8 plots)
     |-- phase5_fairness_evaluation/     (~21 plots)
     +-- phase6_fairness_mitigation/     (5 plots, if applied)
 ```
+
+**For Random Forest or Logistic Regression** (Phase 2 only):
+```
+auphong2707/hospital-readmission-rf/
+|-- README.md
+|-- model_card.md
+|-- aggregated_results.json
+|-- preprocessing_metadata.txt
+|-- models/
+|   +-- random_forest_model.joblib
+|-- metrics/
+|   +-- Random_Forest_metrics.json
+|-- data_splits/
+|   |-- train.csv
+|   |-- validation.csv
+|   |-- test.csv
+|   +-- test_demographics.csv
++-- visualizations/
+    +-- phase2_modeling/  (9 plots)
+```
+
+**Why separate repositories?**
+- Each method is independent and standalone
+- Easier to share and cite specific models
+- Cleaner structure without mixing methods
+- Only Gradient Boosting needs full pipeline (Phases 3-6)
 
 ## Usage Examples
 

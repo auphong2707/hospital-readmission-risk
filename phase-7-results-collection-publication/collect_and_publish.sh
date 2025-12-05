@@ -8,10 +8,11 @@
 set -e  # Exit on error
 
 # Default configuration
-REPO_ID="auphong2707/hospital-readmission-risk"
+REPO_ID=""
 REPO_TYPE="model"
 PRIVATE=false
 DRY_RUN=false
+METHOD=""  # Required: gradient_boosting, random_forest, or logistic_regression
 PROJECT_ROOT=".."
 OUTPUT_DIR="./outputs"
 COLLECTION_DIR="${OUTPUT_DIR}/collection"
@@ -37,14 +38,25 @@ while [[ $# -gt 0 ]]; do
             DRY_RUN=true
             shift
             ;;
+        --method)
+            METHOD="$2"
+            shift 2
+            ;;
         --help)
-            echo "Usage: bash collect_and_publish.sh [OPTIONS]"
+            echo "Usage: bash collect_and_publish.sh --method <name> --repo-id <username/repo> [OPTIONS]"
             echo ""
-            echo "Options:"
-            echo "  --repo-id <username/repo>   HuggingFace repository ID (default: auphong2707/hospital-readmission-risk)"
+            echo "Required:"
+            echo "  --method <name>             Method name: gradient_boosting, random_forest, or logistic_regression"
+            echo "  --repo-id <username/repo>   HuggingFace repository ID"
+            echo ""
+            echo "Optional:"
             echo "  --private                   Create private repository"
             echo "  --dry-run                   Collect files but don't upload"
             echo "  --help                      Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  bash collect_and_publish.sh --method gradient_boosting --repo-id user/hospital-readmission-gb"
+            echo "  bash collect_and_publish.sh --method random_forest --repo-id user/hospital-readmission-rf --private"
             exit 0
             ;;
         *)
@@ -59,7 +71,28 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Phase 7: Results Collection & Publication${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
+# Validate required parameters
+if [ -z "${METHOD}" ]; then
+    echo -e "${RED}Error: --method is required${NC}"
+    echo "Valid options: gradient_boosting, random_forest, logistic_regression"
+    echo "Run with --help for usage information"
+    exit 1
+fi
+
+if [[ ! "${METHOD}" =~ ^(gradient_boosting|random_forest|logistic_regression)$ ]]; then
+    echo -e "${RED}Error: Invalid method '${METHOD}'${NC}"
+    echo "Valid options: gradient_boosting, random_forest, logistic_regression"
+    exit 1
+fi
+
+# Auto-set repo-id if not provided
+if [ -z "${REPO_ID}" ]; then
+    REPO_ID="auphong2707/hospital-readmission-risk-${METHOD}"
+    echo -e "${YELLOW}Note: Using default repo-id: ${REPO_ID}${NC}"
+fi
+
 echo "Configuration:"
+echo "  Method: ${METHOD}"
 echo "  Repository: ${REPO_ID}"
 echo "  Private: ${PRIVATE}"
 echo "  Dry Run: ${DRY_RUN}"
@@ -75,13 +108,18 @@ echo -e "${YELLOW}[Step 1/3] Collecting results from all phases...${NC}"
 mkdir -p "${OUTPUT_DIR}"
 mkdir -p "${COLLECTION_DIR}"
 mkdir -p "${COLLECTION_DIR}/models"
-mkdir -p "${COLLECTION_DIR}/thresholds"
 mkdir -p "${COLLECTION_DIR}/metrics"
+mkdir -p "${COLLECTION_DIR}/data_splits"
 mkdir -p "${COLLECTION_DIR}/visualizations/phase2_modeling"
-mkdir -p "${COLLECTION_DIR}/visualizations/phase3_calibration"
-mkdir -p "${COLLECTION_DIR}/visualizations/phase4_threshold_optimization"
-mkdir -p "${COLLECTION_DIR}/visualizations/phase5_fairness_evaluation"
-mkdir -p "${COLLECTION_DIR}/visualizations/phase6_fairness_mitigation"
+
+# Gradient Boosting has additional phases
+if [ "${METHOD}" = "gradient_boosting" ]; then
+    mkdir -p "${COLLECTION_DIR}/thresholds"
+    mkdir -p "${COLLECTION_DIR}/visualizations/phase3_calibration"
+    mkdir -p "${COLLECTION_DIR}/visualizations/phase4_threshold_optimization"
+    mkdir -p "${COLLECTION_DIR}/visualizations/phase5_fairness_evaluation"
+    mkdir -p "${COLLECTION_DIR}/visualizations/phase6_fairness_mitigation"
+fi
 
 # Initialize collection summary
 SUMMARY_FILE="${OUTPUT_DIR}/collection_summary.txt"
@@ -108,15 +146,15 @@ copy_if_exists() {
     fi
 }
 
-# Phase 1: Data Preprocessing
+# Phase 1: Data Preprocessing (shared across all methods)
 echo "" | tee -a "${SUMMARY_FILE}"
 echo "Phase 1 - Data Preprocessing:" | tee -a "${SUMMARY_FILE}"
 copy_if_exists "${PROJECT_ROOT}/data/processed/preprocessing_metadata.txt" \
-    "${COLLECTION_DIR}/metrics/phase1_preprocessing_metadata.txt" \
+    "${COLLECTION_DIR}/preprocessing_metadata.txt" \
     "Preprocessing metadata"
 copy_if_exists "${PROJECT_ROOT}/data/processed/splits/train.csv" \
     "${COLLECTION_DIR}/data_splits/train.csv" \
-    "Training split" && mkdir -p "${COLLECTION_DIR}/data_splits"
+    "Training split"
 copy_if_exists "${PROJECT_ROOT}/data/processed/splits/validation.csv" \
     "${COLLECTION_DIR}/data_splits/validation.csv" \
     "Validation split"
@@ -129,127 +167,149 @@ copy_if_exists "${PROJECT_ROOT}/data/processed/splits/test_demographics.csv" \
 
 # Phase 2: Risk Modeling
 echo "" | tee -a "${SUMMARY_FILE}"
-echo "Phase 2 - Risk Modeling:" | tee -a "${SUMMARY_FILE}"
-copy_if_exists "${PROJECT_ROOT}/models/gradient_boosting_model_original.joblib" \
-    "${COLLECTION_DIR}/models/gradient_boosting_model_original.joblib" \
-    "Gradient Boosting model"
-copy_if_exists "${PROJECT_ROOT}/models/logistic_regression_model.joblib" \
-    "${COLLECTION_DIR}/models/logistic_regression_model.joblib" \
-    "Logistic Regression model"
-copy_if_exists "${PROJECT_ROOT}/models/random_forest_model.joblib" \
-    "${COLLECTION_DIR}/models/random_forest_model.joblib" \
-    "Random Forest model"
-copy_if_exists "${PROJECT_ROOT}/phase-2-risk-modeling/Gradient_Boosting_metrics.json" \
-    "${COLLECTION_DIR}/metrics/phase2_gradient_boosting_metrics.json" \
-    "Gradient Boosting metrics"
-copy_if_exists "${PROJECT_ROOT}/phase-2-risk-modeling/Logistic_Regression_metrics.json" \
-    "${COLLECTION_DIR}/metrics/phase2_logistic_regression_metrics.json" \
-    "Logistic Regression metrics"
-copy_if_exists "${PROJECT_ROOT}/phase-2-risk-modeling/Random_Forest_metrics.json" \
-    "${COLLECTION_DIR}/metrics/phase2_random_forest_metrics.json" \
-    "Random Forest metrics"
+echo "Phase 2 - Risk Modeling (${METHOD}):" | tee -a "${SUMMARY_FILE}"
 
-# Copy Phase 2 visualizations
-for model in "Gradient_Boosting" "Logistic_Regression" "Random_Forest"; do
-    for viz in "ROC_Curve" "Precision_Recall_Curve" "Confusion_Matrix" "Feature_Importance_Top_20" \
-               "Calibration_Plot" "Prediction_Distribution" "Threshold_Metrics" \
-               "Classification_Report" "Learning_Curves"; do
-        src="${PROJECT_ROOT}/phase-2-risk-modeling/${model}_${viz}.png"
-        if [ -f "${src}" ]; then
-            cp "${src}" "${COLLECTION_DIR}/visualizations/phase2_modeling/"
-            ((FILE_COUNT++))
-        fi
-    done
-done
-echo "  [x] Phase 2 visualizations (27 plots)" | tee -a "${SUMMARY_FILE}"
+# Map method to file names
+case "${METHOD}" in
+    gradient_boosting)
+        MODEL_FILE="gradient_boosting_model_original.joblib"
+        METRICS_FILE="Gradient_Boosting_metrics.json"
+        FILE_PREFIX="Gradient_Boosting"
+        DISPLAY_NAME="Gradient Boosting"
+        ;;
+    random_forest)
+        MODEL_FILE="random_forest_model.joblib"
+        METRICS_FILE="Random_Forest_metrics.json"
+        FILE_PREFIX="Random_Forest"
+        DISPLAY_NAME="Random Forest"
+        ;;
+    logistic_regression)
+        MODEL_FILE="logistic_regression_model.joblib"
+        METRICS_FILE="Logistic_Regression_metrics.json"
+        FILE_PREFIX="Logistic_Regression"
+        DISPLAY_NAME="Logistic Regression"
+        ;;
+esac
 
-# Phase 3: Model Calibration
-echo "" | tee -a "${SUMMARY_FILE}"
-echo "Phase 3 - Model Calibration:" | tee -a "${SUMMARY_FILE}"
-copy_if_exists "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/Gradient_Boosting_(LightGBM)_calibrator.pkl" \
-    "${COLLECTION_DIR}/models/Gradient_Boosting_calibrator.pkl" \
-    "Platt calibrator"
-copy_if_exists "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/calibration_comparison_metrics.json" \
-    "${COLLECTION_DIR}/metrics/phase3_calibration_metrics.json" \
-    "Calibration metrics"
-copy_if_exists "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/reliability_diagram_comparison.png" \
-    "${COLLECTION_DIR}/visualizations/phase3_calibration/reliability_diagram_comparison.png" \
-    "Reliability diagram"
+# Copy model and metrics
+copy_if_exists "${PROJECT_ROOT}/models/${MODEL_FILE}" \
+    "${COLLECTION_DIR}/models/${MODEL_FILE}" \
+    "${DISPLAY_NAME} model"
+copy_if_exists "${PROJECT_ROOT}/phase-2-risk-modeling/${METRICS_FILE}" \
+    "${COLLECTION_DIR}/metrics/${METRICS_FILE}" \
+    "${DISPLAY_NAME} metrics"
 
-# Phase 4: Threshold Optimization
-echo "" | tee -a "${SUMMARY_FILE}"
-echo "Phase 4 - Threshold Optimization:" | tee -a "${SUMMARY_FILE}"
-copy_if_exists "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/outputs/optimal_thresholds.json" \
-    "${COLLECTION_DIR}/thresholds/optimal_thresholds.json" \
-    "Optimal thresholds"
-copy_if_exists "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/outputs/roi_metrics.json" \
-    "${COLLECTION_DIR}/metrics/phase4_roi_metrics.json" \
-    "ROI metrics"
-copy_if_exists "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/outputs/phase4_summary_for_phase5.json" \
-    "${COLLECTION_DIR}/metrics/phase4_summary.json" \
-    "Phase 4 summary"
-
-# Copy Phase 4 visualizations
-for viz in "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/visualizations"/*.png; do
-    if [ -f "${viz}" ]; then
-        cp "${viz}" "${COLLECTION_DIR}/visualizations/phase4_threshold_optimization/"
+# Copy visualizations
+for viz in "ROC_Curve" "Precision_Recall_Curve" "Confusion_Matrix" "Feature_Importance_Top_20" \
+           "Calibration_Plot" "Prediction_Distribution" "Threshold_Metrics" \
+           "Classification_Report" "Learning_Curves"; do
+    src="${PROJECT_ROOT}/phase-2-risk-modeling/${FILE_PREFIX}_${viz}.png"
+    if [ -f "${src}" ]; then
+        cp "${src}" "${COLLECTION_DIR}/visualizations/phase2_modeling/"
         ((FILE_COUNT++))
     fi
 done
-echo "  [x] Phase 4 visualizations (8 plots)" | tee -a "${SUMMARY_FILE}"
+echo "  [x] Phase 2 visualizations (9 plots)" | tee -a "${SUMMARY_FILE}"
 
-# Phase 5: Fairness Evaluation
-echo "" | tee -a "${SUMMARY_FILE}"
-echo "Phase 5 - Fairness Evaluation:" | tee -a "${SUMMARY_FILE}"
-copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/fairness_report.json" \
-    "${COLLECTION_DIR}/metrics/phase5_fairness_report.json" \
-    "Fairness report"
-copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/phase5_summary_for_phase6.json" \
-    "${COLLECTION_DIR}/metrics/phase5_summary.json" \
-    "Phase 5 summary"
-copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/statistical_tests.json" \
-    "${COLLECTION_DIR}/metrics/phase5_statistical_tests.json" \
-    "Statistical tests"
-copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/group_metrics_race.csv" \
-    "${COLLECTION_DIR}/metrics/phase5_group_metrics_race.csv" \
-    "Group metrics (race)"
-copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/group_metrics_gender.csv" \
-    "${COLLECTION_DIR}/metrics/phase5_group_metrics_gender.csv" \
-    "Group metrics (gender)"
-copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/group_metrics_age.csv" \
-    "${COLLECTION_DIR}/metrics/phase5_group_metrics_age.csv" \
-    "Group metrics (age)"
-
-# Copy Phase 5 visualizations
-for viz in "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/visualizations"/*.png; do
-    if [ -f "${viz}" ]; then
-        cp "${viz}" "${COLLECTION_DIR}/visualizations/phase5_fairness_evaluation/"
-        ((FILE_COUNT++))
-    fi
-done
-echo "  [x] Phase 5 visualizations (~21 plots)" | tee -a "${SUMMARY_FILE}"
-
-# Phase 6: Fairness Mitigation (optional)
-echo "" | tee -a "${SUMMARY_FILE}"
-echo "Phase 6 - Fairness Mitigation:" | tee -a "${SUMMARY_FILE}"
-if [ -f "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs/group_thresholds.json" ]; then
-    copy_if_exists "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs/group_thresholds.json" \
-        "${COLLECTION_DIR}/thresholds/group_thresholds.json" \
-        "Group-specific thresholds"
-    copy_if_exists "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs/mitigation_impact.json" \
-        "${COLLECTION_DIR}/metrics/phase6_mitigation_impact.json" \
-        "Mitigation impact"
+# Phase 3: Model Calibration (Gradient Boosting only)
+if [ "${METHOD}" = "gradient_boosting" ]; then
+    echo "" | tee -a "${SUMMARY_FILE}"
+    echo "Phase 3 - Model Calibration:" | tee -a "${SUMMARY_FILE}"
     
-    # Copy Phase 6 visualizations
-    for viz in "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs/visualizations"/*.png; do
+    copy_if_exists "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/Gradient_Boosting_(LightGBM)_calibrator.pkl" \
+        "${COLLECTION_DIR}/models/Gradient_Boosting_calibrator.pkl" \
+        "Platt calibrator"
+    copy_if_exists "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/calibration_comparison_metrics.json" \
+        "${COLLECTION_DIR}/metrics/phase3_calibration_metrics.json" \
+        "Calibration metrics"
+    copy_if_exists "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/reliability_diagram_comparison.png" \
+        "${COLLECTION_DIR}/visualizations/phase3_calibration/reliability_diagram_comparison.png" \
+        "Reliability diagram"
+fi
+
+# Phase 4: Threshold Optimization (Gradient Boosting only)
+if [ "${METHOD}" = "gradient_boosting" ]; then
+    echo "" | tee -a "${SUMMARY_FILE}"
+    echo "Phase 4 - Threshold Optimization:" | tee -a "${SUMMARY_FILE}"
+    
+    copy_if_exists "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/outputs/optimal_thresholds.json" \
+        "${COLLECTION_DIR}/thresholds/optimal_thresholds.json" \
+        "Optimal thresholds"
+    copy_if_exists "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/outputs/roi_metrics.json" \
+        "${COLLECTION_DIR}/metrics/phase4_roi_metrics.json" \
+        "ROI metrics"
+    copy_if_exists "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/outputs/phase4_summary_for_phase5.json" \
+        "${COLLECTION_DIR}/metrics/phase4_summary.json" \
+        "Phase 4 summary"
+    
+    # Copy Phase 4 visualizations
+    for viz in "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/visualizations"/*.png; do
         if [ -f "${viz}" ]; then
-            cp "${viz}" "${COLLECTION_DIR}/visualizations/phase6_fairness_mitigation/"
+            cp "${viz}" "${COLLECTION_DIR}/visualizations/phase4_threshold_optimization/"
             ((FILE_COUNT++))
         fi
     done
-    echo "  [x] Phase 6 visualizations (5 plots)" | tee -a "${SUMMARY_FILE}"
-else
-    echo "  [ ] Phase 6 not applied (mitigation optional)" | tee -a "${SUMMARY_FILE}"
+    echo "  [x] Phase 4 visualizations (8 plots)" | tee -a "${SUMMARY_FILE}"
+fi
+
+# Phase 5: Fairness Evaluation (Gradient Boosting only)
+if [ "${METHOD}" = "gradient_boosting" ]; then
+    echo "" | tee -a "${SUMMARY_FILE}"
+    echo "Phase 5 - Fairness Evaluation:" | tee -a "${SUMMARY_FILE}"
+    
+    copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/fairness_report.json" \
+        "${COLLECTION_DIR}/metrics/phase5_fairness_report.json" \
+        "Fairness report"
+    copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/phase5_summary_for_phase6.json" \
+        "${COLLECTION_DIR}/metrics/phase5_summary.json" \
+        "Phase 5 summary"
+    copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/statistical_tests.json" \
+        "${COLLECTION_DIR}/metrics/phase5_statistical_tests.json" \
+        "Statistical tests"
+    copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/group_metrics_race.csv" \
+        "${COLLECTION_DIR}/metrics/phase5_group_metrics_race.csv" \
+        "Group metrics (race)"
+    copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/group_metrics_gender.csv" \
+        "${COLLECTION_DIR}/metrics/phase5_group_metrics_gender.csv" \
+        "Group metrics (gender)"
+    copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/group_metrics_age.csv" \
+        "${COLLECTION_DIR}/metrics/phase5_group_metrics_age.csv" \
+        "Group metrics (age)"
+    
+    # Copy Phase 5 visualizations
+    for viz in "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/visualizations"/*.png; do
+        if [ -f "${viz}" ]; then
+            cp "${viz}" "${COLLECTION_DIR}/visualizations/phase5_fairness_evaluation/"
+            ((FILE_COUNT++))
+        fi
+    done
+    echo "  [x] Phase 5 visualizations (~21 plots)" | tee -a "${SUMMARY_FILE}"
+fi
+
+# Phase 6: Fairness Mitigation (Gradient Boosting only, optional)
+if [ "${METHOD}" = "gradient_boosting" ]; then
+    echo "" | tee -a "${SUMMARY_FILE}"
+    echo "Phase 6 - Fairness Mitigation:" | tee -a "${SUMMARY_FILE}"
+    
+    if [ -f "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs/group_thresholds.json" ]; then
+        copy_if_exists "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs/group_thresholds.json" \
+            "${COLLECTION_DIR}/thresholds/group_thresholds.json" \
+            "Group-specific thresholds"
+        copy_if_exists "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs/mitigation_impact.json" \
+            "${COLLECTION_DIR}/metrics/phase6_mitigation_impact.json" \
+            "Mitigation impact"
+        
+        # Copy Phase 6 visualizations
+        for viz in "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs/visualizations"/*.png; do
+            if [ -f "${viz}" ]; then
+                cp "${viz}" "${COLLECTION_DIR}/visualizations/phase6_fairness_mitigation/"
+                ((FILE_COUNT++))
+            fi
+        done
+        echo "  [x] Phase 6 visualizations (5 plots)" | tee -a "${SUMMARY_FILE}"
+    else
+        echo "  [ ] Phase 6 not applied (mitigation optional)" | tee -a "${SUMMARY_FILE}"
+    fi
 fi
 
 echo "" | tee -a "${SUMMARY_FILE}"
