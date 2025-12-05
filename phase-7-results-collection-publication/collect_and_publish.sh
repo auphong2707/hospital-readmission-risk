@@ -146,85 +146,193 @@ copy_if_exists() {
     fi
 }
 
+# Function to download Phase 2 artifacts if not found locally
+download_phase2_if_missing() {
+    local local_path=$1
+    local dest_path=$2
+    local hf_path=$3
+    local desc=$4
+    local hf_repo=$5
+    
+    if [ -f "${local_path}" ]; then
+        cp "${local_path}" "${dest_path}"
+        echo "  [x] ${desc}" | tee -a "${SUMMARY_FILE}"
+        ((FILE_COUNT++))
+    else
+        echo "  [ ] ${desc} not found locally, downloading from HuggingFace..." | tee -a "${SUMMARY_FILE}"
+        if huggingface-cli download "${hf_repo}" "${hf_path}" --local-dir "${COLLECTION_DIR}/temp" --quiet 2>/dev/null; then
+            mkdir -p "$(dirname ${dest_path})"
+            mv "${COLLECTION_DIR}/temp/${hf_path}" "${dest_path}"
+            echo "  [x] ${desc} (downloaded from HF)" | tee -a "${SUMMARY_FILE}"
+            ((FILE_COUNT++))
+        else
+            echo "  [ ] ${desc} (NOT FOUND - local or HF)" | tee -a "${SUMMARY_FILE}"
+        fi
+    fi
+}
+
+# Function to download Phase 3 artifacts if not found locally
+download_phase3_if_missing() {
+    local local_path=$1
+    local dest_path=$2
+    local hf_path=$3
+    local desc=$4
+    local hf_repo="auphong2707/hospital-readmission-lgbm-calibrated"
+    
+    if [ -f "${local_path}" ]; then
+        cp "${local_path}" "${dest_path}"
+        echo "  [x] ${desc}" | tee -a "${SUMMARY_FILE}"
+        ((FILE_COUNT++))
+    else
+        echo "  [ ] ${desc} not found locally, downloading from HuggingFace..." | tee -a "${SUMMARY_FILE}"
+        if huggingface-cli download "${hf_repo}" "${hf_path}" --local-dir "${COLLECTION_DIR}/temp" --quiet 2>/dev/null; then
+            mkdir -p "$(dirname ${dest_path})"
+            mv "${COLLECTION_DIR}/temp/${hf_path}" "${dest_path}"
+            echo "  [x] ${desc} (downloaded from HF)" | tee -a "${SUMMARY_FILE}"
+            ((FILE_COUNT++))
+        else
+            echo "  [ ] ${desc} (NOT FOUND - local or HF)" | tee -a "${SUMMARY_FILE}"
+        fi
+    fi
+}
+
 # Phase 1: Data Preprocessing (shared across all methods)
 echo "" | tee -a "${SUMMARY_FILE}"
 echo "Phase 1 - Data Preprocessing:" | tee -a "${SUMMARY_FILE}"
-copy_if_exists "${PROJECT_ROOT}/data/processed/preprocessing_metadata.txt" \
+
+# Try local files first, fallback to HuggingFace download
+download_if_missing() {
+    local local_path=$1
+    local dest_path=$2
+    local hf_path=$3
+    local desc=$4
+    local hf_repo="auphong2707/hospital-readmission-risk-data"
+    
+    if [ -f "${local_path}" ]; then
+        cp "${local_path}" "${dest_path}"
+        echo "  [x] ${desc}" | tee -a "${SUMMARY_FILE}"
+        ((FILE_COUNT++))
+    else
+        echo "  [ ] ${desc} not found locally, downloading from HuggingFace..." | tee -a "${SUMMARY_FILE}"
+        if huggingface-cli download "${hf_repo}" "${hf_path}" --local-dir "${COLLECTION_DIR}/temp" --quiet 2>/dev/null; then
+            mkdir -p "$(dirname ${dest_path})"
+            mv "${COLLECTION_DIR}/temp/${hf_path}" "${dest_path}"
+            echo "  [x] ${desc} (downloaded from HF)" | tee -a "${SUMMARY_FILE}"
+            ((FILE_COUNT++))
+        else
+            echo "  [ ] ${desc} (NOT FOUND - local or HF)" | tee -a "${SUMMARY_FILE}"
+        fi
+    fi
+}
+
+download_if_missing "${PROJECT_ROOT}/data/processed/preprocessing_metadata.txt" \
     "${COLLECTION_DIR}/preprocessing_metadata.txt" \
+    "preprocessing_metadata.txt" \
     "Preprocessing metadata"
-copy_if_exists "${PROJECT_ROOT}/data/processed/splits/train.csv" \
+download_if_missing "${PROJECT_ROOT}/data/processed/splits/train.csv" \
     "${COLLECTION_DIR}/data_splits/train.csv" \
+    "train.csv" \
     "Training split"
-copy_if_exists "${PROJECT_ROOT}/data/processed/splits/validation.csv" \
+download_if_missing "${PROJECT_ROOT}/data/processed/splits/validation.csv" \
     "${COLLECTION_DIR}/data_splits/validation.csv" \
+    "validation.csv" \
     "Validation split"
-copy_if_exists "${PROJECT_ROOT}/data/processed/splits/test.csv" \
+download_if_missing "${PROJECT_ROOT}/data/processed/splits/test.csv" \
     "${COLLECTION_DIR}/data_splits/test.csv" \
+    "test.csv" \
     "Test split"
-copy_if_exists "${PROJECT_ROOT}/data/processed/splits/test_demographics.csv" \
+download_if_missing "${PROJECT_ROOT}/data/processed/splits/test_demographics.csv" \
     "${COLLECTION_DIR}/data_splits/test_demographics.csv" \
+    "test_demographics.csv" \
     "Test demographics"
+
+# Cleanup temp directory
+rm -rf "${COLLECTION_DIR}/temp" 2>/dev/null
 
 # Phase 2: Risk Modeling
 echo "" | tee -a "${SUMMARY_FILE}"
 echo "Phase 2 - Risk Modeling (${METHOD}):" | tee -a "${SUMMARY_FILE}"
 
-# Map method to file names
+# Map method to file names and HuggingFace repos
 case "${METHOD}" in
     gradient_boosting)
         MODEL_FILE="gradient_boosting_model_original.joblib"
         METRICS_FILE="Gradient_Boosting_metrics.json"
         FILE_PREFIX="Gradient_Boosting"
         DISPLAY_NAME="Gradient Boosting"
+        PHASE2_HF_REPO="auphong2707/hospital-readmission-lgbm"
         ;;
     random_forest)
         MODEL_FILE="random_forest_model.joblib"
         METRICS_FILE="Random_Forest_metrics.json"
         FILE_PREFIX="Random_Forest"
         DISPLAY_NAME="Random Forest"
+        PHASE2_HF_REPO="auphong2707/hospital-readmission-rf"
         ;;
     logistic_regression)
         MODEL_FILE="logistic_regression_model.joblib"
         METRICS_FILE="Logistic_Regression_metrics.json"
         FILE_PREFIX="Logistic_Regression"
         DISPLAY_NAME="Logistic Regression"
+        PHASE2_HF_REPO="auphong2707/hospital-readmission-lr"
         ;;
 esac
 
-# Copy model and metrics
-copy_if_exists "${PROJECT_ROOT}/models/${MODEL_FILE}" \
+# Download or copy model and metrics
+download_phase2_if_missing "${PROJECT_ROOT}/models/${MODEL_FILE}" \
     "${COLLECTION_DIR}/models/${MODEL_FILE}" \
-    "${DISPLAY_NAME} model"
-copy_if_exists "${PROJECT_ROOT}/phase-2-risk-modeling/${METRICS_FILE}" \
+    "models/${MODEL_FILE}" \
+    "${DISPLAY_NAME} model" \
+    "${PHASE2_HF_REPO}"
+download_phase2_if_missing "${PROJECT_ROOT}/phase-2-risk-modeling/${METRICS_FILE}" \
     "${COLLECTION_DIR}/metrics/${METRICS_FILE}" \
-    "${DISPLAY_NAME} metrics"
+    "metrics/${METRICS_FILE}" \
+    "${DISPLAY_NAME} metrics" \
+    "${PHASE2_HF_REPO}"
 
-# Copy visualizations
+# Download or copy visualizations
+VIZ_COUNT=0
 for viz in "ROC_Curve" "Precision_Recall_Curve" "Confusion_Matrix" "Feature_Importance_Top_20" \
            "Calibration_Plot" "Prediction_Distribution" "Threshold_Metrics" \
            "Classification_Report" "Learning_Curves"; do
-    src="${PROJECT_ROOT}/phase-2-risk-modeling/${FILE_PREFIX}_${viz}.png"
-    if [ -f "${src}" ]; then
-        cp "${src}" "${COLLECTION_DIR}/visualizations/phase2_modeling/"
+    viz_file="${FILE_PREFIX}_${viz}.png"
+    local_path="${PROJECT_ROOT}/phase-2-risk-modeling/${viz_file}"
+    dest_path="${COLLECTION_DIR}/visualizations/phase2_modeling/${viz_file}"
+    hf_path="visualizations/${viz_file}"
+    
+    if [ -f "${local_path}" ]; then
+        cp "${local_path}" "${dest_path}"
+        ((VIZ_COUNT++))
         ((FILE_COUNT++))
+    else
+        if huggingface-cli download "${PHASE2_HF_REPO}" "${hf_path}" --local-dir "${COLLECTION_DIR}/temp" --quiet 2>/dev/null; then
+            mv "${COLLECTION_DIR}/temp/${hf_path}" "${dest_path}"
+            ((VIZ_COUNT++))
+            ((FILE_COUNT++))
+        fi
     fi
 done
-echo "  [x] Phase 2 visualizations (9 plots)" | tee -a "${SUMMARY_FILE}"
+echo "  [x] Phase 2 visualizations (${VIZ_COUNT} plots)" | tee -a "${SUMMARY_FILE}"
+rm -rf "${COLLECTION_DIR}/temp" 2>/dev/null
 
 # Phase 3: Model Calibration (Gradient Boosting only)
 if [ "${METHOD}" = "gradient_boosting" ]; then
     echo "" | tee -a "${SUMMARY_FILE}"
     echo "Phase 3 - Model Calibration:" | tee -a "${SUMMARY_FILE}"
     
-    copy_if_exists "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/Gradient_Boosting_(LightGBM)_calibrator.pkl" \
+    download_phase3_if_missing "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/Gradient_Boosting_(LightGBM)_calibrator.pkl" \
         "${COLLECTION_DIR}/models/Gradient_Boosting_calibrator.pkl" \
+        "calibration_outputs/Gradient_Boosting_(LightGBM)_calibrator.pkl" \
         "Platt calibrator"
-    copy_if_exists "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/calibration_comparison_metrics.json" \
+    download_phase3_if_missing "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/calibration_comparison_metrics.json" \
         "${COLLECTION_DIR}/metrics/phase3_calibration_metrics.json" \
+        "calibration_outputs/calibration_comparison_metrics.json" \
         "Calibration metrics"
-    copy_if_exists "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/reliability_diagram_comparison.png" \
+    download_phase3_if_missing "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/reliability_diagram_comparison.png" \
         "${COLLECTION_DIR}/visualizations/phase3_calibration/reliability_diagram_comparison.png" \
+        "calibration_outputs/reliability_diagram_comparison.png" \
         "Reliability diagram"
+    rm -rf "${COLLECTION_DIR}/temp" 2>/dev/null
 fi
 
 # Phase 4: Threshold Optimization (Gradient Boosting only)
