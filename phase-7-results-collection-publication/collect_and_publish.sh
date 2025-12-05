@@ -234,22 +234,11 @@ download_if_missing() {
     fi
 }
 
-# Phase 1 files - Skip if not available locally (HuggingFace download disabled to avoid warnings)
+# Phase 1 files - Only collect metadata, skip CSV files
 copy_if_exists "${PROJECT_ROOT}/data/processed/preprocessing_metadata.txt" \
     "${COLLECTION_DIR}/preprocessing_metadata.txt" \
     "Preprocessing metadata"
-copy_if_exists "${PROJECT_ROOT}/data/processed/splits/train.csv" \
-    "${COLLECTION_DIR}/data_splits/train.csv" \
-    "Training split"
-copy_if_exists "${PROJECT_ROOT}/data/processed/splits/validation.csv" \
-    "${COLLECTION_DIR}/data_splits/validation.csv" \
-    "Validation split"
-copy_if_exists "${PROJECT_ROOT}/data/processed/splits/test.csv" \
-    "${COLLECTION_DIR}/data_splits/test.csv" \
-    "Test split"
-copy_if_exists "${PROJECT_ROOT}/data/processed/splits/test_demographics.csv" \
-    "${COLLECTION_DIR}/data_splits/test_demographics.csv" \
-    "Test demographics"
+echo "  [ ] Data splits skipped (CSV files not collected)" | tee -a "${SUMMARY_FILE}"
 
 # Cleanup temp directory
 rm -rf "${COLLECTION_DIR}/temp" 2>/dev/null
@@ -313,15 +302,19 @@ if [ "${METHOD}" = "gradient_boosting" ]; then
     echo "" | tee -a "${SUMMARY_FILE}"
     echo "Phase 3 - Model Calibration:" | tee -a "${SUMMARY_FILE}"
     
-    copy_if_exists "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/Gradient_Boosting_(LightGBM)_calibrator.pkl" \
+    download_phase3_if_missing "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/Gradient_Boosting_(LightGBM)_calibrator.pkl" \
         "${COLLECTION_DIR}/models/Gradient_Boosting_calibrator.pkl" \
+        "Gradient_Boosting_(LightGBM)_calibrator.pkl" \
         "Platt calibrator"
-    copy_if_exists "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/calibration_comparison_metrics.json" \
+    download_phase3_if_missing "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/calibration_comparison_metrics.json" \
         "${COLLECTION_DIR}/metrics/phase3_calibration_metrics.json" \
+        "calibration_comparison_metrics.json" \
         "Calibration metrics"
-    copy_if_exists "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/reliability_diagram_comparison.png" \
+    download_phase3_if_missing "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/reliability_diagram_comparison.png" \
         "${COLLECTION_DIR}/visualizations/phase3_calibration/reliability_diagram_comparison.png" \
+        "reliability_diagram_comparison.png" \
         "Reliability diagram"
+    rm -rf "${COLLECTION_DIR}/temp" 2>/dev/null
 fi
 
 # Phase 4: Threshold Optimization (Gradient Boosting only)
@@ -445,7 +438,7 @@ aggregated_results = {
 
 # Load Phase 2 metrics (Gradient Boosting primary model)
 try:
-    with open(f"{metrics_dir}/phase2_gradient_boosting_metrics.json") as f:
+    with open(f"{metrics_dir}/Gradient_Boosting_metrics.json") as f:
         gb_metrics = json.load(f)
     aggregated_results["phase_2_modeling"] = {
         "models_trained": 3,
@@ -461,6 +454,11 @@ try:
     }
 except Exception as e:
     print(f"Warning: Could not load Phase 2 metrics: {e}")
+    aggregated_results["phase_2_modeling"] = {
+        "models_trained": 3,
+        "primary_model": "Gradient Boosting (LightGBM)",
+        "note": "Metrics not available"
+    }
 
 # Load Phase 3 calibration metrics
 try:
@@ -475,6 +473,10 @@ try:
     }
 except Exception as e:
     print(f"Warning: Could not load Phase 3 metrics: {e}")
+    aggregated_results["phase_3_calibration"] = {
+        "method": "Platt Scaling",
+        "note": "Metrics not available"
+    }
 
 # Load Phase 4 threshold optimization
 try:
@@ -490,6 +492,9 @@ try:
     }
 except Exception as e:
     print(f"Warning: Could not load Phase 4 metrics: {e}")
+    aggregated_results["phase_4_threshold_optimization"] = {
+        "note": "Metrics not available"
+    }
 
 # Load Phase 5 fairness evaluation
 try:
@@ -503,6 +508,10 @@ try:
     }
 except Exception as e:
     print(f"Warning: Could not load Phase 5 metrics: {e}")
+    aggregated_results["phase_5_fairness_evaluation"] = {
+        "groups_analyzed": ["race", "gender", "age"],
+        "note": "Metrics not available"
+    }
 
 # Load Phase 6 mitigation (if exists)
 phase6_path = f"{metrics_dir}/phase6_mitigation_impact.json"
