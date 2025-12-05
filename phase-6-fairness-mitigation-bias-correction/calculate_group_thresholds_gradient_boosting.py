@@ -16,7 +16,7 @@ Usage:
     
     # With custom threshold search configuration
     python calculate_group_thresholds_gradient_boosting.py \
-        --threshold-min 0.01 --threshold-max 0.99 --num-thresholds 100000
+        --threshold-min 0.01 --threshold-max 0.99 --num-thresholds 50000
 
 Inputs:
     - Phase 5 summary (phase5_summary_for_phase6.json)
@@ -99,8 +99,8 @@ def parse_arguments():
     parser.add_argument(
         '--num-thresholds',
         type=int,
-        default=100000,
-        help='Number of thresholds to test (default: 100000)'
+        default=50000,
+        help='Number of thresholds to test (default: 50000)'
     )
     
     # Data sources
