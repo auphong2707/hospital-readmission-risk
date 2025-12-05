@@ -221,16 +221,19 @@ download_if_missing() {
         echo "  [x] ${desc}" | tee -a "${SUMMARY_FILE}"
         ((FILE_COUNT++))
     else
-        echo "  [ ] ${desc} not found locally" | tee -a "${SUMMARY_FILE}"
-        # Skip HuggingFace download - uncomment below to enable
-        # mkdir -p "$(dirname ${dest_path})"
-        # if huggingface-cli download "${hf_repo}" "${hf_path}" --local-dir "${COLLECTION_DIR}/temp" --repo-type=dataset 2>&1 | grep -v "Warning:" >/dev/null; then
-        #     if [ -f "${COLLECTION_DIR}/temp/${hf_path}" ]; then
-        #         mv "${COLLECTION_DIR}/temp/${hf_path}" "${dest_path}"
-        #         echo "  [x] ${desc} (downloaded from HF)" | tee -a "${SUMMARY_FILE}"
-        #         ((FILE_COUNT++))
-        #     fi
-        # fi
+        echo "  [ ] ${desc} not found locally, trying HuggingFace..." | tee -a "${SUMMARY_FILE}"
+        mkdir -p "$(dirname ${dest_path})"
+        if huggingface-cli download "${hf_repo}" "${hf_path}" --local-dir "${COLLECTION_DIR}/temp" --repo-type=dataset 2>/dev/null; then
+            if [ -f "${COLLECTION_DIR}/temp/${hf_path}" ]; then
+                mv "${COLLECTION_DIR}/temp/${hf_path}" "${dest_path}"
+                echo "  [x] ${desc} (downloaded from HF)" | tee -a "${SUMMARY_FILE}"
+                ((FILE_COUNT++))
+            else
+                echo "  [ ] ${desc} (NOT FOUND - local or HF)" | tee -a "${SUMMARY_FILE}"
+            fi
+        else
+            echo "  [ ] ${desc} (NOT FOUND - local or HF)" | tee -a "${SUMMARY_FILE}"
+        fi
     fi
 }
 
