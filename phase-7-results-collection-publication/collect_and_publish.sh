@@ -237,8 +237,8 @@ download_if_missing() {
 # Phase 1 files - Download from HuggingFace if not found locally (skip CSV files)
 download_if_missing "${PROJECT_ROOT}/data/processed/preprocessing_metadata.txt" \
     "${COLLECTION_DIR}/preprocessing_metadata.txt" \
-    "preprocessing_metadata.txt" \
-    "Preprocessing metadata"
+    "splits/split_info.txt" \
+    "Preprocessing metadata (split_info.txt)"
 echo "  [ ] Data splits skipped (CSV files not collected)" | tee -a "${SUMMARY_FILE}"
 rm -rf "${COLLECTION_DIR}/temp" 2>/dev/null
 
@@ -253,7 +253,9 @@ echo "Phase 2 - Risk Modeling (${METHOD}):" | tee -a "${SUMMARY_FILE}"
 case "${METHOD}" in
     gradient_boosting)
         MODEL_FILE="gradient_boosting_model_original.joblib"
+        MODEL_FILE_HF="gradient_boosting_model.joblib"
         METRICS_FILE="Gradient_Boosting_metrics.json"
+        METRICS_FILE_HF="gradient_boosting_metrics.json"
         FILE_PREFIX="Gradient_Boosting"
         DISPLAY_NAME="Gradient Boosting"
         PHASE2_HF_REPO="auphong2707/hospital-readmission-lgbm"
@@ -277,24 +279,36 @@ esac
 # Download or copy model and metrics from HuggingFace
 download_phase2_if_missing "${PROJECT_ROOT}/models/${MODEL_FILE}" \
     "${COLLECTION_DIR}/models/${MODEL_FILE}" \
-    "${MODEL_FILE}" \
+    "${MODEL_FILE_HF}" \
     "${DISPLAY_NAME} model" \
     "${PHASE2_HF_REPO}"
 download_phase2_if_missing "${PROJECT_ROOT}/phase-2-risk-modeling/${METRICS_FILE}" \
     "${COLLECTION_DIR}/metrics/${METRICS_FILE}" \
-    "${METRICS_FILE}" \
+    "${METRICS_FILE_HF}" \
     "${DISPLAY_NAME} metrics" \
     "${PHASE2_HF_REPO}"
 
 # Download or copy visualizations from HuggingFace
+# Map local file names to HF file names (HF uses lowercase snake_case)
 VIZ_COUNT=0
+declare -A viz_map
+viz_map["ROC_Curve"]="roc_curve.png"
+viz_map["Precision_Recall_Curve"]="precision_recall_curve.png"
+viz_map["Confusion_Matrix"]="confusion_matrix.png"
+viz_map["Feature_Importance_Top_20"]="feature_importance.png"
+viz_map["Calibration_Plot"]="calibration_curve.png"
+viz_map["Prediction_Distribution"]="metrics_comparison_across_folds.png"
+viz_map["Threshold_Metrics"]="validation_curves.png"
+viz_map["Classification_Report"]="confusion_matrix.png"
+viz_map["Learning_Curves"]="learning_curves.png"
+
 for viz in "ROC_Curve" "Precision_Recall_Curve" "Confusion_Matrix" "Feature_Importance_Top_20" \
            "Calibration_Plot" "Prediction_Distribution" "Threshold_Metrics" \
            "Classification_Report" "Learning_Curves"; do
     viz_file="${FILE_PREFIX}_${viz}.png"
     local_path="${PROJECT_ROOT}/phase-2-risk-modeling/${viz_file}"
     dest_path="${COLLECTION_DIR}/visualizations/phase2_modeling/${viz_file}"
-    hf_path="${viz_file}"
+    hf_path="${viz_map[$viz]}"
     
     if [ -f "${local_path}" ]; then
         cp "${local_path}" "${dest_path}"
