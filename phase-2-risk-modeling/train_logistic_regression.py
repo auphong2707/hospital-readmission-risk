@@ -37,7 +37,7 @@ import pandas as pd
 import os
 import time
 import json
-import pickle
+import joblib
 import warnings
 from datetime import datetime
 from pathlib import Path
@@ -255,7 +255,7 @@ class LogisticRegressionTrainer:
     
     def save_model(self, output_dir="./models", include_metadata=True):
         """
-        Save trained model with metadata.
+        Save trained model with metadata using joblib (consistent with GBM).
         
         Args:
             output_dir: Directory to save the model
@@ -263,33 +263,18 @@ class LogisticRegressionTrainer:
         """
         os.makedirs(output_dir, exist_ok=True)
         
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        model_filename = f"logistic_regression.pkl"
+        model_filename = f"logistic_regression_model.joblib"
         model_path = os.path.join(output_dir, model_filename)
         
-        # Save model
-        with open(model_path, 'wb') as f:
-            pickle.dump(self.best_model, f)
+        # Save model using joblib (consistent with GBM)
+        joblib.dump(self.best_model, model_path)
         
         print(f"\n✅ Model saved to: {model_path}")
         
-        # Save metadata
-        if include_metadata:
-            metadata = {
-                'model_type': 'Logistic Regression',
-                'timestamp': timestamp,
-                'best_params': self.grid_search.best_params_ if self.grid_search else None,
-                'best_cv_score': self.grid_search.best_score_ if self.grid_search else None,
-                'feature_names': self.feature_names,
-                'n_features': len(self.feature_names) if self.feature_names else None,
-                'random_state': self.random_state
-            }
-            
-            metadata_path = os.path.join(output_dir, f"logistic_regression_metadata.pkl")
-            with open(metadata_path, 'wb') as f:
-                pickle.dump(metadata, f)
-            
-            print(f"✅ Metadata saved to: {metadata_path}")
+        # Save scaler separately
+        scaler_path = os.path.join(output_dir, "logistic_regression_scaler.joblib")
+        joblib.dump(self.scaler, scaler_path)
+        print(f"✅ Scaler saved to: {scaler_path}")
         
         return model_path
     
@@ -443,10 +428,9 @@ def main(hf_repo_id: Optional[str] = None,
         fold_model.fit(X_fold_train_scaled, y_fold_train)
         
         # Evaluate on fold test set
-        y_fold_pred = fold_model.predict(X_fold_test_scaled)
         y_fold_proba = fold_model.predict_proba(X_fold_test_scaled)[:, 1]
         
-        fold_metrics = calculate_comprehensive_metrics(y_fold_test, y_fold_pred, y_fold_proba)
+        fold_metrics = calculate_comprehensive_metrics(y_fold_test, y_fold_proba, threshold=0.5)
         
         print(f"\n   📊 Fold {fold_idx} Results:")
         print(f"      ROC-AUC: {fold_metrics['roc_auc']:.4f}")
@@ -513,10 +497,10 @@ def main(hf_repo_id: Optional[str] = None,
     print("Evaluating final model on the untouched final test set...")
     
     X_final_test_scaled = trainer.scaler.transform(X_final_test)
-    y_final_pred = final_model.predict(X_final_test_scaled)
     y_final_proba = final_model.predict_proba(X_final_test_scaled)[:, 1]
+    y_final_pred = (y_final_proba >= 0.5).astype(int)
     
-    final_metrics = calculate_comprehensive_metrics(y_final_test, y_final_pred, y_final_proba)
+    final_metrics = calculate_comprehensive_metrics(y_final_test, y_final_proba, threshold=0.5)
     print_metrics_table(final_metrics, "🎯 FINAL TEST SET RESULTS")
     
     print(f"\n📈 Model Performance Summary:")
@@ -526,8 +510,9 @@ def main(hf_repo_id: Optional[str] = None,
     print(f"      ROC-AUC: {final_metrics['roc_auc']:.4f}")
     
     # Create output directories
-    output_dir = Path("../models")
-    reports_dir = Path("../reports/logistic_regression")
+    repo_root = Path(__file__).resolve().parents[1]
+    output_dir = repo_root / "models"
+    reports_dir = repo_root / "reports" / "logistic_regression"
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(reports_dir, exist_ok=True)
     
@@ -545,24 +530,26 @@ def main(hf_repo_id: Optional[str] = None,
     print_section("💾 Saving Results", "-")
     model_path = trainer.save_model(output_dir=str(output_dir))
     
-    # Save metrics as JSON
+    # Save metrics as JSON (consistent naming with GBM)
     metrics_json_path = output_dir / "logistic_regression_metrics.json"
     with open(metrics_json_path, 'w') as f:
         json.dump(final_metrics, f, indent=2)
     print(f"✅ Metrics saved: {metrics_json_path}")
     
-    # Save fold details
-    fold_details_path = output_dir / "logistic_regression_cv_fold_details.json"
+    # Save fold details (consistent naming with GBM)
+    fold_details_path = output_dir / "cv_fold_details.json"
     with open(fold_details_path, 'w') as f:
         json.dump(fold_details, f, indent=2)
     print(f"✅ Fold details saved: {fold_details_path}")
     
-    # Create comprehensive training summary
+    # Create comprehensive training summary (consistent with GBM)
     total_time = time.time() - start_time
     training_summary = {
-        'model': 'Logistic Regression',
+        'model': 'Logistic Regression Classifier',
         'task': 'Hospital 30-Day Readmission Risk Prediction',
-        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
+        'environment': 'local',
+        'device': 'cpu',
         'evaluation_pipeline': {
             'description': 'Robust nested CV with final holdout and validation monitoring',
             'final_holdout_size': 0.15,
@@ -578,7 +565,7 @@ def main(hf_repo_id: Optional[str] = None,
             'final_test_size': len(X_final_test),
             'n_features': len(trainer.feature_names)
         },
-        'best_hyperparameters': best_params,
+        'best_params': best_params,
         'cross_validation': {
             'mean_roc_auc': float(mean_score),
             'std_roc_auc': float(std_score),
@@ -593,7 +580,7 @@ def main(hf_repo_id: Optional[str] = None,
         'random_state': 42
     }
     
-    summary_json_path = output_dir / "logistic_regression_training_summary.json"
+    summary_json_path = output_dir / "training_summary.json"
     with open(summary_json_path, 'w') as f:
         json.dump(training_summary, f, indent=2)
     print(f"✅ Training summary saved: {summary_json_path}")
