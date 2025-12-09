@@ -344,36 +344,68 @@ class LogisticRegressionTrainer:
         plt.close()
 
 
-def main(hf_repo_id: Optional[str] = None,
-         hf_token: Optional[str] = None,
-         hf_private: bool = False):
+def main():
     """
     Main training pipeline for Logistic Regression baseline model.
     
     Automatically uploads to HuggingFace if HF_TOKEN is available in environment.
     
-    Args:
-        hf_repo_id: HuggingFace repository ID (e.g., "username/hospital-readmission-lr")
-                   If None and HF_TOKEN exists, will use "username/hospital-readmission-lr"
-        hf_token: HuggingFace API token (if None, uses HF_TOKEN env variable)
-        hf_private: Whether to make the HuggingFace repository private
+    Command-line usage:
+        python train_logistic_regression.py [--output-dir OUTPUT_DIR] [--n-splits N_SPLITS]
     """
+    import argparse
+    
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description="Train Logistic Regression with robust nested CV evaluation using preprocessed data from HuggingFace.",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    
+    # Output arguments
+    parser.add_argument("--output-dir", type=str, default=None,
+                        help="Directory to save model and metrics (auto-detects Kaggle)")
+    
+    # Training arguments
+    parser.add_argument("--n-splits", type=int, default=5,
+                        help="Number of K-fold cross-validation splits (default: 5)")
+    parser.add_argument("--val-size", type=float, default=0.15,
+                        help="Validation size for monitoring (default: 0.15)")
+    parser.add_argument("--random-state", type=int, default=42,
+                        help="Random seed (default: 42)")
+    
+    args = parser.parse_args()
+    
+    # Get repository root
+    repo_root = Path(__file__).resolve().parents[1]
+    
+    # Auto-detect Kaggle environment
+    from utilities import is_kaggle_environment
+    on_kaggle = is_kaggle_environment()
+    environment = "kaggle" if on_kaggle else "local"
+    
+    # Set output directory
+    if args.output_dir is None:
+        args.output_dir = "/kaggle/working/models" if on_kaggle else str(repo_root / "models")
+    
     print(f"\n{'='*70}")
     print("LOGISTIC REGRESSION TRAINING - HOSPITAL READMISSION RISK")
     print(f"{'='*70}")
     print(f"Configuration:")
     print(f"  - Data source: HuggingFace (auphong2707/hospital-readmission-risk-data)")
+    print(f"  - Output directory: {args.output_dir}")
     print(f"  - L1/L2/Elastic Net regularization (with l1_ratio tuning)")
     print(f"  - Class weight balancing")
-    print(f"  - Robust evaluation: 85% development, 15% final holdout")
-    print(f"  - Stratified 5-fold cross-validation")
+    print(f"  - K-fold splits: {args.n_splits}")
+    print(f"  - Validation size: {args.val_size}")
+    print(f"  - Stratified cross-validation")
     print(f"  - Grid search hyperparameter optimization")
+    print(f"  - Environment: {'🏆 Kaggle' if on_kaggle else '💻 Local'}")
     print(f"{'='*70}\n")
     
     start_time = time.time()
     
     # Initialize trainer
-    trainer = LogisticRegressionTrainer(random_state=42)
+    trainer = LogisticRegressionTrainer(random_state=args.random_state)
     
     # STEP 1: Load Phase 1 splits and prepare development set
     print_section("📊 Step 1: Load Phase 1 Splits & Prepare Development Set", "=")
@@ -399,9 +431,9 @@ def main(hf_repo_id: Optional[str] = None,
     
     # STEP 2: Hyperparameter search with K-fold CV on development set
     print_section("🔍 Step 2: Hyperparameter Search with Cross-Validation", "=")
-    print("Performing grid search with 5-fold stratified CV on development set...")
+    print(f"Performing grid search with {args.n_splits}-fold stratified CV on development set...")
     
-    best_model = trainer.train_with_cv(X_development, y_development, n_folds=5)
+    best_model = trainer.train_with_cv(X_development, y_development, n_folds=args.n_splits)
     best_params = trainer.grid_search.best_params_
     best_cv_score = trainer.grid_search.best_score_
     
@@ -413,9 +445,9 @@ def main(hf_repo_id: Optional[str] = None,
     
     # STEP 3: K-Fold CV with best parameters to collect statistics
     print_section("📊 Step 3: K-Fold Cross-Validation with Best Parameters", "=")
-    print(f"Re-training with best parameters to collect detailed metrics across 5 folds\n")
+    print(f"Re-training with best parameters to collect detailed metrics across {args.n_splits} folds\n")
     
-    cv_kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    cv_kfold = StratifiedKFold(n_splits=args.n_splits, shuffle=True, random_state=args.random_state)
     fold_scores = []
     fold_details = []
     
@@ -439,14 +471,14 @@ def main(hf_repo_id: Optional[str] = None,
         X_fold_test_scaled = scaler.transform(X_fold_test)
         
         # Train model with best parameters
-        fold_model = LogisticRegression(**best_params, random_state=42)
+        fold_model = LogisticRegression(**best_params, random_state=args.random_state)
         fold_model.fit(X_fold_train_scaled, y_fold_train)
         
         # Evaluate on fold test set
         y_fold_pred = fold_model.predict(X_fold_test_scaled)
         y_fold_proba = fold_model.predict_proba(X_fold_test_scaled)[:, 1]
         
-        fold_metrics = calculate_comprehensive_metrics(y_fold_test, y_fold_pred, y_fold_proba)
+        fold_metrics = calculate_comprehensive_metrics(y_fold_test, y_fold_proba, threshold=0.5)
         
         print(f"\n   📊 Fold {fold_idx} Results:")
         print(f"      ROC-AUC: {fold_metrics['roc_auc']:.4f}")
@@ -484,8 +516,8 @@ def main(hf_repo_id: Optional[str] = None,
     # Split development set for validation monitoring
     X_dev_train, X_dev_val, y_dev_train, y_dev_val = train_test_split(
         X_development, y_development,
-        test_size=0.15,
-        random_state=42,
+        test_size=args.val_size,
+        random_state=args.random_state,
         stratify=y_development
     )
     
@@ -497,7 +529,7 @@ def main(hf_repo_id: Optional[str] = None,
     X_dev_val_scaled = trainer.scaler.transform(X_dev_val)
     
     # Train final model
-    final_model = LogisticRegression(**best_params, random_state=42)
+    final_model = LogisticRegression(**best_params, random_state=args.random_state)
     final_model.fit(X_dev_train_scaled, y_dev_train)
     trainer.best_model = final_model
     
@@ -516,7 +548,7 @@ def main(hf_repo_id: Optional[str] = None,
     y_final_pred = final_model.predict(X_final_test_scaled)
     y_final_proba = final_model.predict_proba(X_final_test_scaled)[:, 1]
     
-    final_metrics = calculate_comprehensive_metrics(y_final_test, y_final_pred, y_final_proba)
+    final_metrics = calculate_comprehensive_metrics(y_final_test, y_final_proba, threshold=0.5)
     print_metrics_table(final_metrics, "🎯 FINAL TEST SET RESULTS")
     
     print(f"\n📈 Model Performance Summary:")
@@ -526,20 +558,18 @@ def main(hf_repo_id: Optional[str] = None,
     print(f"      ROC-AUC: {final_metrics['roc_auc']:.4f}")
     
     # Create output directories
-    output_dir = Path("../models")
-    reports_dir = Path("../reports/logistic_regression")
-    os.makedirs(output_dir, exist_ok=True)
-    os.makedirs(reports_dir, exist_ok=True)
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Save comprehensive visualizations
     print_section("📊 Generating Comprehensive Visualizations", "-")
     save_visualizations(
-        y_final_test, y_final_proba, y_final_pred, reports_dir,
+        y_final_test, y_final_proba, y_final_pred, output_dir,
         model=final_model, X=X_final_test_scaled, feature_names=trainer.feature_names
     )
     
     # Plot CV results
-    trainer.plot_cv_results(str(reports_dir))
+    trainer.plot_cv_results(str(output_dir))
     
     # Save model
     print_section("💾 Saving Results", "-")
@@ -603,42 +633,53 @@ def main(hf_repo_id: Optional[str] = None,
     hf_token_from_env = os.getenv('HF_TOKEN')
     hf_username = os.getenv('HF_USERNAME', 'auphong2707')
     
-    if hf_token_from_env or hf_token:
+    if hf_token_from_env:
         print_section("🚀 HuggingFace Upload", "-")
         
         # Prepare summary for upload
         summary = {
-            'model_name': 'Logistic Regression',
-            'model_type': 'logistic-regression',
-            'best_params': best_params,
-            'best_cv_score': float(best_cv_score),
-            'cv_mean_score': float(mean_score),
-            'cv_std_score': float(std_score),
-            'final_test_metrics': final_metrics,
-            'n_features': len(trainer.feature_names),
-            'feature_names': trainer.feature_names,
-            'data_split': {
-                'development_size': len(X_development),
-                'final_test_size': len(X_final_test)
+            'model': 'Logistic Regression',
+            'task': 'Hospital 30-Day Readmission Risk Prediction',
+            'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
+            'environment': environment,
+            'evaluation_pipeline': {
+                'description': 'Robust nested CV with final holdout and validation monitoring',
+                'final_holdout_size': args.val_size,
+                'k_folds': args.n_splits,
+                'cv_strategy': 'StratifiedKFold'
             },
-            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            'data': {
+                'total_samples': total_samples,
+                'development_size': len(X_development),
+                'dev_train_size': len(X_dev_train),
+                'dev_val_size': len(X_dev_val),
+                'final_test_size': len(X_final_test),
+                'n_features': len(trainer.feature_names)
+            },
+            'best_params': best_params,
+            'cross_validation': {
+                'mean_roc_auc': float(mean_score),
+                'std_roc_auc': float(std_score),
+                'fold_scores': [float(s) for s in fold_scores],
+                'n_folds': args.n_splits
+            },
+            'validation_monitoring': {
+                'dev_val_auc': float(dev_val_auc)
+            },
+            'final_test_metrics': final_metrics,
+            'total_time_seconds': total_time,
+            'random_state': args.random_state
         }
-        
-        # Use provided repo_id or construct from username
-        if hf_repo_id is None:
-            hf_repo_id = f"{hf_username}/hospital-readmission-lr"
-            print(f"⚠️  No repo_id provided. Using default: {hf_repo_id}")
         
         # Upload to HuggingFace
         upload_success = upload_results_to_hf(
             summary=summary,
             output_dir=str(output_dir),
-            model_name="Logistic Regression",
-            hf_repo_name=hf_repo_id,
-            hf_token=hf_token or hf_token_from_env
+            model_name="hospital-readmission-logistic-regression"
         )
         
         if upload_success:
+            hf_repo_id = f"{hf_username}/hospital-readmission-logistic-regression"
             hf_url = f"https://huggingface.co/{hf_repo_id}"
     else:
         print_section("ℹ️  No HuggingFace Token Found - Skipping Upload", "-")
@@ -650,19 +691,18 @@ def main(hf_repo_id: Optional[str] = None,
     print(f"\n📊 Final Performance Summary:")
     print(f"  Cross-Validation ROC-AUC: {mean_score:.4f} ± {std_score:.4f}")
     print(f"  Final Test ROC-AUC:       {final_metrics['roc_auc']:.4f}")
-    print(f"\n⏱️  Total training time: {total_time:.2f} seconds")
+    print(f"\n⏱️  Total training time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
     print(f"\n📁 Outputs saved to:")
     print(f"  Model: {model_path}")
     print(f"  Metrics JSON: {metrics_json_path}")
     print(f"  Training Summary JSON: {summary_json_path}")
     print(f"  Fold Details JSON: {fold_details_path}")
-    print(f"  Reports: {reports_dir}")
+    print(f"  Visualizations: {output_dir}")
     if hf_url:
         print(f"  HuggingFace: {hf_url}")
+    print(f"\n🎉 Ready for Phase 3 (calibration)!")
     print(f"{'='*70}\n")
-    
-    return trainer, final_metrics
 
 
 if __name__ == "__main__":
-    trainer, final_metrics = main()
+    main()
