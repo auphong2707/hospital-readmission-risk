@@ -57,10 +57,13 @@ from utilities import (
     save_visualizations,
     print_section,
     upload_results_to_hf,
-    load_phase1_splits
+    load_phase1_splits,
+    is_kaggle_environment
 )
 
 warnings.filterwarnings('ignore')
+
+import argparse
 
 
 class LogisticRegressionTrainer:
@@ -329,25 +332,21 @@ class LogisticRegressionTrainer:
         plt.close()
 
 
-def main(hf_repo_id: Optional[str] = None,
-         hf_token: Optional[str] = None,
-         hf_private: bool = False):
+def train_model(output_dir: str, environment: str = 'local'):
     """
     Main training pipeline for Logistic Regression baseline model.
     
-    Automatically uploads to HuggingFace if HF_TOKEN is available in environment.
-    
     Args:
-        hf_repo_id: HuggingFace repository ID (e.g., "username/hospital-readmission-lr")
-                   If None and HF_TOKEN exists, will use "username/hospital-readmission-lr"
-        hf_token: HuggingFace API token (if None, uses HF_TOKEN env variable)
-        hf_private: Whether to make the HuggingFace repository private
+        output_dir: Directory to save model and artifacts
+        environment: 'kaggle' or 'local'
     """
     print(f"\n{'='*70}")
     print("LOGISTIC REGRESSION TRAINING - HOSPITAL READMISSION RISK")
     print(f"{'='*70}")
     print(f"Configuration:")
     print(f"  - Data source: HuggingFace (auphong2707/hospital-readmission-risk-data)")
+    print(f"  - Output directory: {output_dir}")
+    print(f"  - Environment: {'🏆 Kaggle' if environment == 'kaggle' else '💻 Local'}")
     print(f"  - L1/L2/Elastic Net regularization (with l1_ratio tuning)")
     print(f"  - Class weight balancing")
     print(f"  - Robust evaluation: 85% development, 15% final holdout")
@@ -509,10 +508,9 @@ def main(hf_repo_id: Optional[str] = None,
     print(f"   Final Test Set (Untouched Holdout):")
     print(f"      ROC-AUC: {final_metrics['roc_auc']:.4f}")
     
-    # Create output directories
-    repo_root = Path(__file__).resolve().parents[1]
-    output_dir = repo_root / "models"
-    reports_dir = repo_root / "reports" / "logistic_regression"
+    # Create output directories (using passed output_dir)
+    output_dir = Path(output_dir)
+    reports_dir = output_dir.parent / "reports" / "logistic_regression"
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(reports_dir, exist_ok=True)
     
@@ -548,7 +546,7 @@ def main(hf_repo_id: Optional[str] = None,
         'model': 'Logistic Regression Classifier',
         'task': 'Hospital 30-Day Readmission Risk Prediction',
         'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
-        'environment': 'local',
+        'environment': environment,
         'device': 'cpu',
         'evaluation_pipeline': {
             'description': 'Robust nested CV with final holdout and validation monitoring',
@@ -580,76 +578,81 @@ def main(hf_repo_id: Optional[str] = None,
         'random_state': 42
     }
     
-    summary_json_path = output_dir / "training_summary.json"
-    with open(summary_json_path, 'w') as f:
+    summary_path = output_dir / "training_summary.json"
+    with open(summary_path, 'w') as f:
         json.dump(training_summary, f, indent=2)
-    print(f"✅ Training summary saved: {summary_json_path}")
+    print(f"✅ Summary saved: {summary_path}")
     
-    # Auto-upload to HuggingFace if token is available
-    hf_url = None
-    hf_token_from_env = os.getenv('HF_TOKEN')
-    hf_username = os.getenv('HF_USERNAME', 'auphong2707')
-    
-    if hf_token_from_env or hf_token:
-        print_section("🚀 HuggingFace Upload", "-")
-        
-        # Prepare summary for upload
-        summary = {
-            'model_name': 'Logistic Regression',
-            'model_type': 'logistic-regression',
-            'best_params': best_params,
-            'best_cv_score': float(best_cv_score),
-            'cv_mean_score': float(mean_score),
-            'cv_std_score': float(std_score),
-            'final_test_metrics': final_metrics,
-            'n_features': len(trainer.feature_names),
-            'feature_names': trainer.feature_names,
-            'data_split': {
-                'development_size': len(X_development),
-                'final_test_size': len(X_final_test)
-            },
-            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-        
-        # Use provided repo_id or construct from username
-        if hf_repo_id is None:
-            hf_repo_id = f"{hf_username}/hospital-readmission-lr"
-            print(f"⚠️  No repo_id provided. Using default: {hf_repo_id}")
-        
-        # Upload to HuggingFace
-        upload_success = upload_results_to_hf(
-            summary=summary,
-            output_dir=str(output_dir),
-            model_name="Logistic Regression",
-            hf_repo_name=hf_repo_id,
-            hf_token=hf_token or hf_token_from_env
-        )
-        
-        if upload_success:
-            hf_url = f"https://huggingface.co/{hf_repo_id}"
-    else:
-        print_section("ℹ️  No HuggingFace Token Found - Skipping Upload", "-")
-        print("To enable auto-upload, set HF_TOKEN environment variable.")
-        print("Get your token from: https://huggingface.co/settings/tokens")
+    # Upload to HuggingFace Hub (automatically)
+    print_section("📤 Uploading to HuggingFace Hub", "-")
+    upload_success = upload_results_to_hf(
+        summary=training_summary,
+        output_dir=output_dir,
+        model_name="hospital-readmission-lr"
+    )
+    if not upload_success:
+        print("⚠️  Upload to HuggingFace Hub was skipped (set HF_TOKEN in .env to enable)")
     
     # Final summary
-    print_section("✅ TRAINING COMPLETE!", "=")
-    print(f"\n📊 Final Performance Summary:")
-    print(f"  Cross-Validation ROC-AUC: {mean_score:.4f} ± {std_score:.4f}")
-    print(f"  Final Test ROC-AUC:       {final_metrics['roc_auc']:.4f}")
-    print(f"\n⏱️  Total training time: {total_time:.2f} seconds")
-    print(f"\n📁 Outputs saved to:")
-    print(f"  Model: {model_path}")
-    print(f"  Metrics JSON: {metrics_json_path}")
-    print(f"  Training Summary JSON: {summary_json_path}")
-    print(f"  Fold Details JSON: {fold_details_path}")
-    print(f"  Reports: {reports_dir}")
-    if hf_url:
-        print(f"  HuggingFace: {hf_url}")
-    print(f"{'='*70}\n")
+    print_section("✨ Training Complete!", "=")
+    print(f"⏱️  Total time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
+    print(f"📁 All outputs saved to: {output_dir}")
+    print(f"\n📊 Performance Summary:")
+    print(f"   🔄 5-Fold CV ROC-AUC: {mean_score:.4f} ± {std_score:.4f}")
+    print(f"   🎯 Final Test ROC-AUC: {final_metrics['roc_auc']:.4f}")
+    print("\n🎉 Ready for deployment!")
+    print("=" * 70)
     
     return trainer, final_metrics
 
 
+def main():
+    """Main entry point with argument parsing."""
+    parser = argparse.ArgumentParser(
+        description="Train Logistic Regression with robust nested CV evaluation using preprocessed data from HuggingFace.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+            Examples:
+            # Default: Full hyperparameter search with 5-fold CV
+            # Data loaded from HuggingFace: auphong2707/hospital-readmission-risk-data
+            python train_logistic_regression.py
+            
+            # Custom output directory
+            python train_logistic_regression.py --output-dir /path/to/output
+            
+            # Kaggle usage (auto-detects environment and sets output path)
+            !python phase-2-risk-modeling/train_logistic_regression.py
+        """
+    )
+    
+    # Output arguments
+    parser.add_argument("--output-dir", type=str, default=None,
+                        help="Directory to save model and metrics (auto-detects Kaggle)")
+
+    args = parser.parse_args()
+    
+    # Get repository root
+    repo_root = Path(__file__).resolve().parents[1]
+    
+    # Auto-detect Kaggle environment
+    on_kaggle = is_kaggle_environment()
+    environment = "kaggle" if on_kaggle else "local"
+    
+    # Set output directory
+    if args.output_dir is None:
+        args.output_dir = "/kaggle/working/models" if on_kaggle else str(repo_root / "models")
+    
+    if on_kaggle:
+        print("✅ Kaggle environment detected: using /kaggle/working/models")
+    else:
+        print(f"✅ Local environment: using {args.output_dir}")
+    
+    print("\n📥 Data will be loaded directly from HuggingFace: auphong2707/hospital-readmission-risk-data")
+    print("   (No local preprocessing needed)")
+    
+    # Run training
+    train_model(output_dir=args.output_dir, environment=environment)
+
+
 if __name__ == "__main__":
-    trainer, final_metrics = main()
+    main()
