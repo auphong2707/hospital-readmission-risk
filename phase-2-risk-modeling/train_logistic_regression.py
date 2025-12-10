@@ -2,7 +2,12 @@
 Logistic Regression Training for Hospital Readmission Risk Prediction
 =====================================================================
 
-Baseline model with comprehensive configuration and robust evaluation pipeline:
+Baseline model with comprehensive configuration and robust evaluation pipeline.
+
+Data Source:
+- HuggingFace repository: auphong2707/hospital-readmission-risk-data
+- Automatically downloads preprocessed features and target
+- No local preprocessing needed
 
 Evaluation Pipeline:
 1. Final Holdout Split: Split entire dataset into development_set and final_test_set
@@ -52,7 +57,7 @@ from utilities import (
     save_visualizations,
     print_section,
     upload_results_to_hf,
-    load_data
+    load_phase1_splits
 )
 
 warnings.filterwarnings('ignore')
@@ -357,6 +362,7 @@ def main(hf_repo_id: Optional[str] = None,
     print("LOGISTIC REGRESSION TRAINING - HOSPITAL READMISSION RISK")
     print(f"{'='*70}")
     print(f"Configuration:")
+    print(f"  - Data source: HuggingFace (auphong2707/hospital-readmission-risk-data)")
     print(f"  - L1/L2/Elastic Net regularization (with l1_ratio tuning)")
     print(f"  - Class weight balancing")
     print(f"  - Robust evaluation: 85% development, 15% final holdout")
@@ -369,26 +375,27 @@ def main(hf_repo_id: Optional[str] = None,
     # Initialize trainer
     trainer = LogisticRegressionTrainer(random_state=42)
     
-    # STEP 1: Load preprocessed data and create final holdout split
-    print_section("📊 Step 1: Load Data & Create Final Holdout Split", "=")
-    X, y = load_data()
-    trainer.feature_names = X.columns.tolist()
+    # STEP 1: Load Phase 1 splits and prepare development set
+    print_section("📊 Step 1: Load Phase 1 Splits & Prepare Development Set", "=")
+    X_train, X_val, X_test, y_train, y_val, y_test = load_phase1_splits()
     
-    print(f"Total samples: {len(X)}")
+    # Combine train + validation for development set
+    X_development = pd.concat([X_train, X_val], axis=0).reset_index(drop=True)
+    y_development = pd.concat([y_train, y_val], axis=0).reset_index(drop=True)
+    X_final_test = X_test
+    y_final_test = y_test
+    
+    trainer.feature_names = X_development.columns.tolist()
+    
+    total_samples = len(X_train) + len(X_val) + len(X_test)
+    print(f"Total samples: {total_samples}")
     print(f"Number of features: {len(trainer.feature_names)}")
-    print(f"Target distribution: {dict(y.value_counts())}")
     
-    # Create final holdout split (85% development, 15% final test)
-    X_development, X_final_test, y_development, y_final_test = train_test_split(
-        X, y, 
-        test_size=0.15, 
-        random_state=42,
-        stratify=y
-    )
-    
-    print(f"\n✅ Final holdout split created:")
-    print(f"   Development set: {len(X_development)} samples ({len(X_development)/len(X)*100:.1f}%)")
-    print(f"   Final test set: {len(X_final_test)} samples ({len(X_final_test)/len(X)*100:.1f}%)")
+    print(f"\n✅ Using Phase 1 splits (single source of truth):")
+    print(f"   Development set (train + val): {len(X_development)} samples ({len(X_development)/total_samples*100:.1f}%)")
+    print(f"   Final test set: {len(X_final_test)} samples ({len(X_final_test)/total_samples*100:.1f}%)")
+    print(f"   Development class distribution: {dict(y_development.value_counts())}")
+    print(f"   Final test class distribution: {dict(y_final_test.value_counts())}")
     
     # STEP 2: Hyperparameter search with K-fold CV on development set
     print_section("🔍 Step 2: Hyperparameter Search with Cross-Validation", "=")
@@ -564,7 +571,7 @@ def main(hf_repo_id: Optional[str] = None,
             'cv_strategy': 'StratifiedKFold'
         },
         'data': {
-            'total_samples': len(X),
+            'total_samples': len(X_train) + len(X_val) + len(X_test),
             'development_size': len(X_development),
             'dev_train_size': len(X_dev_train),
             'dev_val_size': len(X_dev_val),
@@ -619,7 +626,7 @@ def main(hf_repo_id: Optional[str] = None,
         
         # Use provided repo_id or construct from username
         if hf_repo_id is None:
-            hf_repo_id = f"{hf_username}/logistic-regression"
+            hf_repo_id = f"{hf_username}/hospital-readmission-lr"
             print(f"⚠️  No repo_id provided. Using default: {hf_repo_id}")
         
         # Upload to HuggingFace

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import Optional, Tuple
@@ -113,51 +112,100 @@ def print_section(title: str, char: str = "="):
 # DATA LOADING
 # ============================================================================
 
-def load_data(data_dir: str = "data/processed"):
-    """Load features and target data from processed directory.
+def load_phase1_splits(cache_dir: str = "./data/downloaded",
+                       repo_id: str = "auphong2707/hospital-readmission-risk-data"):
+    """Load Phase 1 splits from HuggingFace.
+    
+    This ensures all phases (2-5) use the exact same preprocessed data from Phase 1.
+    Phase 1 created these splits with:
+    - Train: 73,526 samples (72.25%)
+    - Validation: 12,975 samples (12.75%)
+    - Test: 15,265 samples (15%)
+    - Random seed: 42
+    - Stratification: Yes (on target variable)
     
     Args:
-        data_dir: Directory containing features.csv and target.csv
-        
+        cache_dir: Directory to cache downloaded files
+        repo_id: HuggingFace repository ID
+    
     Returns:
-        tuple: (X, y) where X is features DataFrame and y is target Series
+        tuple: (X_train, X_val, X_test, y_train, y_val, y_test)
         
     Raises:
-        FileNotFoundError: If processed data files are not found
+        ImportError: If huggingface_hub is not installed
+        Exception: If splits cannot be loaded from HuggingFace
     """
-    print("📂 Loading data...")
-    data_dir = Path(data_dir)
-    X_path = data_dir / "features.csv"
-    y_path = data_dir / "target.csv"
-
-    if not X_path.exists() or not y_path.exists():
-        raise FileNotFoundError(
-            f"Processed data not found in {data_dir}. Run phase-1 preprocessing first."
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError:
+        raise ImportError(
+            "huggingface_hub library required. "
+            "Install with: pip install huggingface_hub"
         )
-
-    X = pd.read_csv(X_path)
-    y = pd.read_csv(y_path)
-    # support both columnar and single-column target files
-    if "target" in y.columns:
-        y = y["target"]
-    else:
-        y = y.iloc[:, 0]
-
-    print(f"✅ Loaded features: {X.shape}, target: {y.shape}")
-    print(f"   Class distribution: {y.value_counts().to_dict()}")
-    return X, y
-
-
-def run_preprocessing(preprocess_script: Path) -> None:
-    """Run preprocessing script to generate features and target files.
     
-    Args:
-        preprocess_script: Path to the preprocessing script to execute
-    """
-    print_section("🔄 Running Preprocessing", "-")
-    print(f"📂 Running: {preprocess_script}")
-    subprocess.run([sys.executable, str(preprocess_script)], check=True)
-    print("✅ Preprocessing completed")
+    print("\n" + "="*80)
+    print("📥 Loading Phase 1 Splits from HuggingFace")
+    print("="*80)
+    print(f"Repository: {repo_id}")
+    print(f"Cache directory: {cache_dir}")
+    
+    try:
+        # Download Phase 1 splits from HuggingFace
+        train_path = hf_hub_download(
+            repo_id=repo_id,
+            filename="splits/train.csv",
+            repo_type="dataset",
+            cache_dir=cache_dir
+        )
+        val_path = hf_hub_download(
+            repo_id=repo_id,
+            filename="splits/validation.csv",
+            repo_type="dataset",
+            cache_dir=cache_dir
+        )
+        test_path = hf_hub_download(
+            repo_id=repo_id,
+            filename="splits/test.csv",
+            repo_type="dataset",
+            cache_dir=cache_dir
+        )
+        
+        # Load into DataFrames
+        train_df = pd.read_csv(train_path)
+        val_df = pd.read_csv(val_path)
+        test_df = pd.read_csv(test_path)
+        
+        # Split features and target
+        # Phase 1 uses 'target' as the column name
+        target_col = 'target' if 'target' in train_df.columns else 'readmitted'
+        
+        X_train = train_df.drop(columns=[target_col])
+        y_train = train_df[target_col]
+        
+        X_val = val_df.drop(columns=[target_col])
+        y_val = val_df[target_col]
+        
+        X_test = test_df.drop(columns=[target_col])
+        y_test = test_df[target_col]
+        
+        print(f"✅ Successfully loaded Phase 1 splits:")
+        print(f"   Train: {X_train.shape} ({len(X_train):,} samples)")
+        print(f"   Validation: {X_val.shape} ({len(X_val):,} samples)")
+        print(f"   Test: {X_test.shape} ({len(X_test):,} samples)")
+        print(f"   Total: {len(X_train) + len(X_val) + len(X_test):,} samples")
+        print(f"\n📊 Class distributions:")
+        print(f"   Train: {dict(y_train.value_counts())}")
+        print(f"   Validation: {dict(y_val.value_counts())}")
+        print(f"   Test: {dict(y_test.value_counts())}")
+        print("="*80 + "\n")
+        
+        return X_train, X_val, X_test, y_train, y_val, y_test
+        
+    except Exception as e:
+        print(f"❌ Error loading Phase 1 splits: {e}")
+        print(f"   Make sure splits exist in HuggingFace repository")
+        print(f"   Expected location: splits/train.csv, splits/validation.csv, splits/test.csv")
+        raise
 
 
 # ============================================================================
