@@ -112,8 +112,8 @@ mkdir -p "${COLLECTION_DIR}/metrics"
 mkdir -p "${COLLECTION_DIR}/data_splits"
 mkdir -p "${COLLECTION_DIR}/visualizations/phase2_modeling"
 
-# Gradient Boosting has additional phases
-if [ "${METHOD}" = "gradient_boosting" ]; then
+# Gradient Boosting and Logistic Regression have additional phases
+if [[ "${METHOD}" = "gradient_boosting" || "${METHOD}" = "logistic_regression" ]]; then
     mkdir -p "${COLLECTION_DIR}/thresholds"
     mkdir -p "${COLLECTION_DIR}/visualizations/phase3_calibration"
     mkdir -p "${COLLECTION_DIR}/visualizations/phase4_threshold_optimization"
@@ -271,11 +271,14 @@ case "${METHOD}" in
         PHASE2_HF_REPO="auphong2707/hospital-readmission-rf"
         ;;
     logistic_regression)
-        MODEL_FILE="logistic_regression_model.joblib"
-        METRICS_FILE="Logistic_Regression_metrics.json"
-        FILE_PREFIX="Logistic_Regression"
+        MODEL_FILE="logistic_regression.pkl"
+        MODEL_FILE_HF="logistic_regression.pkl"
+        SCALER_FILE="logistic_regression_scaler.pkl"
+        METRICS_FILE="logistic_regression_metrics.json"
+        METRICS_FILE_HF="logistic_regression_metrics.json"
+        FILE_PREFIX="logistic_regression"
         DISPLAY_NAME="Logistic Regression"
-        PHASE2_HF_REPO="auphong2707/hospital-readmission-lr"
+        PHASE2_HF_REPO="auphong2707/hospital-readmission-logistic-regression"
         ;;
 esac
 
@@ -290,6 +293,15 @@ download_phase2_if_missing "${PROJECT_ROOT}/phase-2-risk-modeling/${METRICS_FILE
     "${METRICS_FILE_HF}" \
     "${DISPLAY_NAME} metrics" \
     "${PHASE2_HF_REPO}"
+
+# For logistic regression, also collect the scaler
+if [ "${METHOD}" = "logistic_regression" ]; then
+    download_phase2_if_missing "${PROJECT_ROOT}/models/${SCALER_FILE}" \
+        "${COLLECTION_DIR}/models/${SCALER_FILE}" \
+        "${SCALER_FILE}" \
+        "${DISPLAY_NAME} scaler" \
+        "${PHASE2_HF_REPO}"
+fi
 
 # Download or copy visualizations from HuggingFace
 # Map local file names to HF file names (HF uses lowercase snake_case)
@@ -331,7 +343,7 @@ done
 echo "  [x] Phase 2 visualizations (${VIZ_COUNT} plots)" | tee -a "${SUMMARY_FILE}"
 rm -rf "${COLLECTION_DIR}/temp" 2>/dev/null
 
-# Phase 3: Model Calibration (Gradient Boosting only)
+# Phase 3: Model Calibration (Gradient Boosting and Logistic Regression)
 if [ "${METHOD}" = "gradient_boosting" ]; then
     echo "" | tee -a "${SUMMARY_FILE}"
     echo "Phase 3 - Model Calibration:" | tee -a "${SUMMARY_FILE}"
@@ -351,23 +363,64 @@ if [ "${METHOD}" = "gradient_boosting" ]; then
     rm -rf "${COLLECTION_DIR}/temp" 2>/dev/null
 fi
 
-# Phase 4: Threshold Optimization (Gradient Boosting only)
-if [ "${METHOD}" = "gradient_boosting" ]; then
+if [ "${METHOD}" = "logistic_regression" ]; then
+    echo "" | tee -a "${SUMMARY_FILE}"
+    echo "Phase 3 - Model Calibration:" | tee -a "${SUMMARY_FILE}"
+    
+    PHASE3_HF_REPO="auphong2707/hospital-readmission-logistic-regression-calibrated"
+    
+    download_phase3_if_missing "${PROJECT_ROOT}/calibration_outputs/logistic_regression/logistic_regression_model_original.pkl" \
+        "${COLLECTION_DIR}/models/logistic_regression_model_original.pkl" \
+        "logistic_regression_model_original.pkl" \
+        "Original model"
+    download_phase3_if_missing "${PROJECT_ROOT}/calibration_outputs/logistic_regression/logistic_regression_scaler.pkl" \
+        "${COLLECTION_DIR}/models/logistic_regression_scaler.pkl" \
+        "logistic_regression_scaler.pkl" \
+        "Scaler"
+    download_phase3_if_missing "${PROJECT_ROOT}/calibration_outputs/logistic_regression/Logistic_Regression_calibrator.pkl" \
+        "${COLLECTION_DIR}/models/Logistic_Regression_calibrator.pkl" \
+        "Logistic_Regression_calibrator.pkl" \
+        "Platt calibrator"
+    download_phase3_if_missing "${PROJECT_ROOT}/calibration_outputs/logistic_regression/calibration_comparison_metrics.json" \
+        "${COLLECTION_DIR}/metrics/phase3_calibration_metrics.json" \
+        "calibration_comparison_metrics.json" \
+        "Calibration metrics"
+    download_phase3_if_missing "${PROJECT_ROOT}/calibration_outputs/logistic_regression/reliability_diagram_comparison.png" \
+        "${COLLECTION_DIR}/visualizations/phase3_calibration/reliability_diagram_comparison.png" \
+        "reliability_diagram_comparison.png" \
+        "Reliability diagram"
+    rm -rf "${COLLECTION_DIR}/temp" 2>/dev/null
+fi
+
+# Phase 4: Threshold Optimization (Gradient Boosting and Logistic Regression)
+if [[ "${METHOD}" = "gradient_boosting" || "${METHOD}" = "logistic_regression" ]]; then
     echo "" | tee -a "${SUMMARY_FILE}"
     echo "Phase 4 - Threshold Optimization:" | tee -a "${SUMMARY_FILE}"
     
-    copy_if_exists "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/outputs/optimal_thresholds.json" \
+    if [ "${METHOD}" = "gradient_boosting" ]; then
+        PHASE4_DIR="${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/outputs"
+    else
+        PHASE4_DIR="${PROJECT_ROOT}/phase-4-outputs/logistic_regression"
+    fi
+    
+    copy_if_exists "${PHASE4_DIR}/optimal_thresholds.json" \
         "${COLLECTION_DIR}/thresholds/optimal_thresholds.json" \
         "Optimal thresholds"
-    copy_if_exists "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/outputs/roi_metrics.json" \
+    copy_if_exists "${PHASE4_DIR}/roi_metrics.json" \
         "${COLLECTION_DIR}/metrics/phase4_roi_metrics.json" \
         "ROI metrics"
-    copy_if_exists "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/outputs/phase4_summary_for_phase5.json" \
+    copy_if_exists "${PHASE4_DIR}/phase4_summary_for_phase5.json" \
         "${COLLECTION_DIR}/metrics/phase4_summary.json" \
         "Phase 4 summary"
     
     # Copy Phase 4 visualizations
-    for viz in "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/visualizations"/*.png; do
+    if [ "${METHOD}" = "gradient_boosting" ]; then
+        VIZ_DIR="${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/visualizations"
+    else
+        VIZ_DIR="${PROJECT_ROOT}/phase-4-outputs/logistic_regression/visualizations"
+    fi
+    
+    for viz in "${VIZ_DIR}"/*.png; do
         if [ -f "${viz}" ]; then
             cp "${viz}" "${COLLECTION_DIR}/visualizations/phase4_threshold_optimization/"
             ((FILE_COUNT++))
@@ -376,32 +429,41 @@ if [ "${METHOD}" = "gradient_boosting" ]; then
     echo "  [x] Phase 4 visualizations (8 plots)" | tee -a "${SUMMARY_FILE}"
 fi
 
-# Phase 5: Fairness Evaluation (Gradient Boosting only)
-if [ "${METHOD}" = "gradient_boosting" ]; then
+# Phase 5: Fairness Evaluation (Gradient Boosting and Logistic Regression)
+if [[ "${METHOD}" = "gradient_boosting" || "${METHOD}" = "logistic_regression" ]]; then
     echo "" | tee -a "${SUMMARY_FILE}"
     echo "Phase 5 - Fairness Evaluation:" | tee -a "${SUMMARY_FILE}"
     
-    copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/fairness_report.json" \
+    if [ "${METHOD}" = "gradient_boosting" ]; then
+        PHASE5_DIR="${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs"
+    else
+        PHASE5_DIR="${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/logistic_regression"
+    fi
+    
+    copy_if_exists "${PHASE5_DIR}/fairness_report.json" \
         "${COLLECTION_DIR}/metrics/phase5_fairness_report.json" \
         "Fairness report"
-    copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/phase5_summary_for_phase6.json" \
-        "${COLLECTION_DIR}/metrics/phase5_summary.json" \
-        "Phase 5 summary"
-    copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/statistical_tests.json" \
+    copy_if_exists "${PHASE5_DIR}/statistical_tests.json" \
         "${COLLECTION_DIR}/metrics/phase5_statistical_tests.json" \
         "Statistical tests"
-    copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/group_metrics_race.csv" \
+    copy_if_exists "${PHASE5_DIR}/group_metrics_race.csv" \
         "${COLLECTION_DIR}/metrics/phase5_group_metrics_race.csv" \
         "Group metrics (race)"
-    copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/group_metrics_gender.csv" \
+    copy_if_exists "${PHASE5_DIR}/group_metrics_gender.csv" \
         "${COLLECTION_DIR}/metrics/phase5_group_metrics_gender.csv" \
         "Group metrics (gender)"
-    copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/group_metrics_age.csv" \
+    copy_if_exists "${PHASE5_DIR}/group_metrics_age_group.csv" \
         "${COLLECTION_DIR}/metrics/phase5_group_metrics_age.csv" \
         "Group metrics (age)"
     
     # Copy Phase 5 visualizations
-    for viz in "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/visualizations"/*.png; do
+    if [ "${METHOD}" = "gradient_boosting" ]; then
+        VIZ_DIR="${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/visualizations"
+    else
+        VIZ_DIR="${PHASE5_DIR}/visualizations"
+    fi
+    
+    for viz in "${VIZ_DIR}"/*.png; do
         if [ -f "${viz}" ]; then
             cp "${viz}" "${COLLECTION_DIR}/visualizations/phase5_fairness_evaluation/"
             ((FILE_COUNT++))
@@ -410,21 +472,30 @@ if [ "${METHOD}" = "gradient_boosting" ]; then
     echo "  [x] Phase 5 visualizations (~21 plots)" | tee -a "${SUMMARY_FILE}"
 fi
 
-# Phase 6: Fairness Mitigation (Gradient Boosting only, optional)
-if [ "${METHOD}" = "gradient_boosting" ]; then
+# Phase 6: Fairness Mitigation (Gradient Boosting and Logistic Regression, optional)
+if [[ "${METHOD}" = "gradient_boosting" || "${METHOD}" = "logistic_regression" ]]; then
     echo "" | tee -a "${SUMMARY_FILE}"
     echo "Phase 6 - Fairness Mitigation:" | tee -a "${SUMMARY_FILE}"
     
-    if [ -f "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs/group_thresholds.json" ]; then
-        copy_if_exists "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs/group_thresholds.json" \
+    if [ "${METHOD}" = "gradient_boosting" ]; then
+        PHASE6_DIR="${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs"
+    else
+        PHASE6_DIR="${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs/logistic_regression"
+    fi
+    
+    if [ -f "${PHASE6_DIR}/group_thresholds.json" ]; then
+        copy_if_exists "${PHASE6_DIR}/group_thresholds.json" \
             "${COLLECTION_DIR}/thresholds/group_thresholds.json" \
             "Group-specific thresholds"
-        copy_if_exists "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs/mitigation_impact.json" \
+        copy_if_exists "${PHASE6_DIR}/mitigation_impact.json" \
             "${COLLECTION_DIR}/metrics/phase6_mitigation_impact.json" \
             "Mitigation impact"
+        copy_if_exists "${PHASE6_DIR}/tradeoff_analysis.json" \
+            "${COLLECTION_DIR}/metrics/phase6_tradeoff_analysis.json" \
+            "Trade-off analysis"
         
         # Copy Phase 6 visualizations
-        for viz in "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs/visualizations"/*.png; do
+        for viz in "${PHASE6_DIR}/visualizations"/*.png; do
             if [ -f "${viz}" ]; then
                 cp "${viz}" "${COLLECTION_DIR}/visualizations/phase6_fairness_mitigation/"
                 ((FILE_COUNT++))

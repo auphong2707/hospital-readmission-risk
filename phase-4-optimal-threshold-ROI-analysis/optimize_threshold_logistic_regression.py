@@ -214,6 +214,8 @@ def load_logistic_regression_calibrated(model_repo_id, cache_dir, force_download
     
     # Try HuggingFace Hub
     try:
+        from huggingface_hub import hf_hub_download
+        
         print(f"⏳ Attempting to download from HuggingFace Hub: {model_repo_id}")
         model, calibrator = load_calibrated_model(
             repo_id=model_repo_id,
@@ -221,16 +223,23 @@ def load_logistic_regression_calibrated(model_repo_id, cache_dir, force_download
             force_download=force_download
         )
         
-        # Load scaler (should be in same location)
-        scaler_path = Path(cache_dir) / "logistic_regression_scaler.pkl"
-        if scaler_path.exists():
+        # Download scaler from HuggingFace Hub
+        print(f"⏳ Downloading scaler from HuggingFace Hub...")
+        try:
+            scaler_path = hf_hub_download(
+                repo_id=model_repo_id,
+                filename="logistic_regression_scaler.pkl",
+                cache_dir=cache_dir,
+                force_download=force_download
+            )
             with open(scaler_path, 'rb') as f:
                 scaler = pickle.load(f)
-            print(f"   ✅ Scaler loaded")
-        else:
+            print(f"   ✅ Scaler downloaded from HuggingFace Hub")
+        except Exception as scaler_error:
+            print(f"   ⚠️  Could not download scaler: {scaler_error}")
+            print(f"   ⚠️  Creating new unfitted StandardScaler (predictions may be incorrect!)")
             from sklearn.preprocessing import StandardScaler
             scaler = StandardScaler()
-            print(f"   ⚠️  Scaler not found, created new StandardScaler")
         
         return model, scaler, calibrator
         
