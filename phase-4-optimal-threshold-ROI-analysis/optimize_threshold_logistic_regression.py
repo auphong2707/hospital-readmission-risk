@@ -219,6 +219,7 @@ def load_logistic_regression_calibrated(model_repo_id, cache_dir, force_download
         print(f"⏳ Attempting to download from HuggingFace Hub: {model_repo_id}")
         model, calibrator = load_calibrated_model(
             repo_id=model_repo_id,
+            method="logistic_regression",
             cache_dir=cache_dir,
             force_download=force_download
         )

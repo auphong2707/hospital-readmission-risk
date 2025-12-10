@@ -257,6 +257,7 @@ def load_phase1_splits(
 
 def load_calibrated_model(
     repo_id: str,
+    method: str = "gradient_boosting",
     cache_dir: str = "./models/downloaded",
     force_download: bool = False
 ) -> Tuple[Any, Any]:
@@ -266,13 +267,17 @@ def load_calibrated_model(
     uploaded to HuggingFace Hub in Phase 3. This ensures consistent model artifacts
     across all phases.
     
-    Phase 3 uploads:
+    Phase 3 uploads (Gradient Boosting):
     - gradient_boosting_model_original.joblib: The base LightGBM model
     - Gradient_Boosting_(LightGBM)_calibrator.pkl: The Platt calibrator
-    - Calibration metrics and visualizations
+    
+    Phase 3 uploads (Logistic Regression):
+    - logistic_regression_model_original.pkl: The base Logistic Regression model
+    - Logistic_Regression_calibrator.pkl: The Platt calibrator
     
     Args:
-        repo_id: HuggingFace repository ID for calibrated model (e.g., 'username/hospital-readmission-lgbm-calibrated')
+        repo_id: HuggingFace repository ID for calibrated model
+        method: Model type ('gradient_boosting' or 'logistic_regression')
         cache_dir: Directory to cache downloaded files
         force_download: If True, re-download even if files exist locally
         
@@ -285,7 +290,8 @@ def load_calibrated_model(
         
     Example:
         >>> model, calibrator = load_calibrated_model(
-        ...     repo_id='your-username/hospital-readmission-lgbm-calibrated'
+        ...     repo_id='your-username/hospital-readmission-lgbm-calibrated',
+        ...     method='gradient_boosting'
         ... )
         >>> # Use for predictions
         >>> y_pred = model.predict_proba(X_test)[:, 1]
@@ -299,18 +305,31 @@ def load_calibrated_model(
             "Install with: pip install huggingface_hub"
         )
     
+    # Determine filenames based on method
+    if method == "gradient_boosting":
+        model_filename = "gradient_boosting_model_original.joblib"
+        calibrator_filename = "Gradient_Boosting_(LightGBM)_calibrator.pkl"
+        loader_func = joblib.load
+    elif method == "logistic_regression":
+        model_filename = "logistic_regression_model_original.pkl"
+        calibrator_filename = "Logistic_Regression_calibrator.pkl"
+        loader_func = lambda path: pickle.load(open(path, 'rb'))
+    else:
+        raise ValueError(f"Unknown method: {method}. Must be 'gradient_boosting' or 'logistic_regression'")
+    
     print("\n" + "="*80)
     print("📥 Loading Calibrated Model from HuggingFace Hub")
     print("="*80)
     print(f"Repository: {repo_id}")
+    print(f"Method: {method}")
     print(f"Cache directory: {cache_dir}")
     
     try:
         # Download model file
-        print(f"\n⏳ Downloading original model...")
+        print(f"\n⏳ Downloading original model ({model_filename})...")
         model_path = hf_hub_download(
             repo_id=repo_id,
-            filename="gradient_boosting_model_original.joblib",
+            filename=model_filename,
             cache_dir=cache_dir,
             force_download=force_download
         )
@@ -318,14 +337,14 @@ def load_calibrated_model(
         
         # Load model
         print(f"⏳ Loading model...")
-        model = joblib.load(model_path)
+        model = loader_func(model_path)
         print(f"✅ Model loaded successfully")
         
         # Download calibrator file
-        print(f"\n⏳ Downloading Platt calibrator...")
+        print(f"\n⏳ Downloading Platt calibrator ({calibrator_filename})...")
         calibrator_path = hf_hub_download(
             repo_id=repo_id,
-            filename="Gradient_Boosting_(LightGBM)_calibrator.pkl",
+            filename=calibrator_filename,
             cache_dir=cache_dir,
             force_download=force_download
         )
