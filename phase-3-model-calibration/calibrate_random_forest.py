@@ -64,6 +64,114 @@ from utilities import (
 warnings.filterwarnings('ignore')
 
 
+def download_rf_model_from_hf(
+    repo_id: str = "auphong2707/hospital-readmission-rf",
+    cache_dir: str = "./models/downloaded",
+    force_download: bool = False
+):
+    """
+    Download Random Forest model from HuggingFace Hub.
+    
+    Wrapper around download_model_from_hf that uses correct filenames for RF model.
+    """
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError:
+        raise ImportError("huggingface_hub required. Install: pip install huggingface_hub")
+    
+    print(f"\n{'='*80}")
+    print(f"📥 Downloading Random Forest Model from HuggingFace Hub")
+    print(f"{'='*80}")
+    print(f"Repository: {repo_id}")
+    
+    cache_path = Path(cache_dir)
+    cache_path.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        # Download model
+        print(f"⏳ Downloading model file...")
+        model_path = hf_hub_download(
+            repo_id=repo_id,
+            filename="random_forest_model.joblib",
+            cache_dir=cache_dir,
+            force_download=force_download
+        )
+        print(f"✅ Model downloaded: {model_path}")
+        
+        print(f"⏳ Loading model...")
+        try:
+            model = joblib.load(model_path)
+            print(f"✅ Model loaded successfully")
+        except (ValueError, AttributeError) as e:
+            error_msg = str(e)
+            if "missing_go_to_left" in error_msg or "monotonic_cst" in error_msg:
+                print(f"⚠️  sklearn version mismatch detected")
+                print(f"   Error: {error_msg[:100]}...")
+                print(f"\n💡 Solution: Upgrade scikit-learn in your environment:")
+                print(f"   !pip install --upgrade 'scikit-learn>=1.5.0'")
+                print(f"   Then restart kernel and re-run this script")
+                raise RuntimeError(
+                    f"Sklearn version incompatibility. "
+                    f"Model trained with sklearn>=1.5, but current version is older. "
+                    f"Run: pip install --upgrade 'scikit-learn>=1.5.0'"
+                ) from e
+            else:
+                raise
+        
+        # Download training summary
+        summary = {}
+        try:
+            print(f"⏳ Downloading training summary...")
+            summary_path = hf_hub_download(
+                repo_id=repo_id,
+                filename="training_summary.json",
+                cache_dir=cache_dir,
+                force_download=force_download
+            )
+            with open(summary_path, 'r') as f:
+                summary = json.load(f)
+            print(f"✅ Summary downloaded")
+            
+            print(f"\n📊 Model Information:")
+            print(f"   Model: {summary.get('model', 'N/A')}")
+            print(f"   Training Date: {summary.get('timestamp', 'N/A')}")
+            if 'cross_validation' in summary:
+                cv = summary['cross_validation']
+                print(f"   CV ROC-AUC: {cv.get('mean_roc_auc', 'N/A'):.4f} ± {cv.get('std_roc_auc', 'N/A'):.4f}")
+            if 'final_test_metrics' in summary:
+                test = summary['final_test_metrics']
+                print(f"   Test ROC-AUC: {test.get('roc_auc', 'N/A'):.4f}")
+        except Exception as e:
+            print(f"⚠️  Could not download summary: {e}")
+        
+        # Try to download metrics (optional - RF uses different filename)
+        try:
+            print(f"⏳ Downloading metrics file...")
+            metrics_path = hf_hub_download(
+                repo_id=repo_id,
+                filename="random_forest_metrics.json",
+                cache_dir=cache_dir,
+                force_download=force_download
+            )
+            print(f"✅ Metrics downloaded")
+        except Exception:
+            pass  # Metrics file is optional
+        
+        print(f"\n{'='*80}")
+        print(f"✅ Download Complete!")
+        print(f"{'='*80}\n")
+        
+        return model, summary
+        
+    except Exception as e:
+        print(f"\n❌ Error: {e}")
+        print(f"\nTroubleshooting:")
+        print(f"1. Check repository: https://huggingface.co/{repo_id}")
+        print(f"2. Verify model file exists: random_forest_model.joblib")
+        print(f"3. Try with --force-download")
+        raise
+
+
 def print_section(title: str, char: str = "=", width: int = 80):
     """Print formatted section header.
     
@@ -512,9 +620,8 @@ Examples:
     try:
         # STEP 1: Download model from HuggingFace Hub
         print_section("📥 Step 1: Download Pre-trained Model", "=")
-        model, training_summary = download_model_from_hf(
+        model, training_summary = download_rf_model_from_hf(
             repo_id=args.repo_id,
-            model_filename="random_forest_model.joblib",
             cache_dir="./models/downloaded",
             force_download=args.force_download
         )
