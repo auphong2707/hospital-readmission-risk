@@ -189,7 +189,9 @@ def load_logistic_regression_model(repo_id: str, cache_dir: str = "./models/down
         print(f"   Attempting to download from HuggingFace Hub: {repo_id}")
         
         try:
-            # Try downloading from HuggingFace
+            from huggingface_hub import hf_hub_download
+            
+            # Download model
             model, training_summary = download_model_from_hf(
                 repo_id=repo_id,
                 model_filename="logistic_regression.pkl",
@@ -197,16 +199,26 @@ def load_logistic_regression_model(repo_id: str, cache_dir: str = "./models/down
                 force_download=force_download
             )
             
-            # Try to load scaler
-            scaler_hf_path = Path(cache_dir) / "logistic_regression_scaler.pkl"
-            if scaler_hf_path.exists():
-                with open(scaler_hf_path, 'rb') as f:
+            # Download scaler from HuggingFace Hub
+            print(f"\n⏳ Downloading scaler from HuggingFace Hub...")
+            try:
+                scaler_path = hf_hub_download(
+                    repo_id=repo_id,
+                    filename="logistic_regression_scaler.pkl",
+                    cache_dir=cache_dir,
+                    force_download=force_download
+                )
+                
+                with open(scaler_path, 'rb') as f:
                     scaler = pickle.load(f)
-                print(f"   ✅ Scaler downloaded")
-            else:
+                print(f"   ✅ Scaler downloaded from HuggingFace Hub")
+                
+            except Exception as scaler_error:
+                print(f"   ⚠️  Could not download scaler from HuggingFace: {scaler_error}")
+                print(f"   ⚠️  Creating new unfitted StandardScaler (predictions may be incorrect!)")
+                print(f"   💡 Please ensure Phase 2 completed successfully and uploaded scaler")
                 from sklearn.preprocessing import StandardScaler
                 scaler = StandardScaler()
-                print(f"   ⚠️  Scaler not found in HF, created new StandardScaler")
             
             return model, scaler, training_summary
             

@@ -262,7 +262,7 @@ class LogisticRegressionTrainer:
     
     def save_model(self, output_dir="./models", include_metadata=True):
         """
-        Save trained model with metadata.
+        Save trained model with metadata and scaler.
         
         Args:
             output_dir: Directory to save the model
@@ -279,6 +279,14 @@ class LogisticRegressionTrainer:
             pickle.dump(self.best_model, f)
         
         print(f"\n✅ Model saved to: {model_path}")
+        
+        # Save scaler (CRITICAL for Phase 3 calibration)
+        scaler_filename = f"logistic_regression_scaler.pkl"
+        scaler_path = os.path.join(output_dir, scaler_filename)
+        with open(scaler_path, 'wb') as f:
+            pickle.dump(self.scaler, f)
+        
+        print(f"✅ Scaler saved to: {scaler_path}")
         
         # Save metadata
         if include_metadata:
