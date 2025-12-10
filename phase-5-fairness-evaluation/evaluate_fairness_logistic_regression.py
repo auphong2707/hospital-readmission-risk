@@ -156,7 +156,7 @@ def parse_arguments():
     parser.add_argument(
         '--phase4-summary',
         type=str,
-        default='./phase-4-outputs/logistic_regression/phase4_summary_for_phase5.json',
+        default='./phase-4-optimal-threshold-ROI-analysis/outputs/logistic_regression/phase4_summary_for_phase5.json',
         help='Path to Phase 4 summary JSON'
     )
     
