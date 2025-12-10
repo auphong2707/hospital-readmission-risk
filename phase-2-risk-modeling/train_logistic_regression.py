@@ -50,6 +50,13 @@ from sklearn.metrics import make_scorer, roc_auc_score
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # Load .env file if it exists
+except ImportError:
+    pass  # dotenv not installed, will use system environment variables
+
 # Import utilities
 from utilities import (
     calculate_comprehensive_metrics,
@@ -628,63 +635,59 @@ def main():
         json.dump(training_summary, f, indent=2)
     print(f"✅ Training summary saved: {summary_json_path}")
     
-    # Auto-upload to HuggingFace if token is available
-    hf_url = None
-    hf_token_from_env = os.getenv('HF_TOKEN')
-    hf_username = os.getenv('HF_USERNAME', 'auphong2707')
+    # Auto-upload to HuggingFace Hub
+    print_section("📤 Uploading to HuggingFace Hub", "-")
     
-    if hf_token_from_env:
-        print_section("🚀 HuggingFace Upload", "-")
-        
-        # Prepare summary for upload
-        summary = {
-            'model': 'Logistic Regression',
-            'task': 'Hospital 30-Day Readmission Risk Prediction',
-            'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
-            'environment': environment,
-            'evaluation_pipeline': {
-                'description': 'Robust nested CV with final holdout and validation monitoring',
-                'final_holdout_size': args.val_size,
-                'k_folds': args.n_splits,
-                'cv_strategy': 'StratifiedKFold'
-            },
-            'data': {
-                'total_samples': total_samples,
-                'development_size': len(X_development),
-                'dev_train_size': len(X_dev_train),
-                'dev_val_size': len(X_dev_val),
-                'final_test_size': len(X_final_test),
-                'n_features': len(trainer.feature_names)
-            },
-            'best_params': best_params,
-            'cross_validation': {
-                'mean_roc_auc': float(mean_score),
-                'std_roc_auc': float(std_score),
-                'fold_scores': [float(s) for s in fold_scores],
-                'n_folds': args.n_splits
-            },
-            'validation_monitoring': {
-                'dev_val_auc': float(dev_val_auc)
-            },
-            'final_test_metrics': final_metrics,
-            'total_time_seconds': total_time,
-            'random_state': args.random_state
-        }
-        
-        # Upload to HuggingFace
-        upload_success = upload_results_to_hf(
-            summary=summary,
-            output_dir=str(output_dir),
-            model_name="hospital-readmission-logistic-regression"
-        )
-        
-        if upload_success:
-            hf_repo_id = f"{hf_username}/hospital-readmission-logistic-regression"
-            hf_url = f"https://huggingface.co/{hf_repo_id}"
-    else:
-        print_section("ℹ️  No HuggingFace Token Found - Skipping Upload", "-")
-        print("To enable auto-upload, set HF_TOKEN environment variable.")
-        print("Get your token from: https://huggingface.co/settings/tokens")
+    hf_url = None
+    
+    # Prepare summary for upload
+    summary = {
+        'model': 'Logistic Regression',
+        'task': 'Hospital 30-Day Readmission Risk Prediction',
+        'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
+        'environment': environment,
+        'evaluation_pipeline': {
+            'description': 'Robust nested CV with final holdout and validation monitoring',
+            'final_holdout_size': args.val_size,
+            'k_folds': args.n_splits,
+            'cv_strategy': 'StratifiedKFold'
+        },
+        'data': {
+            'total_samples': total_samples,
+            'development_size': len(X_development),
+            'dev_train_size': len(X_dev_train),
+            'dev_val_size': len(X_dev_val),
+            'final_test_size': len(X_final_test),
+            'n_features': len(trainer.feature_names)
+        },
+        'best_params': best_params,
+        'cross_validation': {
+            'mean_roc_auc': float(mean_score),
+            'std_roc_auc': float(std_score),
+            'fold_scores': [float(s) for s in fold_scores],
+            'n_folds': args.n_splits
+        },
+        'validation_monitoring': {
+            'dev_val_auc': float(dev_val_auc)
+        },
+        'final_test_metrics': final_metrics,
+        'total_time_seconds': total_time,
+        'random_state': args.random_state
+    }
+    
+    # Upload to HuggingFace (will automatically check for HF_TOKEN and load .env)
+    upload_success = upload_results_to_hf(
+        summary=summary,
+        output_dir=str(output_dir),
+        model_name="hospital-readmission-logistic-regression"
+    )
+    
+    if upload_success:
+        hf_username = os.getenv('HF_USERNAME', 'auphong2707')
+        hf_repo_id = f"{hf_username}/hospital-readmission-logistic-regression"
+        hf_url = f"https://huggingface.co/{hf_repo_id}"
+        print(f"\n✅ Successfully uploaded to HuggingFace Hub!")
+        print(f"🌐 View at: {hf_url}")
     
     # Final summary
     print_section("✅ TRAINING COMPLETE!", "=")
