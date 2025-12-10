@@ -39,10 +39,14 @@ HuggingFace Model:
 """
 
 import argparse
-import sys
 import warnings
 from pathlib import Path
 import json
+
+import sys
+sys.path.insert(0, "/kaggle/working")
+sys.path.insert(0, "/usr/local/lib/python3.11/dist-packages")
+# -----------------------------------------------
 
 import numpy as np
 import pandas as pd
