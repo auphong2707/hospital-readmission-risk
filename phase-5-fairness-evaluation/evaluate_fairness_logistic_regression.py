@@ -417,23 +417,29 @@ def main():
         
         # STEP 7: Fairness metrics
         print_section("⚖️  Step 7: Compute Fairness Metrics", "=")
-        fairness_calculator = FairnessMetrics()
-        fairness_results = fairness_calculator.compute_all_fairness_metrics(
-            y_test, y_pred, y_pred_proba, demographics, optimal_threshold
-        )
+        fairness_results = FairnessMetrics.compute_all_fairness_metrics(group_metrics)
         
         # STEP 8: Statistical significance testing
         print_section("📊 Step 8: Statistical Significance Testing", "=")
-        tester = StatisticalTester()
-        statistical_tests = tester.run_all_tests(
-            y_test, y_pred, demographics, group_metrics
-        )
+        statistical_tests = {}
+        for attribute in group_metrics.keys():
+            print(f"\n🔬 {attribute.upper()} Statistical Tests:")
+            
+            # Chi-square test for intervention rate
+            chi2_result = StatisticalTester.chi_square_test_intervention_rate(
+                y_pred, demographics, attribute
+            )
+            statistical_tests[f'{attribute}_chi2'] = chi2_result
+            
+            print(f"   Chi-square test (intervention rate):")
+            print(f"      χ² = {chi2_result['chi2_statistic']:.2f}, p-value = {chi2_result['p_value']:.4f}")
+            print(f"      Result: {chi2_result['interpretation']}")
         
         # Save statistical tests
         tests_path = output_dir / "statistical_tests.json"
         with open(tests_path, 'w') as f:
             json.dump(statistical_tests, f, indent=2)
-        print(f"✅ Statistical tests saved: {tests_path}")
+        print(f"\n✅ Statistical tests saved: {tests_path}")
         
         # STEP 9: Risk category analysis
         print_section("🎯 Step 9: Risk Category Distribution Analysis", "=")
