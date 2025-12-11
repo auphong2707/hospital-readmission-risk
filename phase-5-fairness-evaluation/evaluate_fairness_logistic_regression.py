@@ -549,38 +549,58 @@ def main():
         # STEP 11: Create comprehensive fairness report
         print_section("📄 Step 11: Generate Fairness Report", "=")
         
+        # Assess overall fairness based on individual fairness metrics
+        fairness_passed = True
+        for attribute, metrics in fairness_results.items():
+            for metric_name, metric_data in metrics.items():
+                if isinstance(metric_data, dict) and 'passed' in metric_data:
+                    if not metric_data['passed']:
+                        fairness_passed = False
+                        break
+            if not fairness_passed:
+                break
+        
         fairness_report = {
             'model_type': 'Logistic Regression',
             'evaluation_date': pd.Timestamp.now().isoformat(),
             'test_set_size': len(y_test),
             'optimal_threshold': optimal_threshold,
+            'risk_thresholds': risk_thresholds,
             'overall_metrics': overall_metrics,
-            'group_metrics': {k: {g: m for g, m in v.items()} for k, v in group_metrics.items()},
+            'group_metrics': {k: v.to_dict(orient='records') if isinstance(v, pd.DataFrame) else v 
+                             for k, v in group_metrics.items()},
             'fairness_metrics': fairness_results,
             'statistical_tests': statistical_tests,
             'deployment_readiness': {
                 'overall_performance': 'PASS' if overall_metrics['roc_auc'] > 0.7 else 'FAIL',
-                'fairness_assessment': 'PASS' if fairness_results['summary']['overall_fairness_status'] == 'PASS' else 'FAIL',
-                'recommendation': 'APPROVED' if (overall_metrics['roc_auc'] > 0.7 and fairness_results['summary']['overall_fairness_status'] == 'PASS') else 'NEEDS REVIEW'
+                'fairness_assessment': 'PASS' if fairness_passed else 'NEEDS REVIEW',
+                'recommendation': 'APPROVED' if (overall_metrics['roc_auc'] > 0.7 and fairness_passed) else 'NEEDS REVIEW'
             }
         }
         
+        # Convert to JSON-serializable format
+        fairness_report_serializable = convert_to_serializable(fairness_report)
+        
         report_path = output_dir / "fairness_report.json"
         with open(report_path, 'w') as f:
-            json.dump(fairness_report, f, indent=2)
+            json.dump(fairness_report_serializable, f, indent=2)
         print(f"✅ Fairness report saved: {report_path}")
         
         # STEP 12: Upload to HuggingFace Hub
         print_section("📤 Step 12: Upload to HuggingFace Hub", "=")
         
-        upload_success = upload_results_to_hf(
-            summary=fairness_report,
-            output_dir=str(output_dir),
-            model_name="hospital-readmission-logistic-regression-fairness-results"
-        )
-        
-        if upload_success:
+        try:
+            repo_url = upload_results_to_hf(
+                output_dir=str(output_dir),
+                repo_id="auphong2707/hospital-readmission-logistic-regression-fairness-results",
+                commit_message="Phase 5: Fairness evaluation for Logistic Regression model",
+                include_visualizations=True
+            )
             print(f"\n✅ Successfully uploaded to HuggingFace Hub!")
+            print(f"🌐 View results at: {repo_url}")
+        except Exception as e:
+            print(f"\n⚠️  Upload to HuggingFace failed: {e}")
+            print(f"💡 Results are still saved locally in {output_dir}")
         
         # FINAL SUMMARY
         print_section("✨ Fairness Evaluation Complete!", "=")
