@@ -435,9 +435,7 @@ def main():
         }
         
         thresholds_path = output_dir / "group_thresholds.json"
-        with open(thresholds_path, 'w') as f:
-            json.dump(thresholds_output, f, indent=2)
-        print(f"\n✅ Group thresholds saved: {thresholds_path}")
+        save_results(thresholds_output, str(thresholds_path))
         
         # STEP 6: Evaluate mitigation impact
         print("\n" + "="*80)
@@ -452,9 +450,7 @@ def main():
         
         # Save mitigation impact
         impact_path = output_dir / "mitigation_impact.json"
-        with open(impact_path, 'w') as f:
-            json.dump(mitigation_results, f, indent=2)
-        print(f"✅ Mitigation impact saved: {impact_path}")
+        save_results(mitigation_results, str(impact_path))
         
         # STEP 7: Trade-off analysis
         print("\n" + "="*80)
@@ -468,9 +464,7 @@ def main():
         
         # Save tradeoff analysis
         tradeoff_path = output_dir / "tradeoff_analysis.json"
-        with open(tradeoff_path, 'w') as f:
-            json.dump(tradeoff_results, f, indent=2)
-        print(f"✅ Trade-off analysis saved: {tradeoff_path}")
+        save_results(tradeoff_results, str(tradeoff_path))
         
         # STEP 8: Generate visualizations
         print("\n" + "="*80)
