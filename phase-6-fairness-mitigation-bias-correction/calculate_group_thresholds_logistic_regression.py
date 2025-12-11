@@ -369,6 +369,21 @@ def main():
         y_pred_proba = generate_lr_predictions(model, scaler, calibrator, X_test)
         print(f"✅ Generated {len(y_pred_proba)} calibrated predictions")
         
+        # STEP 4b: Evaluate Baseline (Global Threshold)
+        print("\n" + "="*80)
+        print("Step 4b: Evaluate Baseline with Global Threshold")
+        print("="*80)
+        
+        phase4_results = phase5_report.get('phase4_results', None)
+        evaluator = MitigationEvaluator(phase4_results=phase4_results)
+        
+        baseline = evaluator.evaluate_baseline(
+            y_true=y_test.values,
+            y_pred_proba=y_pred_proba,
+            demographics=demographics,
+            global_threshold=global_threshold
+        )
+        
         # STEP 5: Calculate group-specific thresholds
         print("\n" + "="*80)
         print("Step 5: Calculate Group-Specific Thresholds (Equalized Odds)")
@@ -437,85 +452,69 @@ def main():
         thresholds_path = output_dir / "group_thresholds.json"
         save_results(thresholds_output, str(thresholds_path))
         
-        # STEP 6: Evaluate mitigation impact
+        # STEP 6: Evaluate Mitigated (Group-Specific Thresholds)
         print("\n" + "="*80)
-        print("Step 6: Evaluate Mitigation Impact")
+        print("Step 6: Evaluate with Group-Specific Thresholds")
         print("="*80)
         
-        evaluator = MitigationEvaluator()
-        mitigation_results = evaluator.evaluate_mitigation_impact(
-            y_test, y_pred_proba, demographics, 
-            optimal_threshold, group_thresholds
+        mitigated = evaluator.evaluate_mitigated(
+            y_true=y_test.values,
+            y_pred_proba=y_pred_proba,
+            demographics=demographics,
+            group_thresholds=group_thresholds
         )
+        
+        # STEP 7: Analyze Trade-offs
+        print("\n" + "="*80)
+        print("Step 7: Analyze Performance/Fairness/ROI Trade-offs")
+        print("="*80)
+        
+        improvements = TradeoffAnalyzer.calculate_improvements(baseline, mitigated)
         
         # Save mitigation impact
-        impact_path = output_dir / "mitigation_impact.json"
-        save_results(mitigation_results, str(impact_path))
-        
-        # STEP 7: Trade-off analysis
-        print("\n" + "="*80)
-        print("Step 7: Performance-Fairness Trade-off Analysis")
-        print("="*80)
-        
-        tradeoff_analyzer = TradeoffAnalyzer()
-        tradeoff_results = tradeoff_analyzer.analyze_tradeoffs(
-            mitigation_results, phase5_report
-        )
-        
-        # Save tradeoff analysis
-        tradeoff_path = output_dir / "tradeoff_analysis.json"
-        save_results(tradeoff_results, str(tradeoff_path))
-        
-        # STEP 8: Generate visualizations
-        print("\n" + "="*80)
-        print("Step 8: Generate Mitigation Visualizations")
-        print("="*80)
-        
-        viz_dir = output_dir / "visualizations"
-        viz_dir.mkdir(exist_ok=True)
-        
-        visualizer = MitigationVisualizer(str(viz_dir))
-        
-        # Before/after comparison plots
-        for attribute in ['race', 'gender', 'age_group']:
-            if attribute in group_thresholds:
-                visualizer.plot_before_after_comparison(
-                    mitigation_results['before'][attribute],
-                    mitigation_results['after'][attribute],
-                    attribute
+        mitigation_impact = {
+            'phase': 6,
+            'mitigation_strategy': 'equalized_odds',
+            'baseline_metrics': baseline,
+            'mitigated_metrics': mitigated,
+            'improvements': improvements,
+            'summary': {
+                'fairness_targets_met': improvements['summary']['fairness_targets_met'],
+                'performance_drop_acceptable': improvements['summary']['performance_drop_acceptable'],
+                'roi_reduction_acceptable': improvements['summary']['roi_reduction_acceptable'],
+                'recommended_for_deployment': (
+                    improvements['summary']['fairness_targets_met'] and
+                    improvements['summary']['performance_drop_acceptable'] and
+                    improvements['summary']['roi_reduction_acceptable']
                 )
+            }
+        }
         
-        # Threshold comparison
-        visualizer.plot_threshold_comparison(group_thresholds, optimal_threshold)
+        impact_path = output_dir / "mitigation_impact.json"
+        save_results(mitigation_impact, str(impact_path))
         
-        # Fairness improvement
-        visualizer.plot_fairness_improvement(
-            mitigation_results['fairness_improvement']
+        # STEP 8: Generate Visualizations
+        print("\n" + "="*80)
+        print("Step 8: Generate Visualizations")
+        print("="*80)
+        
+        MitigationVisualizer.generate_all_visualizations(
+            baseline=baseline,
+            mitigated=mitigated,
+            improvements=improvements,
+            output_dir=str(output_dir)
         )
-        
-        print(f"✅ All visualizations saved to: {viz_dir}")
         
         # STEP 9: Upload to HuggingFace Hub
         print("\n" + "="*80)
         print("Step 9: Upload to HuggingFace Hub")
         print("="*80)
         
-        summary = {
-            'model_type': 'Logistic Regression',
-            'mitigation_strategy': 'Equalized Odds',
-            'group_thresholds': group_thresholds,
-            'mitigation_results': mitigation_results,
-            'tradeoff_analysis': tradeoff_results
-        }
-        
-        upload_success = upload_results_to_hf(
-            summary=summary,
+        upload_results_to_hf(
             output_dir=str(output_dir),
-            model_name="hospital-readmission-logistic-regression-fairness-mitigation"
+            repo_id=args.repo_id,
+            commit_message="Upload Phase 6 Logistic Regression fairness mitigation results"
         )
-        
-        if upload_success:
-            print(f"\n✅ Successfully uploaded to HuggingFace Hub!")
         
         # FINAL SUMMARY
         print("\n" + "="*80)
@@ -526,25 +525,20 @@ def main():
         print(f"\n📊 Key Results:")
         print(f"   Mitigation strategy: Equalized Odds")
         print(f"   Attributes mitigated: {', '.join(group_thresholds.keys())}")
-        
-        # Print fairness improvement summary
-        if 'summary' in mitigation_results['fairness_improvement']:
-            improvement = mitigation_results['fairness_improvement']['summary']
-            print(f"\n   Fairness Improvement:")
-            print(f"      TPR gap reduction: {improvement.get('tpr_gap_reduction', 0):.2%}")
-            print(f"      FPR gap reduction: {improvement.get('fpr_gap_reduction', 0):.2%}")
+        print(f"   Fairness targets met: {mitigation_impact['summary']['fairness_targets_met']}")
+        print(f"   Performance drop acceptable: {mitigation_impact['summary']['performance_drop_acceptable']}")
+        print(f"   ROI reduction acceptable: {mitigation_impact['summary']['roi_reduction_acceptable']}")
+        print(f"   Recommended for deployment: {mitigation_impact['summary']['recommended_for_deployment']}")
         
         print(f"\n📄 Generated Files:")
         print(f"   - group_thresholds.json")
         print(f"   - mitigation_impact.json")
-        print(f"   - tradeoff_analysis.json")
         print(f"   - visualizations/ (before/after charts)")
         
         print(f"\n🚀 Next Steps:")
         print(f"   1. Review mitigation impact: {impact_path}")
-        print(f"   2. Examine trade-off analysis: {tradeoff_path}")
-        print(f"   3. Review visualizations in: {viz_dir}")
-        print(f"   4. Proceed to Phase 7: Results Collection & Publication")
+        print(f"   2. Review visualizations in: {output_dir}/visualizations/")
+        print(f"   3. Proceed to Phase 7: Results Collection & Publication")
         
         print(f"\n{'='*80}")
         print("🎉 Fairness mitigation complete!")
