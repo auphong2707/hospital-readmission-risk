@@ -512,7 +512,7 @@ def main():
         
         upload_results_to_hf(
             output_dir=str(output_dir),
-            repo_id=args.repo_id,
+            repo_id=args.model_repo_id,
             commit_message="Upload Phase 6 Logistic Regression fairness mitigation results"
         )
         
