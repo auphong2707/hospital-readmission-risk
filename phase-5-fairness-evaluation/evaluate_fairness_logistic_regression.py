@@ -462,16 +462,70 @@ def main():
         
         # STEP 9: Risk category analysis
         print_section("🎯 Step 9: Risk Category Distribution Analysis", "=")
+        
+        # Create risk categories based on Phase 4 thresholds
+        low_threshold = risk_thresholds['low']
+        high_threshold = risk_thresholds['high']
+        
+        risk_categories = np.full(len(y_pred_proba), 'Medium')
+        risk_categories[y_pred_proba < low_threshold] = 'Low'
+        risk_categories[y_pred_proba >= high_threshold] = 'High'
+        
+        # Analyze risk categories by demographic group
+        def analyze_risk_categories_by_group(risk_cats, y_true_data, demo_data, attr):
+            """Analyze risk category distribution by demographic group."""
+            if attr not in demo_data.columns:
+                return pd.DataFrame()
+            
+            groups = demo_data[attr].unique()
+            results = []
+            
+            for group in groups:
+                mask = (demo_data[attr] == group).values
+                if mask.sum() == 0:
+                    continue
+                
+                group_risk = risk_cats[mask]
+                group_true = y_true_data[mask]
+                
+                # Risk category distribution
+                risk_dist = pd.Series(group_risk).value_counts(normalize=True)
+                
+                # Actual readmission rate per risk category
+                readmit_by_risk = {}
+                for risk_cat in ['Low', 'Medium', 'High']:
+                    risk_mask = group_risk == risk_cat
+                    if risk_mask.sum() > 0:
+                        readmit_by_risk[risk_cat] = float(group_true[risk_mask].mean())
+                    else:
+                        readmit_by_risk[risk_cat] = 0.0
+                
+                group_result = {
+                    'attribute': attr,
+                    'group': group,
+                    'n_samples': int(mask.sum()),
+                    'pct_low_risk': float(risk_dist.get('Low', 0)),
+                    'pct_medium_risk': float(risk_dist.get('Medium', 0)),
+                    'pct_high_risk': float(risk_dist.get('High', 0)),
+                    'readmit_rate_low': readmit_by_risk.get('Low', 0.0),
+                    'readmit_rate_medium': readmit_by_risk.get('Medium', 0.0),
+                    'readmit_rate_high': readmit_by_risk.get('High', 0.0)
+                }
+                results.append(group_result)
+            
+            return pd.DataFrame(results)
+        
+        # Analyze for each demographic attribute
         for attribute in ['race', 'gender', 'age_group']:
             if attribute in demographics.columns:
-                risk_analysis = analyzer.analyze_risk_categories(
-                    y_pred_proba, demographics[attribute], risk_thresholds
+                risk_analysis = analyze_risk_categories_by_group(
+                    risk_categories, y_test.values, demographics, attribute
                 )
                 
-                risk_df = pd.DataFrame(risk_analysis).T
-                risk_path = output_dir / f"risk_categories_{attribute}.csv"
-                risk_df.to_csv(risk_path)
-                print(f"✅ Risk analysis saved: {risk_path}")
+                if not risk_analysis.empty:
+                    risk_path = output_dir / f"risk_categories_{attribute}.csv"
+                    risk_analysis.to_csv(risk_path, index=False)
+                    print(f"✅ Risk analysis saved: {risk_path}")
         
         # STEP 10: Generate visualizations
         print_section("📊 Step 10: Generate Fairness Visualizations", "=")
