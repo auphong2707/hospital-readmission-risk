@@ -399,7 +399,7 @@ def load_calibrated_random_forest_model_and_calibrator(
         # Download model
         model_path = hf_hub_download(
             repo_id=model_repo_id,
-            filename="random_forest_model.joblib",
+            filename="random_forest_model_original.joblib",
             repo_type="model",
             cache_dir=cache_dir
         )

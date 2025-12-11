@@ -419,7 +419,7 @@ def load_calibrated_random_forest_model(
         print(f"\n⏳ Downloading Random Forest model...")
         model_path = hf_hub_download(
             repo_id=repo_id,
-            filename="random_forest_model.joblib",
+            filename="random_forest_model_original.joblib",
             cache_dir=cache_dir,
             force_download=force_download
         )
@@ -468,8 +468,8 @@ def load_calibrated_random_forest_model(
     except Exception as e:
         print(f"\n❌ Error loading model: {e}")
         print(f"\nIf you have local Phase 3 outputs, you can use them directly:")
-        print(f"   model = joblib.load('./phase-3-model-calibration/models/random_forest_model.joblib')")
-        print(f"   calibrator = pickle.load(open('./phase-3-model-calibration/models/Random_Forest_calibrator.pkl', 'rb'))")
+        print(f"   model = joblib.load('./calibration_outputs/random_forest/random_forest_model_original.joblib')")
+        print(f"   calibrator = pickle.load(open('./calibration_outputs/random_forest/Random_Forest_calibrator.pkl', 'rb'))")
         raise
 
 
