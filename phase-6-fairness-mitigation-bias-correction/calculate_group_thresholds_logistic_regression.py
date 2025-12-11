@@ -373,10 +373,19 @@ def main():
         print("Step 5: Calculate Group-Specific Thresholds (Equalized Odds)")
         print("="*80)
         
+        # Calculate step size from num_thresholds
+        threshold_step = (args.threshold_max - args.threshold_min) / (args.num_thresholds - 1)
+        
         optimizer = ThresholdOptimizer(
+            fairness_tolerance=args.fairness_tolerance,
             threshold_range=(args.threshold_min, args.threshold_max),
-            num_candidates=args.num_thresholds
+            threshold_step=threshold_step
         )
+        
+        print(f"\n🔍 Threshold Search Configuration:")
+        print(f"   Range: [{args.threshold_min:.2f}, {args.threshold_max:.2f}]")
+        print(f"   Number of thresholds: {args.num_thresholds:,}")
+        print(f"   Step size: {threshold_step:.6f}")
         
         group_thresholds = {}
         for attribute in ['race', 'gender', 'age_group']:
