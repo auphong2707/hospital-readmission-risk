@@ -608,7 +608,7 @@ def main():
         print(f"\n📊 Key Results:")
         print(f"   Overall ROC-AUC: {overall_metrics['roc_auc']:.4f}")
         print(f"   Intervention Rate: {overall_metrics['intervention_rate']:.2%}")
-        print(f"   Fairness Status: {fairness_results['summary']['overall_fairness_status']}")
+        print(f"   Fairness Assessment: {fairness_report['deployment_readiness']['fairness_assessment']}")
         print(f"   Deployment Recommendation: {fairness_report['deployment_readiness']['recommendation']}")
         
         print(f"\n📄 Generated Files:")
@@ -616,14 +616,15 @@ def main():
         print(f"   - group_metrics_*.csv (race, gender, age)")
         print(f"   - statistical_tests.json")
         print(f"   - risk_categories_*.csv")
-        print(f"   - visualizations/ (15+ plots)")
+        print(f"   - visualizations/ (4 comparison plots)")
         
         print(f"\n🚀 Next Steps:")
         print(f"   1. Review fairness report: {report_path}")
         print(f"   2. Examine group-specific metrics")
         print(f"   3. Review visualizations in: {viz_dir}")
-        if fairness_results['summary']['overall_fairness_status'] == 'FAIL':
+        if fairness_report['deployment_readiness']['fairness_assessment'] != 'PASS':
             print(f"   4. Proceed to Phase 6: Fairness Mitigation")
+            print(f"      python ./phase-6-fairness-mitigation-bias-correction/calculate_group_thresholds_logistic_regression.py")
         else:
             print(f"   4. Model approved for deployment!")
         
