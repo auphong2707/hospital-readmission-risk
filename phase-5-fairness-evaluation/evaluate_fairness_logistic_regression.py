@@ -406,9 +406,7 @@ def main():
         for attribute in ['race', 'gender', 'age_group']:
             if attribute in demographics.columns:
                 print(f"\n🔍 Analyzing {attribute.upper()}...")
-                metrics = analyzer.compute_group_metrics(
-                    y_test, y_pred, y_pred_proba, demographics[attribute], optimal_threshold
-                )
+                metrics = analyzer.compute_group_metrics(attribute)
                 group_metrics[attribute] = metrics
                 
                 # Save to CSV
