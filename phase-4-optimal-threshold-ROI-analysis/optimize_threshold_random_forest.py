@@ -71,7 +71,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from utilities import (
     load_phase1_splits,
-    load_calibrated_model,
+    load_calibrated_random_forest_model,
     get_calibrated_predictions,
     ThresholdOptimizer,
     RiskCategoryMapper,
@@ -204,9 +204,9 @@ def main():
     print(f"   Readmission rate: {y_test.mean():.1%}")
     
     # Load calibrated model from HuggingFace Hub
-    print("\n📥 Loading calibrated model from HuggingFace Hub...")
+    print("\n📥 Loading calibrated Random Forest model from HuggingFace Hub...")
     try:
-        model, calibrator = load_calibrated_model(
+        model, calibrator = load_calibrated_random_forest_model(
             repo_id=args.model_repo_id,
             cache_dir=args.cache_dir,
             force_download=args.force_download

@@ -78,7 +78,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from utilities import (
     load_test_data_and_demographics,
-    load_calibrated_model_and_calibrator,
+    load_calibrated_random_forest_model_and_calibrator,
     load_phase4_results,
     generate_calibrated_predictions,
     GroupPerformanceAnalyzer,
@@ -440,7 +440,7 @@ def main():
     
     print_section("Step 2: Load Calibrated Model", "-")
     
-    model, calibrator = load_calibrated_model_and_calibrator(
+    model, calibrator = load_calibrated_random_forest_model_and_calibrator(
         model_repo_id=args.model_repo_id,
         use_local=args.use_local,
         local_model_path=args.local_model,

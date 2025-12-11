@@ -364,6 +364,115 @@ def load_calibrated_model(
         raise
 
 
+def load_calibrated_random_forest_model(
+    repo_id: str,
+    cache_dir: str = "./models/downloaded",
+    force_download: bool = False
+) -> Tuple[Any, Any]:
+    """Load calibrated Random Forest model and calibrator from HuggingFace Hub (Phase 3 output).
+    
+    This function downloads the calibrated Random Forest model and Platt calibrator that were
+    uploaded to HuggingFace Hub in Phase 3. This ensures consistent model artifacts
+    across all phases.
+    
+    Phase 3 uploads:
+    - random_forest_model.joblib: The base Random Forest model
+    - Random_Forest_calibrator.pkl: The Platt calibrator
+    - Calibration metrics and visualizations
+    
+    Args:
+        repo_id: HuggingFace repository ID for calibrated model (e.g., 'username/hospital-readmission-rf-calibrated')
+        cache_dir: Directory to cache downloaded files
+        force_download: If True, re-download even if files exist locally
+        
+    Returns:
+        tuple: (model, calibrator)
+        
+    Raises:
+        ImportError: If huggingface_hub is not installed
+        FileNotFoundError: If model files not found in repository
+        
+    Example:
+        >>> model, calibrator = load_calibrated_random_forest_model(
+        ...     repo_id='your-username/hospital-readmission-rf-calibrated'
+        ... )
+        >>> # Use for predictions
+        >>> y_pred = model.predict_proba(X_test)[:, 1]
+        >>> y_calibrated = calibrator.predict_proba(y_pred)
+    """
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError:
+        raise ImportError(
+            "huggingface_hub library required. "
+            "Install with: pip install huggingface_hub"
+        )
+    
+    print("\n" + "="*80)
+    print("📥 Loading Calibrated Random Forest Model from HuggingFace Hub")
+    print("="*80)
+    print(f"Repository: {repo_id}")
+    print(f"Cache directory: {cache_dir}")
+    
+    try:
+        # Download model file
+        print(f"\n⏳ Downloading Random Forest model...")
+        model_path = hf_hub_download(
+            repo_id=repo_id,
+            filename="random_forest_model.joblib",
+            cache_dir=cache_dir,
+            force_download=force_download
+        )
+        print(f"✅ Model downloaded: {model_path}")
+        
+        # Load model
+        print(f"⏳ Loading model...")
+        model = joblib.load(model_path)
+        print(f"✅ Model loaded successfully")
+        
+        # Download calibrator file
+        print(f"\n⏳ Downloading Platt calibrator...")
+        calibrator_path = hf_hub_download(
+            repo_id=repo_id,
+            filename="Random_Forest_calibrator.pkl",
+            cache_dir=cache_dir,
+            force_download=force_download
+        )
+        print(f"✅ Calibrator downloaded: {calibrator_path}")
+        
+        # Load calibrator
+        print(f"⏳ Loading calibrator...")
+        with open(calibrator_path, 'rb') as f:
+            calibrator = pickle.load(f)
+        print(f"✅ Calibrator loaded successfully")
+        
+        print("\n" + "="*80)
+        print("✅ Calibrated Random Forest Model & Calibrator Loaded from HuggingFace")
+        print("="*80)
+        print(f"🌐 Repository: https://huggingface.co/{repo_id}")
+        print(f"💾 Local cache: {cache_dir}")
+        print("="*80 + "\n")
+        
+        return model, calibrator
+        
+    except FileNotFoundError as e:
+        print(f"\n❌ Error: Model files not found in HuggingFace repository")
+        print(f"   {e}")
+        print(f"\n💡 Troubleshooting:")
+        print(f"1. Ensure Phase 3 calibration has been run and uploaded:")
+        print(f"   python ./phase-3-model-calibration/calibrate_random_forest.py")
+        print(f"2. Check repository exists: https://huggingface.co/{repo_id}")
+        print(f"3. Verify HF_TOKEN and HF_USERNAME are set in .env for Phase 3 upload")
+        print(f"4. Check internet connection")
+        raise
+    except Exception as e:
+        print(f"\n❌ Error loading model: {e}")
+        print(f"\nIf you have local Phase 3 outputs, you can use them directly:")
+        print(f"   model = joblib.load('./phase-3-model-calibration/models/random_forest_model.joblib')")
+        print(f"   calibrator = pickle.load(open('./phase-3-model-calibration/models/Random_Forest_calibrator.pkl', 'rb'))")
+        raise
+
+
 def get_calibrated_predictions(
     model: Any,
     calibrator: Any,
