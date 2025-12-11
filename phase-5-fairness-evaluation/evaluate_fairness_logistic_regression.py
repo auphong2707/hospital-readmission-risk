@@ -395,7 +395,12 @@ def main():
         
         # STEP 6: Group-specific analysis
         print_section("👥 Step 6: Group-Specific Performance Analysis", "=")
-        analyzer = GroupPerformanceAnalyzer()
+        analyzer = GroupPerformanceAnalyzer(
+            y_true=y_test,
+            y_pred=y_pred,
+            y_pred_proba=y_pred_proba,
+            demographics=demographics
+        )
         
         group_metrics = {}
         for attribute in ['race', 'gender', 'age_group']:
