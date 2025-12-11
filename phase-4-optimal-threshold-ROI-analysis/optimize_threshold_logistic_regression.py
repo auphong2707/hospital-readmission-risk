@@ -559,6 +559,10 @@ def main():
         'optimal_threshold': optimal_threshold,
         'low_risk_threshold': risk_mapper.low_threshold,
         'high_risk_threshold': risk_mapper.high_threshold,
+        'risk_thresholds': {  # Add this for Phase 5 compatibility
+            'low': risk_mapper.low_threshold,
+            'high': risk_mapper.high_threshold
+        },
         'expected_value': optimizer.optimal_ev,
         'roi_percentage': roi_metrics['roi_percentage'],
         'net_benefit': roi_metrics['net_benefit'],
