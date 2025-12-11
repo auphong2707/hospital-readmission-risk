@@ -201,7 +201,8 @@ def load_phase5_fairness_report(report_path):
     
     print(f"✅ Loaded Phase 5 report")
     print(f"   Optimal threshold: {report['optimal_threshold']:.4f}")
-    print(f"   Overall fairness status: {report['fairness_metrics']['summary']['overall_fairness_status']}")
+    if 'deployment_readiness' in report:
+        print(f"   Fairness assessment: {report['deployment_readiness']['fairness_assessment']}")
     
     return report
 
