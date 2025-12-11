@@ -342,6 +342,7 @@ def main():
         print("="*80)
         phase5_report = load_phase5_fairness_report(args.phase5_report)
         optimal_threshold = phase5_report['optimal_threshold']
+        global_threshold = optimal_threshold  # Use as global threshold for mitigation
         
         # STEP 2: Load test data and demographics
         print("\n" + "="*80)
@@ -387,23 +388,55 @@ def main():
         print(f"   Number of thresholds: {args.num_thresholds:,}")
         print(f"   Step size: {threshold_step:.6f}")
         
+        # Calculate overall metrics for target
+        y_pred_global = (y_pred_proba >= global_threshold).astype(int)
+        tn, fp, fn, tp = np.bincount(y_test.values * 2 + y_pred_global, minlength=4)
+        
+        overall_metrics = {
+            'tpr': tp / (tp + fn) if (tp + fn) > 0 else 0.0,
+            'fpr': fp / (fp + tn) if (fp + tn) > 0 else 0.0,
+            'intervention_rate': np.mean(y_pred_global)
+        }
+        
         group_thresholds = {}
         for attribute in ['race', 'gender', 'age_group']:
-            if attribute in demographics.columns:
-                print(f"\n🔍 Optimizing thresholds for {attribute.upper()}...")
-                thresholds = optimizer.find_equalized_odds_thresholds(
-                    y_test, y_pred_proba, demographics[attribute]
-                )
-                group_thresholds[attribute] = thresholds
-                
-                print(f"   ✅ Group thresholds calculated:")
-                for group, thresh in thresholds.items():
-                    print(f"      {group}: {thresh:.4f}")
+            if attribute not in demographics.columns:
+                print(f"\n⚠️  Skipping {attribute}: column not found in demographics")
+                continue
+            
+            thresholds = optimizer.calculate_group_thresholds(
+                y_true=y_test.values,
+                y_pred_proba=y_pred_proba,
+                demographics=demographics,
+                attribute=attribute,
+                overall_metrics=overall_metrics,
+                global_threshold=global_threshold
+            )
+            
+            group_thresholds[attribute] = thresholds
         
         # Save group thresholds
+        thresholds_output = {
+            'mitigation_strategy': 'equalized_odds',
+            'fairness_tolerance': args.fairness_tolerance,
+            'global_threshold': global_threshold,
+            'group_specific_thresholds': group_thresholds,
+            'threshold_search_config': {
+                'min': args.threshold_min,
+                'max': args.threshold_max,
+                'num_thresholds': args.num_thresholds,
+                'step': threshold_step
+            },
+            'target_metrics': {
+                'tpr': overall_metrics['tpr'],
+                'fpr': overall_metrics['fpr'],
+                'intervention_rate': overall_metrics['intervention_rate']
+            }
+        }
+        
         thresholds_path = output_dir / "group_thresholds.json"
         with open(thresholds_path, 'w') as f:
-            json.dump(group_thresholds, f, indent=2)
+            json.dump(thresholds_output, f, indent=2)
         print(f"\n✅ Group thresholds saved: {thresholds_path}")
         
         # STEP 6: Evaluate mitigation impact
