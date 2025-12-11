@@ -437,8 +437,27 @@ def main():
         
         # Save statistical tests
         tests_path = output_dir / "statistical_tests.json"
+        
+        # Convert numpy types to native Python types for JSON serialization
+        def convert_to_serializable(obj):
+            if isinstance(obj, np.bool_):
+                return bool(obj)
+            elif isinstance(obj, np.integer):
+                return int(obj)
+            elif isinstance(obj, np.floating):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, dict):
+                return {k: convert_to_serializable(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_to_serializable(item) for item in obj]
+            return obj
+        
+        statistical_tests_serializable = convert_to_serializable(statistical_tests)
+        
         with open(tests_path, 'w') as f:
-            json.dump(statistical_tests, f, indent=2)
+            json.dump(statistical_tests_serializable, f, indent=2)
         print(f"\n✅ Statistical tests saved: {tests_path}")
         
         # STEP 9: Risk category analysis
