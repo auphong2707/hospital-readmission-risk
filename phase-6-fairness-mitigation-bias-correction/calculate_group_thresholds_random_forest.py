@@ -46,7 +46,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utilities import (
     load_phase5_summary,
     load_test_data_and_demographics,
-    load_model_and_calibrator,
+    load_random_forest_model_and_calibrator,
     ThresholdOptimizer,
     MitigationEvaluator,
     TradeoffAnalyzer,
@@ -268,7 +268,7 @@ def main():
         local_demographics_path=args.local_demographics
     )
     
-    model, calibrator = load_model_and_calibrator(
+    model, calibrator = load_random_forest_model_and_calibrator(
         model_repo_id=args.model_repo_id,
         use_local=args.use_local,
         local_model_path=args.local_model,
