@@ -12,6 +12,7 @@ REPO_ID="auphong2707/hospital-readmission-risk"
 REPO_TYPE="model"
 PRIVATE=false
 DRY_RUN=false
+MODEL="gradient_boosting"  # Options: gradient_boosting, random_forest
 PROJECT_ROOT=".."
 OUTPUT_DIR="./outputs"
 COLLECTION_DIR="${OUTPUT_DIR}/collection"
@@ -29,6 +30,10 @@ while [[ $# -gt 0 ]]; do
             REPO_ID="$2"
             shift 2
             ;;
+        --model)
+            MODEL="$2"
+            shift 2
+            ;;
         --private)
             PRIVATE=true
             shift
@@ -42,6 +47,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --repo-id <username/repo>   HuggingFace repository ID (default: auphong2707/hospital-readmission-risk)"
+            echo "  --model <model_name>        Model type: gradient_boosting or random_forest (default: gradient_boosting)"
             echo "  --private                   Create private repository"
             echo "  --dry-run                   Collect files but don't upload"
             echo "  --help                      Show this help message"
@@ -55,11 +61,41 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Validate and configure model-specific settings
+if [ "$MODEL" = "gradient_boosting" ]; then
+    MODEL_DISPLAY="Gradient Boosting (LightGBM)"
+    MODEL_FILE="gradient_boosting_model_original.joblib"
+    CALIBRATOR_FILE="Gradient_Boosting_calibrator.pkl"
+    MODEL_NAME="Gradient_Boosting"
+    CALIBRATION_DIR="gradient_boosting"
+    OUTPUTS_SUFFIX=""
+    VIZ_SUFFIX=""
+elif [ "$MODEL" = "random_forest" ]; then
+    MODEL_DISPLAY="Random Forest"
+    MODEL_FILE="random_forest_model_original.joblib"
+    CALIBRATOR_FILE="Random_Forest_calibrator.pkl"
+    MODEL_NAME="Random_Forest"
+    CALIBRATION_DIR="random_forest"
+    OUTPUTS_SUFFIX="_random_forest"
+    VIZ_SUFFIX="_random_forest"
+    # Update paths for Random Forest
+    OUTPUT_DIR="./outputs_random_forest"
+    COLLECTION_DIR="${OUTPUT_DIR}/collection"
+    # Update repo ID if still using default
+    if [ "$REPO_ID" = "auphong2707/hospital-readmission-risk" ]; then
+        REPO_ID="auphong2707/hospital-readmission-risk-random-forest"
+    fi
+else
+    echo -e "${RED}Error: Invalid model '${MODEL}'. Must be 'gradient_boosting' or 'random_forest'${NC}"
+    exit 1
+fi
+
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Phase 7: Results Collection & Publication${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 echo "Configuration:"
+echo "  Model: ${MODEL_DISPLAY}"
 echo "  Repository: ${REPO_ID}"
 echo "  Private: ${PRIVATE}"
 echo "  Dry Run: ${DRY_RUN}"
@@ -130,67 +166,87 @@ copy_if_exists "${PROJECT_ROOT}/data/processed/splits/test_demographics.csv" \
 # Phase 2: Risk Modeling
 echo "" | tee -a "${SUMMARY_FILE}"
 echo "Phase 2 - Risk Modeling:" | tee -a "${SUMMARY_FILE}"
-copy_if_exists "${PROJECT_ROOT}/models/gradient_boosting_model_original.joblib" \
-    "${COLLECTION_DIR}/models/gradient_boosting_model_original.joblib" \
-    "Gradient Boosting model"
-copy_if_exists "${PROJECT_ROOT}/models/logistic_regression_model.joblib" \
-    "${COLLECTION_DIR}/models/logistic_regression_model.joblib" \
-    "Logistic Regression model"
-copy_if_exists "${PROJECT_ROOT}/models/random_forest_model.joblib" \
-    "${COLLECTION_DIR}/models/random_forest_model.joblib" \
-    "Random Forest model"
-copy_if_exists "${PROJECT_ROOT}/phase-2-risk-modeling/Gradient_Boosting_metrics.json" \
-    "${COLLECTION_DIR}/metrics/phase2_gradient_boosting_metrics.json" \
-    "Gradient Boosting metrics"
-copy_if_exists "${PROJECT_ROOT}/phase-2-risk-modeling/Logistic_Regression_metrics.json" \
-    "${COLLECTION_DIR}/metrics/phase2_logistic_regression_metrics.json" \
-    "Logistic Regression metrics"
-copy_if_exists "${PROJECT_ROOT}/phase-2-risk-modeling/Random_Forest_metrics.json" \
-    "${COLLECTION_DIR}/metrics/phase2_random_forest_metrics.json" \
-    "Random Forest metrics"
-
-# Copy Phase 2 visualizations
-for model in "Gradient_Boosting" "Logistic_Regression" "Random_Forest"; do
+if [ "$MODEL" = "gradient_boosting" ]; then
+    copy_if_exists "${PROJECT_ROOT}/models/gradient_boosting_model_original.joblib" \
+        "${COLLECTION_DIR}/models/gradient_boosting_model_original.joblib" \
+        "Gradient Boosting model"
+    copy_if_exists "${PROJECT_ROOT}/models/logistic_regression_model.joblib" \
+        "${COLLECTION_DIR}/models/logistic_regression_model.joblib" \
+        "Logistic Regression model"
+    copy_if_exists "${PROJECT_ROOT}/models/random_forest_model.joblib" \
+        "${COLLECTION_DIR}/models/random_forest_model.joblib" \
+        "Random Forest model"
+    copy_if_exists "${PROJECT_ROOT}/phase-2-risk-modeling/Gradient_Boosting_metrics.json" \
+        "${COLLECTION_DIR}/metrics/phase2_gradient_boosting_metrics.json" \
+        "Gradient Boosting metrics"
+    copy_if_exists "${PROJECT_ROOT}/phase-2-risk-modeling/Logistic_Regression_metrics.json" \
+        "${COLLECTION_DIR}/metrics/phase2_logistic_regression_metrics.json" \
+        "Logistic Regression metrics"
+    copy_if_exists "${PROJECT_ROOT}/phase-2-risk-modeling/Random_Forest_metrics.json" \
+        "${COLLECTION_DIR}/metrics/phase2_random_forest_metrics.json" \
+        "Random Forest metrics"
+    # Copy Phase 2 visualizations for all models
+    for model in "Gradient_Boosting" "Logistic_Regression" "Random_Forest"; do
+        for viz in "ROC_Curve" "Precision_Recall_Curve" "Confusion_Matrix" "Feature_Importance_Top_20" \
+                   "Calibration_Plot" "Prediction_Distribution" "Threshold_Metrics" \
+                   "Classification_Report" "Learning_Curves"; do
+            src="${PROJECT_ROOT}/phase-2-risk-modeling/${model}_${viz}.png"
+            if [ -f "${src}" ]; then
+                cp "${src}" "${COLLECTION_DIR}/visualizations/phase2_modeling/"
+                ((FILE_COUNT++))
+            fi
+        done
+    done
+    echo "  [x] Phase 2 visualizations (27 plots)" | tee -a "${SUMMARY_FILE}"
+else
+    # Random Forest only
+    copy_if_exists "${PROJECT_ROOT}/models/${MODEL_FILE}" \
+        "${COLLECTION_DIR}/models/${MODEL_FILE}" \
+        "Random Forest model"
+    copy_if_exists "${PROJECT_ROOT}/phase-2-risk-modeling/${MODEL_NAME}_metrics.json" \
+        "${COLLECTION_DIR}/metrics/phase2_random_forest_metrics.json" \
+        "Random Forest metrics"
+    # Copy Phase 2 visualizations for Random Forest only
     for viz in "ROC_Curve" "Precision_Recall_Curve" "Confusion_Matrix" "Feature_Importance_Top_20" \
                "Calibration_Plot" "Prediction_Distribution" "Threshold_Metrics" \
                "Classification_Report" "Learning_Curves"; do
-        src="${PROJECT_ROOT}/phase-2-risk-modeling/${model}_${viz}.png"
+        src="${PROJECT_ROOT}/phase-2-risk-modeling/${MODEL_NAME}_${viz}.png"
         if [ -f "${src}" ]; then
             cp "${src}" "${COLLECTION_DIR}/visualizations/phase2_modeling/"
             ((FILE_COUNT++))
         fi
     done
-done
-echo "  [x] Phase 2 visualizations (27 plots)" | tee -a "${SUMMARY_FILE}"
+    echo "  [x] Phase 2 visualizations (9 plots)" | tee -a "${SUMMARY_FILE}"
+fi
 
 # Phase 3: Model Calibration
 echo "" | tee -a "${SUMMARY_FILE}"
 echo "Phase 3 - Model Calibration:" | tee -a "${SUMMARY_FILE}"
-copy_if_exists "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/Gradient_Boosting_(LightGBM)_calibrator.pkl" \
-    "${COLLECTION_DIR}/models/Gradient_Boosting_calibrator.pkl" \
+copy_if_exists "${PROJECT_ROOT}/calibration_outputs/${CALIBRATION_DIR}/${CALIBRATOR_FILE}" \
+    "${COLLECTION_DIR}/models/${CALIBRATOR_FILE}" \
     "Platt calibrator"
-copy_if_exists "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/calibration_comparison_metrics.json" \
+copy_if_exists "${PROJECT_ROOT}/calibration_outputs/${CALIBRATION_DIR}/calibration_comparison_metrics.json" \
     "${COLLECTION_DIR}/metrics/phase3_calibration_metrics.json" \
     "Calibration metrics"
-copy_if_exists "${PROJECT_ROOT}/calibration_outputs/gradient_boosting/reliability_diagram_comparison.png" \
+copy_if_exists "${PROJECT_ROOT}/calibration_outputs/${CALIBRATION_DIR}/reliability_diagram_comparison.png" \
     "${COLLECTION_DIR}/visualizations/phase3_calibration/reliability_diagram_comparison.png" \
     "Reliability diagram"
 
 # Phase 4: Threshold Optimization
 echo "" | tee -a "${SUMMARY_FILE}"
 echo "Phase 4 - Threshold Optimization:" | tee -a "${SUMMARY_FILE}"
-copy_if_exists "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/outputs/optimal_thresholds.json" \
+copy_if_exists "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/outputs${OUTPUTS_SUFFIX}/optimal_thresholds.json" \
     "${COLLECTION_DIR}/thresholds/optimal_thresholds.json" \
     "Optimal thresholds"
-copy_if_exists "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/outputs/roi_metrics.json" \
+copy_if_exists "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/outputs${OUTPUTS_SUFFIX}/roi_metrics.json" \
     "${COLLECTION_DIR}/metrics/phase4_roi_metrics.json" \
     "ROI metrics"
-copy_if_exists "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/outputs/phase4_summary_for_phase5.json" \
+copy_if_exists "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/outputs${OUTPUTS_SUFFIX}/phase4_summary_for_phase5.json" \
     "${COLLECTION_DIR}/metrics/phase4_summary.json" \
     "Phase 4 summary"
 
 # Copy Phase 4 visualizations
-for viz in "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/visualizations"/*.png; do
+for viz in "${PROJECT_ROOT}/phase-4-optimal-threshold-ROI-analysis/visualizations${VIZ_SUFFIX}"/*.png; do
     if [ -f "${viz}" ]; then
         cp "${viz}" "${COLLECTION_DIR}/visualizations/phase4_threshold_optimization/"
         ((FILE_COUNT++))
@@ -201,27 +257,27 @@ echo "  [x] Phase 4 visualizations (8 plots)" | tee -a "${SUMMARY_FILE}"
 # Phase 5: Fairness Evaluation
 echo "" | tee -a "${SUMMARY_FILE}"
 echo "Phase 5 - Fairness Evaluation:" | tee -a "${SUMMARY_FILE}"
-copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/fairness_report.json" \
+copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs${OUTPUTS_SUFFIX}/fairness_report.json" \
     "${COLLECTION_DIR}/metrics/phase5_fairness_report.json" \
     "Fairness report"
-copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/phase5_summary_for_phase6.json" \
+copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs${OUTPUTS_SUFFIX}/phase5_summary_for_phase6.json" \
     "${COLLECTION_DIR}/metrics/phase5_summary.json" \
     "Phase 5 summary"
-copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/statistical_tests.json" \
+copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs${OUTPUTS_SUFFIX}/statistical_tests.json" \
     "${COLLECTION_DIR}/metrics/phase5_statistical_tests.json" \
     "Statistical tests"
-copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/group_metrics_race.csv" \
+copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs${OUTPUTS_SUFFIX}/group_metrics_race.csv" \
     "${COLLECTION_DIR}/metrics/phase5_group_metrics_race.csv" \
     "Group metrics (race)"
-copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/group_metrics_gender.csv" \
+copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs${OUTPUTS_SUFFIX}/group_metrics_gender.csv" \
     "${COLLECTION_DIR}/metrics/phase5_group_metrics_gender.csv" \
     "Group metrics (gender)"
-copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/group_metrics_age.csv" \
+copy_if_exists "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs${OUTPUTS_SUFFIX}/group_metrics_age.csv" \
     "${COLLECTION_DIR}/metrics/phase5_group_metrics_age.csv" \
     "Group metrics (age)"
 
 # Copy Phase 5 visualizations
-for viz in "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs/visualizations"/*.png; do
+for viz in "${PROJECT_ROOT}/phase-5-fairness-evaluation/outputs${OUTPUTS_SUFFIX}/visualizations"/*.png; do
     if [ -f "${viz}" ]; then
         cp "${viz}" "${COLLECTION_DIR}/visualizations/phase5_fairness_evaluation/"
         ((FILE_COUNT++))
@@ -232,16 +288,16 @@ echo "  [x] Phase 5 visualizations (~21 plots)" | tee -a "${SUMMARY_FILE}"
 # Phase 6: Fairness Mitigation (optional)
 echo "" | tee -a "${SUMMARY_FILE}"
 echo "Phase 6 - Fairness Mitigation:" | tee -a "${SUMMARY_FILE}"
-if [ -f "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs/group_thresholds.json" ]; then
-    copy_if_exists "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs/group_thresholds.json" \
+if [ -f "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs${OUTPUTS_SUFFIX}/group_thresholds.json" ]; then
+    copy_if_exists "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs${OUTPUTS_SUFFIX}/group_thresholds.json" \
         "${COLLECTION_DIR}/thresholds/group_thresholds.json" \
         "Group-specific thresholds"
-    copy_if_exists "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs/mitigation_impact.json" \
+    copy_if_exists "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs${OUTPUTS_SUFFIX}/mitigation_impact.json" \
         "${COLLECTION_DIR}/metrics/phase6_mitigation_impact.json" \
         "Mitigation impact"
     
     # Copy Phase 6 visualizations
-    for viz in "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs/visualizations"/*.png; do
+    for viz in "${PROJECT_ROOT}/phase-6-fairness-mitigation-bias-correction/outputs${OUTPUTS_SUFFIX}/visualizations"/*.png; do
         if [ -f "${viz}" ]; then
             cp "${viz}" "${COLLECTION_DIR}/visualizations/phase6_fairness_mitigation/"
             ((FILE_COUNT++))
@@ -263,6 +319,12 @@ echo -e "${GREEN}[x] Collection complete!${NC}"
 echo ""
 echo -e "${YELLOW}[Step 2/3] Creating aggregated results and model card...${NC}"
 
+# Export variables for Python script
+export MODEL
+export MODEL_DISPLAY
+export MODEL_FILE
+export CALIBRATOR_FILE
+
 # Create aggregated results JSON using Python
 python3 << 'PYTHON_SCRIPT'
 import json
@@ -272,7 +334,17 @@ from pathlib import Path
 
 # Configuration
 project_root = ".."
-output_dir = "./outputs"
+model = os.getenv('MODEL', 'gradient_boosting')
+model_display = os.getenv('MODEL_DISPLAY', 'Gradient Boosting (LightGBM)')
+model_file = os.getenv('MODEL_FILE', 'gradient_boosting_model_original.joblib')
+calibrator_file = os.getenv('CALIBRATOR_FILE', 'Gradient_Boosting_calibrator.pkl')
+
+# Set output directory based on model
+if model == 'random_forest':
+    output_dir = "./outputs_random_forest"
+else:
+    output_dir = "./outputs"
+    
 collection_dir = f"{output_dir}/collection"
 metrics_dir = f"{collection_dir}/metrics"
 
@@ -280,28 +352,44 @@ metrics_dir = f"{collection_dir}/metrics"
 aggregated_results = {
     "project_info": {
         "name": "Hospital Readmission Risk Prediction",
+        "model": model_display,
         "dataset": "Diabetes 130-US Hospitals (1999-2008)",
         "collection_date": datetime.now().strftime("%Y-%m-%d"),
         "repository": "https://github.com/auphong2707/hospital-readmission-risk"
     }
 }
 
-# Load Phase 2 metrics (Gradient Boosting primary model)
+# Load Phase 2 metrics
 try:
-    with open(f"{metrics_dir}/phase2_gradient_boosting_metrics.json") as f:
-        gb_metrics = json.load(f)
-    aggregated_results["phase_2_modeling"] = {
-        "models_trained": 3,
-        "primary_model": "Gradient Boosting (LightGBM)",
-        "gradient_boosting": {
-            "roc_auc": gb_metrics.get("roc_auc"),
-            "pr_auc": gb_metrics.get("pr_auc"),
-            "f1_score": gb_metrics.get("f1_score"),
-            "precision": gb_metrics.get("precision"),
-            "recall": gb_metrics.get("recall"),
-            "brier_score": gb_metrics.get("brier_score")
+    if model == 'gradient_boosting':
+        with open(f"{metrics_dir}/phase2_gradient_boosting_metrics.json") as f:
+            model_metrics = json.load(f)
+        aggregated_results["phase_2_modeling"] = {
+            "models_trained": 3,
+            "primary_model": "Gradient Boosting (LightGBM)",
+            "gradient_boosting": {
+                "roc_auc": model_metrics.get("roc_auc"),
+                "pr_auc": model_metrics.get("pr_auc"),
+                "f1_score": model_metrics.get("f1_score"),
+                "precision": model_metrics.get("precision"),
+                "recall": model_metrics.get("recall"),
+                "brier_score": model_metrics.get("brier_score")
+            }
         }
-    }
+    else:  # random_forest
+        with open(f"{metrics_dir}/phase2_random_forest_metrics.json") as f:
+            model_metrics = json.load(f)
+        aggregated_results["phase_2_modeling"] = {
+            "primary_model": "Random Forest (scikit-learn)",
+            "random_forest": {
+                "roc_auc": model_metrics.get("roc_auc"),
+                "pr_auc": model_metrics.get("pr_auc"),
+                "f1_score": model_metrics.get("f1_score"),
+                "precision": model_metrics.get("precision"),
+                "recall": model_metrics.get("recall"),
+                "brier_score": model_metrics.get("brier_score")
+            }
+        }
 except Exception as e:
     print(f"Warning: Could not load Phase 2 metrics: {e}")
 
@@ -375,12 +463,15 @@ with open(f"{output_dir}/aggregated_results.json", "w") as f:
 print("[x] Created aggregated_results.json")
 
 # Create Model Card
+model_key = 'gradient_boosting' if model == 'gradient_boosting' else 'random_forest'
+model_type_display = model_display
+
 model_card = f"""# Hospital Readmission Risk Prediction Model
 
 ## Model Details
 
 - **Model Name**: Hospital 30-Day Readmission Risk Predictor
-- **Model Type**: Gradient Boosting Classifier (LightGBM)
+- **Model Type**: {model_type_display}
 - **Version**: 1.0
 - **Date**: {datetime.now().strftime("%Y-%m-%d")}
 - **Developers**: auphong2707
@@ -406,11 +497,11 @@ This model predicts the risk of 30-day hospital readmission for diabetic patient
 ## Performance Metrics
 
 ### Classification Performance
-- **ROC-AUC**: {aggregated_results.get('phase_2_modeling', {}).get('gradient_boosting', {}).get('roc_auc', 'N/A')}
-- **PR-AUC**: {aggregated_results.get('phase_2_modeling', {}).get('gradient_boosting', {}).get('pr_auc', 'N/A')}
-- **F1-Score**: {aggregated_results.get('phase_2_modeling', {}).get('gradient_boosting', {}).get('f1_score', 'N/A')}
-- **Precision**: {aggregated_results.get('phase_2_modeling', {}).get('gradient_boosting', {}).get('precision', 'N/A')}
-- **Recall**: {aggregated_results.get('phase_2_modeling', {}).get('gradient_boosting', {}).get('recall', 'N/A')}
+- **ROC-AUC**: {aggregated_results.get('phase_2_modeling', {}).get(model_key, {}).get('roc_auc', 'N/A')}
+- **PR-AUC**: {aggregated_results.get('phase_2_modeling', {}).get(model_key, {}).get('pr_auc', 'N/A')}
+- **F1-Score**: {aggregated_results.get('phase_2_modeling', {}).get(model_key, {}).get('f1_score', 'N/A')}
+- **Precision**: {aggregated_results.get('phase_2_modeling', {}).get(model_key, {}).get('precision', 'N/A')}
+- **Recall**: {aggregated_results.get('phase_2_modeling', {}).get(model_key, {}).get('recall', 'N/A')}
 
 ### Calibration Quality
 - **Calibration Method**: Platt Scaling
@@ -481,9 +572,9 @@ pip install huggingface-hub joblib numpy pandas scikit-learn
 from huggingface_hub import hf_hub_download
 import joblib
 
-repo_id = "auphong2707/hospital-readmission-risk"
-model = joblib.load(hf_hub_download(repo_id, "models/gradient_boosting_model_original.joblib"))
-calibrator = joblib.load(hf_hub_download(repo_id, "models/Gradient_Boosting_calibrator.pkl"))
+repo_id = "auphong2707/hospital-readmission-risk{'−random-forest' if model == 'random_forest' else ''}"
+model = joblib.load(hf_hub_download(repo_id, "models/{model_file}"))
+calibrator = joblib.load(hf_hub_download(repo_id, "models/{calibrator_file}"))
 ```
 
 ### Make Predictions
@@ -602,8 +693,8 @@ from huggingface_hub import hf_hub_download
 import joblib
 
 # Download model
-model = joblib.load(hf_hub_download("${REPO_ID}", "models/gradient_boosting_model_original.joblib"))
-calibrator = joblib.load(hf_hub_download("${REPO_ID}", "models/Gradient_Boosting_calibrator.pkl"))
+model = joblib.load(hf_hub_download("${REPO_ID}", "models/${MODEL_FILE}"))
+calibrator = joblib.load(hf_hub_download("${REPO_ID}", "models/${CALIBRATOR_FILE}"))
 
 # Make prediction
 risk_score = calibrator.predict_proba([[model.predict_proba(patient_features)[0, 1]]])[0, 1]
@@ -613,18 +704,20 @@ risk_score = calibrator.predict_proba([[model.predict_proba(patient_features)[0,
 
 This repository contains a complete hospital readmission risk prediction system trained on the Diabetes 130-US Hospitals dataset (1999-2008, 101,766 patients).
 
+**Model**: ${MODEL_DISPLAY}
+
 **Key Features**:
-- 🎯 Gradient Boosting (LightGBM) classifier with 113 engineered features
+- 🎯 ${MODEL_DISPLAY} with 113 engineered features
 - 📊 Platt scaling calibration for reliable probability estimates
 - ⚖️ Fairness evaluation across race, gender, and age groups
 - 💰 ROI-optimized decision thresholds ($15K readmission cost vs $500 intervention)
-- 📈 Comprehensive evaluation with 60+ visualizations
+- 📈 Comprehensive evaluation with visualizations
 
 ## Repository Contents
 
 \`\`\`
 ${REPO_ID}/
-|-- models/                    # 3 trained models + calibrator
+|-- models/                    # Trained model + calibrator
 |-- thresholds/                # Optimal decision thresholds
 |-- metrics/                   # Performance, calibration, fairness metrics
 |-- visualizations/            # 60+ plots from all phases
