@@ -572,7 +572,7 @@ pip install huggingface-hub joblib numpy pandas scikit-learn
 from huggingface_hub import hf_hub_download
 import joblib
 
-repo_id = "auphong2707/hospital-readmission-risk{'−random-forest' if model == 'random_forest' else ''}"
+repo_id = "auphong2707/hospital-readmission-risk{'-random-forest' if model == 'random_forest' else ''}"
 model = joblib.load(hf_hub_download(repo_id, "models/{model_file}"))
 calibrator = joblib.load(hf_hub_download(repo_id, "models/{calibrator_file}"))
 ```
