@@ -1478,6 +1478,806 @@ If you use these results, please cite the hospital readmission risk prediction p
     return f"https://huggingface.co/{repo_id}"
 
 
+# ============================================================================
+# FAIRNESS MITIGATION (from Phase 6)
+# ============================================================================
+
+class ThresholdOptimizer:
+    """Calculate optimal group-specific thresholds using equalized odds strategy."""
+    
+    def __init__(
+        self,
+        fairness_tolerance: float = 0.05,
+        threshold_range: Tuple[float, float] = (0.01, 0.99),
+        threshold_step: float = 0.01
+    ):
+        """
+        Initialize threshold optimizer with equalized odds strategy.
+        
+        Args:
+            fairness_tolerance: Target gap tolerance (e.g., 0.05 = 5%)
+            threshold_range: (min, max) threshold to search
+            threshold_step: Step size for grid search
+        """
+        self.fairness_tolerance = fairness_tolerance
+        self.threshold_range = threshold_range
+        self.threshold_step = threshold_step
+    
+    def calculate_tpr_fpr(
+        self,
+        y_true: np.ndarray,
+        y_pred: np.ndarray
+    ) -> Tuple[float, float]:
+        """Calculate True Positive Rate and False Positive Rate."""
+        tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
+        
+        tpr = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+        
+        return tpr, fpr
+    
+    def optimize_equalized_odds(
+        self,
+        y_true: np.ndarray,
+        y_pred_proba: np.ndarray,
+        target_tpr: float,
+        target_fpr: float
+    ) -> Dict:
+        """
+        Find threshold that minimizes TPR and FPR gaps from target.
+        
+        Args:
+            y_true: True labels
+            y_pred_proba: Predicted probabilities
+            target_tpr: Target TPR to match
+            target_fpr: Target FPR to match
+            
+        Returns:
+            dict: Best threshold and resulting metrics
+        """
+        best_threshold = None
+        best_score = float('inf')
+        best_metrics = {}
+        
+        thresholds = np.arange(
+            self.threshold_range[0],
+            self.threshold_range[1] + self.threshold_step,
+            self.threshold_step
+        )
+        
+        for threshold in thresholds:
+            y_pred = (y_pred_proba >= threshold).astype(int)
+            tpr, fpr = self.calculate_tpr_fpr(y_true, y_pred)
+            
+            # Score: combined distance from target TPR and FPR
+            tpr_gap = abs(tpr - target_tpr)
+            fpr_gap = abs(fpr - target_fpr)
+            score = tpr_gap + fpr_gap
+            
+            if score < best_score:
+                best_score = score
+                best_threshold = threshold
+                best_metrics = {
+                    'threshold': threshold,
+                    'tpr': tpr,
+                    'fpr': fpr,
+                    'tpr_gap': tpr_gap,
+                    'fpr_gap': fpr_gap,
+                    'score': score
+                }
+        
+        return best_metrics
+    
+    def calculate_group_thresholds(
+        self,
+        y_true: np.ndarray,
+        y_pred_proba: np.ndarray,
+        demographics: pd.DataFrame,
+        attribute: str,
+        overall_metrics: Dict,
+        global_threshold: float
+    ) -> Dict:
+        """
+        Calculate optimal threshold for each group in a demographic attribute.
+        Falls back to global threshold if optimization doesn't improve fairness.
+        
+        Args:
+            y_true: True labels
+            y_pred_proba: Predicted probabilities
+            demographics: Demographics DataFrame
+            attribute: Demographic attribute (race, gender, age)
+            overall_metrics: Overall population metrics (TPR, FPR, intervention_rate)
+            global_threshold: Global threshold to use as fallback
+            
+        Returns:
+            dict: Group-specific thresholds and metrics
+        """
+        print(f"\n🔍 Optimizing thresholds for: {attribute.upper()}")
+        print(f"   Strategy: equalized_odds")
+        print(f"   Target TPR: {overall_metrics['tpr']:.3f}")
+        print(f"   Target FPR: {overall_metrics['fpr']:.3f}")
+        print(f"   Target tolerance: ±{self.fairness_tolerance:.1%}")
+        
+        group_thresholds = {}
+        unique_groups = demographics[attribute].unique()
+        
+        for group in unique_groups:
+            mask = demographics[attribute] == group
+            n_samples = mask.sum()
+            
+            if n_samples < 50:  # Skip small groups
+                print(f"   ⚠️  Skipping {group}: insufficient samples ({n_samples})")
+                continue
+            
+            y_true_group = y_true[mask]
+            y_pred_proba_group = y_pred_proba[mask]
+            
+            # Optimize using equalized odds
+            metrics = self.optimize_equalized_odds(
+                y_true_group,
+                y_pred_proba_group,
+                target_tpr=overall_metrics['tpr'],
+                target_fpr=overall_metrics['fpr']
+            )
+            
+            # Calculate baseline metrics with global threshold
+            y_pred_baseline = (y_pred_proba_group >= global_threshold).astype(int)
+            tpr_baseline, fpr_baseline = self.calculate_tpr_fpr(y_true_group, y_pred_baseline)
+            baseline_score = abs(tpr_baseline - overall_metrics['tpr']) + abs(fpr_baseline - overall_metrics['fpr'])
+            
+            # Keep optimized threshold only if it improves or maintains fairness
+            if metrics['score'] <= baseline_score:
+                metrics['n_samples'] = n_samples
+                metrics['improvement'] = True
+                group_thresholds[group] = metrics
+                print(f"   {group}: threshold={metrics['threshold']:.3f}, "
+                      f"TPR={metrics['tpr']:.3f}, FPR={metrics['fpr']:.3f} ✅")
+            else:
+                # Fall back to global threshold
+                fallback_metrics = {
+                    'threshold': global_threshold,
+                    'tpr': tpr_baseline,
+                    'fpr': fpr_baseline,
+                    'tpr_gap': abs(tpr_baseline - overall_metrics['tpr']),
+                    'fpr_gap': abs(fpr_baseline - overall_metrics['fpr']),
+                    'score': baseline_score,
+                    'n_samples': n_samples,
+                    'improvement': False
+                }
+                group_thresholds[group] = fallback_metrics
+                print(f"   {group}: threshold={global_threshold:.3f} (global, no improvement found), "
+                      f"TPR={tpr_baseline:.3f}, FPR={fpr_baseline:.3f} ⚠️")
+        
+        return group_thresholds
+
+
+class MitigationEvaluator:
+    """Evaluate fairness mitigation impact (before vs after)."""
+    
+    def __init__(self, phase4_results: Dict = None):
+        """
+        Initialize evaluator.
+        
+        Args:
+            phase4_results: Phase 4 ROI results for cost calculations
+        """
+        self.phase4_results = phase4_results
+    
+    def evaluate_baseline(
+        self,
+        y_true: np.ndarray,
+        y_pred_proba: np.ndarray,
+        demographics: pd.DataFrame,
+        global_threshold: float
+    ) -> Dict:
+        """
+        Evaluate baseline metrics with global threshold.
+        
+        Args:
+            y_true: True labels
+            y_pred_proba: Predicted probabilities
+            demographics: Demographics DataFrame
+            global_threshold: Global threshold from Phase 4
+            
+        Returns:
+            dict: Baseline metrics
+        """
+        print("\n" + "="*80)
+        print("📊 BASELINE EVALUATION (Global Threshold)")
+        print("="*80)
+        
+        # Apply global threshold
+        y_pred = (y_pred_proba >= global_threshold).astype(int)
+        
+        # Overall metrics
+        overall_metrics = self._calculate_overall_metrics(y_true, y_pred, y_pred_proba)
+        
+        # Group-specific metrics
+        group_metrics = {}
+        for attribute in ['race', 'gender', 'age']:
+            if attribute not in demographics.columns:
+                continue
+            
+            group_metrics[attribute] = self._calculate_group_metrics(
+                y_true, y_pred, demographics, attribute
+            )
+        
+        # Fairness metrics
+        fairness_metrics = self._calculate_fairness_metrics(group_metrics)
+        
+        # ROI metrics
+        roi_metrics = self._calculate_roi_metrics(y_true, y_pred) if self.phase4_results else {}
+        
+        baseline = {
+            'global_threshold': global_threshold,
+            'overall_metrics': overall_metrics,
+            'group_metrics': group_metrics,
+            'fairness_metrics': fairness_metrics,
+            'roi_metrics': roi_metrics
+        }
+        
+        self._print_evaluation_summary(baseline, "BASELINE")
+        
+        return baseline
+    
+    def evaluate_mitigated(
+        self,
+        y_true: np.ndarray,
+        y_pred_proba: np.ndarray,
+        demographics: pd.DataFrame,
+        group_thresholds: Dict
+    ) -> Dict:
+        """
+        Evaluate metrics with group-specific thresholds.
+        
+        Args:
+            y_true: True labels
+            y_pred_proba: Predicted probabilities
+            demographics: Demographics DataFrame
+            group_thresholds: Group-specific thresholds by attribute
+            
+        Returns:
+            dict: Mitigated metrics
+        """
+        print("\n" + "="*80)
+        print("📊 MITIGATED EVALUATION (Group-Specific Thresholds)")
+        print("="*80)
+        
+        # Apply group-specific thresholds
+        y_pred = np.zeros(len(y_true), dtype=int)
+        
+        for attribute, thresholds in group_thresholds.items():
+            if attribute not in demographics.columns:
+                continue
+            
+            for group, threshold_info in thresholds.items():
+                if isinstance(threshold_info, dict):
+                    threshold = threshold_info['threshold']
+                else:
+                    threshold = threshold_info
+                
+                mask = demographics[attribute] == group
+                y_pred[mask] = (y_pred_proba[mask] >= threshold).astype(int)
+        
+        # Overall metrics
+        overall_metrics = self._calculate_overall_metrics(y_true, y_pred, y_pred_proba)
+        
+        # Group-specific metrics
+        group_metrics = {}
+        for attribute in ['race', 'gender', 'age']:
+            if attribute not in demographics.columns:
+                continue
+            
+            group_metrics[attribute] = self._calculate_group_metrics(
+                y_true, y_pred, demographics, attribute
+            )
+        
+        # Fairness metrics
+        fairness_metrics = self._calculate_fairness_metrics(group_metrics)
+        
+        # ROI metrics
+        roi_metrics = self._calculate_roi_metrics(y_true, y_pred) if self.phase4_results else {}
+        
+        mitigated = {
+            'group_thresholds': group_thresholds,
+            'overall_metrics': overall_metrics,
+            'group_metrics': group_metrics,
+            'fairness_metrics': fairness_metrics,
+            'roi_metrics': roi_metrics
+        }
+        
+        self._print_evaluation_summary(mitigated, "MITIGATED")
+        
+        return mitigated
+    
+    def _calculate_overall_metrics(
+        self,
+        y_true: np.ndarray,
+        y_pred: np.ndarray,
+        y_pred_proba: np.ndarray
+    ) -> Dict:
+        """Calculate overall performance metrics."""
+        tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
+        
+        return {
+            'accuracy': accuracy_score(y_true, y_pred),
+            'precision': precision_score(y_true, y_pred, zero_division=0),
+            'recall': recall_score(y_true, y_pred, zero_division=0),
+            'tpr': tp / (tp + fn) if (tp + fn) > 0 else 0.0,
+            'fpr': fp / (fp + tn) if (fp + tn) > 0 else 0.0,
+            'f1_score': f1_score(y_true, y_pred, zero_division=0),
+            'roc_auc': roc_auc_score(y_true, y_pred_proba),
+            'intervention_rate': np.mean(y_pred),
+            'n_interventions': int(np.sum(y_pred)),
+            'tp': int(tp),
+            'fp': int(fp),
+            'tn': int(tn),
+            'fn': int(fn)
+        }
+    
+    def _calculate_group_metrics(
+        self,
+        y_true: np.ndarray,
+        y_pred: np.ndarray,
+        demographics: pd.DataFrame,
+        attribute: str
+    ) -> Dict:
+        """Calculate metrics per group."""
+        group_metrics = {}
+        
+        for group in demographics[attribute].unique():
+            mask = demographics[attribute] == group
+            
+            if mask.sum() < 10:  # Skip very small groups
+                continue
+            
+            y_true_group = y_true[mask]
+            y_pred_group = y_pred[mask]
+            
+            tn, fp, fn, tp = confusion_matrix(
+                y_true_group, y_pred_group, labels=[0, 1]
+            ).ravel()
+            
+            group_metrics[group] = {
+                'n_samples': int(mask.sum()),
+                'tpr': tp / (tp + fn) if (tp + fn) > 0 else 0.0,
+                'fpr': fp / (fp + tn) if (fp + tn) > 0 else 0.0,
+                'precision': precision_score(y_true_group, y_pred_group, zero_division=0),
+                'recall': recall_score(y_true_group, y_pred_group, zero_division=0),
+                'intervention_rate': np.mean(y_pred_group)
+            }
+        
+        return group_metrics
+    
+    def _calculate_fairness_metrics(self, group_metrics: Dict) -> Dict:
+        """Calculate fairness gaps across groups."""
+        fairness_metrics = {}
+        
+        for attribute, groups in group_metrics.items():
+            if not groups:
+                continue
+            
+            tprs = [m['tpr'] for m in groups.values()]
+            fprs = [m['fpr'] for m in groups.values()]
+            intervention_rates = [m['intervention_rate'] for m in groups.values()]
+            
+            fairness_metrics[attribute] = {
+                'tpr_gap': max(tprs) - min(tprs),
+                'fpr_gap': max(fprs) - min(fprs),
+                'intervention_rate_gap': max(intervention_rates) - min(intervention_rates),
+                'tpr_max': max(tprs),
+                'tpr_min': min(tprs),
+                'fpr_max': max(fprs),
+                'fpr_min': min(fprs)
+            }
+        
+        return fairness_metrics
+    
+    def _calculate_roi_metrics(self, y_true: np.ndarray, y_pred: np.ndarray) -> Dict:
+        """Calculate ROI metrics using Phase 4 cost matrix."""
+        if not self.phase4_results:
+            return {}
+        
+        tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
+        
+        # Cost matrix from Phase 4
+        cost_tp = 14500  # Benefit of preventing readmission
+        cost_fp = -500   # Cost of unnecessary intervention
+        cost_fn = -15000 # Cost of missed readmission
+        cost_tn = 0      # No cost
+        
+        expected_value = (tp * cost_tp) + (fp * cost_fp) + (fn * cost_fn) + (tn * cost_tn)
+        
+        return {
+            'expected_value': expected_value,
+            'net_benefit': expected_value,
+            'cost_per_intervention': abs(cost_fp),
+            'benefit_per_true_positive': cost_tp
+        }
+    
+    def _print_evaluation_summary(self, evaluation: Dict, label: str):
+        """Print evaluation summary."""
+        print(f"\n📊 {label} Metrics:")
+        
+        overall = evaluation['overall_metrics']
+        print(f"   Overall TPR: {overall['tpr']:.3f}")
+        print(f"   Overall FPR: {overall['fpr']:.3f}")
+        print(f"   Overall ROC-AUC: {overall['roc_auc']:.3f}")
+        print(f"   Intervention rate: {overall['intervention_rate']:.1%}")
+        
+        if evaluation['fairness_metrics']:
+            print(f"\n   Fairness Gaps:")
+            for attr, metrics in evaluation['fairness_metrics'].items():
+                print(f"      {attr.upper()}: TPR gap={metrics['tpr_gap']:.3f}, "
+                      f"FPR gap={metrics['fpr_gap']:.3f}")
+        
+        if evaluation['roi_metrics']:
+            print(f"\n   ROI: ${evaluation['roi_metrics']['expected_value']:,.0f}")
+
+
+class TradeoffAnalyzer:
+    """Analyze performance/fairness/ROI trade-offs."""
+    
+    @staticmethod
+    def calculate_improvements(baseline: Dict, mitigated: Dict) -> Dict:
+        """
+        Calculate improvement metrics from baseline to mitigated.
+        
+        Args:
+            baseline: Baseline evaluation results
+            mitigated: Mitigated evaluation results
+            
+        Returns:
+            dict: Improvement metrics and trade-offs
+        """
+        print("\n" + "="*80)
+        print("📈 TRADE-OFF ANALYSIS: Baseline vs Mitigated")
+        print("="*80)
+        
+        improvements = {
+            'fairness_improvements': {},
+            'performance_changes': {},
+            'roi_changes': {},
+            'summary': {}
+        }
+        
+        # Fairness improvements
+        for attribute in baseline['fairness_metrics'].keys():
+            baseline_fairness = baseline['fairness_metrics'][attribute]
+            mitigated_fairness = mitigated['fairness_metrics'][attribute]
+            
+            improvements['fairness_improvements'][attribute] = {
+                'tpr_gap_before': baseline_fairness['tpr_gap'],
+                'tpr_gap_after': mitigated_fairness['tpr_gap'],
+                'tpr_gap_reduction': baseline_fairness['tpr_gap'] - mitigated_fairness['tpr_gap'],
+                'tpr_gap_reduction_pct': ((baseline_fairness['tpr_gap'] - mitigated_fairness['tpr_gap']) / 
+                                          baseline_fairness['tpr_gap'] * 100) if baseline_fairness['tpr_gap'] > 0 else 0,
+                'fpr_gap_before': baseline_fairness['fpr_gap'],
+                'fpr_gap_after': mitigated_fairness['fpr_gap'],
+                'fpr_gap_reduction': baseline_fairness['fpr_gap'] - mitigated_fairness['fpr_gap'],
+                'fpr_gap_reduction_pct': ((baseline_fairness['fpr_gap'] - mitigated_fairness['fpr_gap']) / 
+                                          baseline_fairness['fpr_gap'] * 100) if baseline_fairness['fpr_gap'] > 0 else 0
+            }
+        
+        # Performance changes
+        baseline_overall = baseline['overall_metrics']
+        mitigated_overall = mitigated['overall_metrics']
+        
+        improvements['performance_changes'] = {
+            'tpr_change': mitigated_overall['tpr'] - baseline_overall['tpr'],
+            'fpr_change': mitigated_overall['fpr'] - baseline_overall['fpr'],
+            'accuracy_change': mitigated_overall['accuracy'] - baseline_overall['accuracy'],
+            'roc_auc_change': mitigated_overall['roc_auc'] - baseline_overall['roc_auc'],
+            'intervention_rate_change': mitigated_overall['intervention_rate'] - baseline_overall['intervention_rate']
+        }
+        
+        # ROI changes
+        if baseline['roi_metrics'] and mitigated['roi_metrics']:
+            baseline_roi = baseline['roi_metrics']['expected_value']
+            mitigated_roi = mitigated['roi_metrics']['expected_value']
+            
+            improvements['roi_changes'] = {
+                'expected_value_before': baseline_roi,
+                'expected_value_after': mitigated_roi,
+                'expected_value_change': mitigated_roi - baseline_roi,
+                'roi_reduction_pct': ((baseline_roi - mitigated_roi) / baseline_roi * 100) if baseline_roi != 0 else 0
+            }
+        
+        # Summary assessment
+        avg_tpr_reduction = np.mean([
+            imp['tpr_gap_reduction_pct'] 
+            for imp in improvements['fairness_improvements'].values()
+        ])
+        avg_fpr_reduction = np.mean([
+            imp['fpr_gap_reduction_pct'] 
+            for imp in improvements['fairness_improvements'].values()
+        ])
+        
+        improvements['summary'] = {
+            'avg_fairness_improvement_pct': (avg_tpr_reduction + avg_fpr_reduction) / 2,
+            'performance_drop_acceptable': (
+                improvements['performance_changes']['tpr_change'] >= -0.02 and  # TPR should not drop significantly
+                improvements['performance_changes']['fpr_change'] <= 0.02 and   # FPR should not increase significantly
+                abs(improvements['performance_changes']['roc_auc_change']) <= 0.02
+            ),
+            'roi_reduction_acceptable': (
+                abs(improvements['roi_changes'].get('roi_reduction_pct', 0)) <= 10
+            ) if improvements['roi_changes'] else True,
+            'fairness_targets_met': all(
+                imp['tpr_gap_after'] < 0.05 and imp['fpr_gap_after'] < 0.05
+                for imp in improvements['fairness_improvements'].values()
+            )
+        }
+        
+        TradeoffAnalyzer._print_tradeoff_summary(improvements)
+        
+        return improvements
+    
+    @staticmethod
+    def _print_tradeoff_summary(improvements: Dict):
+        """Print trade-off analysis summary."""
+        print("\n✅ FAIRNESS IMPROVEMENTS:")
+        for attr, imp in improvements['fairness_improvements'].items():
+            print(f"   {attr.upper()}:")
+            print(f"      TPR gap: {imp['tpr_gap_before']:.3f} → {imp['tpr_gap_after']:.3f} "
+                  f"({imp['tpr_gap_reduction_pct']:+.1f}%)")
+            print(f"      FPR gap: {imp['fpr_gap_before']:.3f} → {imp['fpr_gap_after']:.3f} "
+                  f"({imp['fpr_gap_reduction_pct']:+.1f}%)")
+        
+        print("\n⚖️  PERFORMANCE CHANGES:")
+        perf = improvements['performance_changes']
+        print(f"   Overall TPR: {perf['tpr_change']:+.3f}")
+        print(f"   Overall FPR: {perf['fpr_change']:+.3f}")
+        print(f"   ROC-AUC: {perf['roc_auc_change']:+.4f}")
+        
+        if improvements['roi_changes']:
+            print("\n💰 ROI IMPACT:")
+            roi = improvements['roi_changes']
+            print(f"   Expected value: ${roi['expected_value_before']:,.0f} → "
+                  f"${roi['expected_value_after']:,.0f}")
+            print(f"   Change: ${roi['expected_value_change']:+,.0f} "
+                  f"({roi['roi_reduction_pct']:+.1f}%)")
+        
+        print("\n📋 SUMMARY:")
+        summary = improvements['summary']
+        print(f"   ✅ Fairness targets met: {summary['fairness_targets_met']}")
+        print(f"   ✅ Performance drop acceptable: {summary['performance_drop_acceptable']}")
+        print(f"   ✅ ROI reduction acceptable: {summary['roi_reduction_acceptable']}")
+
+
+class MitigationVisualizer:
+    """Generate before/after comparison visualizations."""
+    
+    @staticmethod
+    def generate_all_visualizations(
+        baseline: Dict,
+        mitigated: Dict,
+        improvements: Dict,
+        output_dir: str
+    ):
+        """Generate all mitigation visualizations."""
+        print("\n" + "="*80)
+        print("📊 Generating Visualizations")
+        print("="*80)
+        
+        vis_dir = Path(output_dir) / "visualizations"
+        vis_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 1. Before/After TPR comparison
+        MitigationVisualizer.plot_tpr_comparison(
+            baseline, mitigated, str(vis_dir / "tpr_comparison.png")
+        )
+        
+        # 2. Before/After FPR comparison
+        MitigationVisualizer.plot_fpr_comparison(
+            baseline, mitigated, str(vis_dir / "fpr_comparison.png")
+        )
+        
+        # 3. Fairness gaps comparison
+        MitigationVisualizer.plot_fairness_gaps(
+            baseline, mitigated, str(vis_dir / "fairness_gaps.png")
+        )
+        
+        # 4. Threshold adjustments
+        MitigationVisualizer.plot_threshold_adjustments(
+            baseline['global_threshold'], 
+            mitigated['group_thresholds'],
+            str(vis_dir / "threshold_adjustments.png")
+        )
+        
+        # 5. Trade-off summary
+        MitigationVisualizer.plot_tradeoff_summary(
+            improvements, str(vis_dir / "tradeoff_summary.png")
+        )
+        
+        print(f"✅ Visualizations saved to: {vis_dir}")
+    
+    @staticmethod
+    def plot_tpr_comparison(baseline: Dict, mitigated: Dict, output_path: str):
+        """Plot TPR comparison across groups."""
+        fig, axes = plt.subplots(1, len(baseline['group_metrics']), figsize=(15, 5))
+        
+        if len(baseline['group_metrics']) == 1:
+            axes = [axes]
+        
+        for idx, (attribute, groups) in enumerate(baseline['group_metrics'].items()):
+            ax = axes[idx]
+            
+            group_names = list(groups.keys())
+            baseline_tprs = [groups[g]['tpr'] for g in group_names]
+            mitigated_tprs = [mitigated['group_metrics'][attribute][g]['tpr'] for g in group_names]
+            
+            x = np.arange(len(group_names))
+            width = 0.35
+            
+            ax.bar(x - width/2, baseline_tprs, width, label='Baseline (Global)', alpha=0.8)
+            ax.bar(x + width/2, mitigated_tprs, width, label='Mitigated (Group-Specific)', alpha=0.8)
+            
+            ax.set_xlabel('Group')
+            ax.set_ylabel('True Positive Rate')
+            ax.set_title(f'TPR Comparison: {attribute.upper()}')
+            ax.set_xticks(x)
+            ax.set_xticklabels(group_names, rotation=45, ha='right')
+            ax.legend()
+            ax.grid(axis='y', alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.close()
+    
+    @staticmethod
+    def plot_fpr_comparison(baseline: Dict, mitigated: Dict, output_path: str):
+        """Plot FPR comparison across groups."""
+        fig, axes = plt.subplots(1, len(baseline['group_metrics']), figsize=(15, 5))
+        
+        if len(baseline['group_metrics']) == 1:
+            axes = [axes]
+        
+        for idx, (attribute, groups) in enumerate(baseline['group_metrics'].items()):
+            ax = axes[idx]
+            
+            group_names = list(groups.keys())
+            baseline_fprs = [groups[g]['fpr'] for g in group_names]
+            mitigated_fprs = [mitigated['group_metrics'][attribute][g]['fpr'] for g in group_names]
+            
+            x = np.arange(len(group_names))
+            width = 0.35
+            
+            ax.bar(x - width/2, baseline_fprs, width, label='Baseline (Global)', alpha=0.8)
+            ax.bar(x + width/2, mitigated_fprs, width, label='Mitigated (Group-Specific)', alpha=0.8)
+            
+            ax.set_xlabel('Group')
+            ax.set_ylabel('False Positive Rate')
+            ax.set_title(f'FPR Comparison: {attribute.upper()}')
+            ax.set_xticks(x)
+            ax.set_xticklabels(group_names, rotation=45, ha='right')
+            ax.legend()
+            ax.grid(axis='y', alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.close()
+    
+    @staticmethod
+    def plot_fairness_gaps(baseline: Dict, mitigated: Dict, output_path: str):
+        """Plot fairness gap reductions."""
+        attributes = list(baseline['fairness_metrics'].keys())
+        
+        tpr_gaps_before = [baseline['fairness_metrics'][attr]['tpr_gap'] for attr in attributes]
+        tpr_gaps_after = [mitigated['fairness_metrics'][attr]['tpr_gap'] for attr in attributes]
+        fpr_gaps_before = [baseline['fairness_metrics'][attr]['fpr_gap'] for attr in attributes]
+        fpr_gaps_after = [mitigated['fairness_metrics'][attr]['fpr_gap'] for attr in attributes]
+        
+        x = np.arange(len(attributes))
+        width = 0.2
+        
+        fig, ax = plt.subplots(figsize=(12, 6))
+        
+        ax.bar(x - width*1.5, tpr_gaps_before, width, label='TPR Gap (Before)', alpha=0.8)
+        ax.bar(x - width*0.5, tpr_gaps_after, width, label='TPR Gap (After)', alpha=0.8)
+        ax.bar(x + width*0.5, fpr_gaps_before, width, label='FPR Gap (Before)', alpha=0.8)
+        ax.bar(x + width*1.5, fpr_gaps_after, width, label='FPR Gap (After)', alpha=0.8)
+        
+        ax.axhline(y=0.05, color='r', linestyle='--', label='Fairness Threshold (5%)')
+        
+        ax.set_xlabel('Demographic Attribute')
+        ax.set_ylabel('Fairness Gap (max - min)')
+        ax.set_title('Fairness Gap Reduction: Before vs After Mitigation')
+        ax.set_xticks(x)
+        ax.set_xticklabels([attr.upper() for attr in attributes])
+        ax.legend()
+        ax.grid(axis='y', alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.close()
+    
+    @staticmethod
+    def plot_threshold_adjustments(
+        global_threshold: float,
+        group_thresholds: Dict,
+        output_path: str
+    ):
+        """Plot threshold adjustments per group."""
+        fig, axes = plt.subplots(1, len(group_thresholds), figsize=(15, 5))
+        
+        if len(group_thresholds) == 1:
+            axes = [axes]
+        
+        for idx, (attribute, thresholds) in enumerate(group_thresholds.items()):
+            ax = axes[idx]
+            
+            group_names = list(thresholds.keys())
+            group_thresholds_vals = [
+                thresholds[g]['threshold'] if isinstance(thresholds[g], dict) else thresholds[g]
+                for g in group_names
+            ]
+            adjustments = [t - global_threshold for t in group_thresholds_vals]
+            colors = ['green' if adj < 0 else 'red' if adj > 0 else 'gray' for adj in adjustments]
+            
+            x = np.arange(len(group_names))
+            ax.bar(x, adjustments, color=colors, alpha=0.7)
+            ax.axhline(y=0, color='black', linestyle='-', linewidth=1)
+            
+            ax.set_xlabel('Group')
+            ax.set_ylabel(f'Threshold Adjustment\n(vs Global={global_threshold:.3f})')
+            ax.set_title(f'Threshold Adjustments: {attribute.upper()}')
+            ax.set_xticks(x)
+            ax.set_xticklabels(group_names, rotation=45, ha='right')
+            ax.grid(axis='y', alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.close()
+    
+    @staticmethod
+    def plot_tradeoff_summary(improvements: Dict, output_path: str):
+        """Plot trade-off summary metrics."""
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+        
+        # Fairness improvements
+        attributes = list(improvements['fairness_improvements'].keys())
+        tpr_reductions = [improvements['fairness_improvements'][attr]['tpr_gap_reduction_pct'] 
+                         for attr in attributes]
+        fpr_reductions = [improvements['fairness_improvements'][attr]['fpr_gap_reduction_pct'] 
+                         for attr in attributes]
+        
+        x = np.arange(len(attributes))
+        width = 0.35
+        
+        ax1.bar(x - width/2, tpr_reductions, width, label='TPR Gap Reduction', alpha=0.8)
+        ax1.bar(x + width/2, fpr_reductions, width, label='FPR Gap Reduction', alpha=0.8)
+        ax1.set_xlabel('Demographic Attribute')
+        ax1.set_ylabel('Gap Reduction (%)')
+        ax1.set_title('Fairness Improvements')
+        ax1.set_xticks(x)
+        ax1.set_xticklabels([attr.upper() for attr in attributes])
+        ax1.legend()
+        ax1.grid(axis='y', alpha=0.3)
+        
+        # Performance/ROI changes
+        perf = improvements['performance_changes']
+        metrics = ['TPR', 'FPR', 'Accuracy', 'ROC-AUC']
+        changes = [
+            perf['tpr_change'] * 100,
+            perf['fpr_change'] * 100,
+            perf['accuracy_change'] * 100,
+            perf['roc_auc_change'] * 100
+        ]
+        
+        colors = ['green' if c > 0 else 'red' if c < 0 else 'gray' for c in changes]
+        
+        ax2.barh(metrics, changes, color=colors, alpha=0.7)
+        ax2.axvline(x=0, color='black', linestyle='-', linewidth=1)
+        ax2.set_xlabel('Change (%)')
+        ax2.set_title('Performance Changes')
+        ax2.grid(axis='x', alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.close()
+
+
 if __name__ == "__main__":
-    print("Phase 5 Fairness Evaluation Utilities")
-    print("Import this module to use fairness evaluation functions")
+    print("Phase 5 Fairness Assessment & Mitigation Utilities")
+    print("Import this module to use fairness evaluation and mitigation functions")

@@ -1,13 +1,16 @@
-# Phase 5: Fairness Evaluation & Deployment Readiness
+# Phase 5: Fairness Assessment & Mitigation
 
 ## Purpose
 
-Phase 5 is the final ethical and operational validation stage before deploying the readmission risk model. It evaluates whether the model's predictions and resulting interventions are equitable across protected demographic groups (race, gender, age), quantifies any disparities, proposes mitigation strategies (if needed), and packages the model, documentation, and monitoring for production.
+Phase 5 performs comprehensive fairness assessment AND conditional mitigation for the hospital readmission risk model. This unified phase evaluates whether the model produces equitable outcomes across protected demographic groups (race, gender, age) and automatically applies fairness mitigation when violations are detected.
 
-**Who this is for:** Data scientists, ML engineers, clinical leads, and stakeholders responsible for safe and fair deployment of predictive models in healthcare.
+**Who this is for:** Data scientists, ML engineers, clinical leads, ethics committees, and stakeholders responsible for safe and fair deployment of predictive models in healthcare.
 
-
-**What this contains:** Meaning, goals, definitions, step-by-step evaluation plan, required inputs/outputs, critical blocker, mitigation options, run instructions, and monitoring recommendations.
+**What this contains:** 
+- Part A: Fairness evaluation (always runs)
+- Part B: Fairness mitigation (conditional - runs if violations detected)
+- Unified orchestration script for both workflows
+- Combined outputs and deployment recommendations
 
 ---
 
@@ -149,19 +152,90 @@ This will create the demographics files in `data/processed/splits/` and upload t
 
 ---
 
-**Run / Usage (example commands)**
+## Unified Workflow (Recommended)
 
-- Run the fairness evaluation script (example, to be implemented in `phase-5`):
+Phase 5 now contains a unified workflow that runs both fairness evaluation AND conditional mitigation:
 
-```powershell
-# From project root
-.venv\Scripts\activate
-python ./phase-5-fairness-evaluation-deployment-readiness/evaluate_fairness_gradient_boosting.py \
-  --data-repo-id auphong2707/hospital-readmission-risk-data \
-  --model-repo-id auphong2707/hospital-readmission-lgbm-calibrated \
-  --phase4-summary ./phase-4-optimal-threshold-ROI-analysis/outputs/phase4_summary_for_phase5.json \
-  --output-dir ./phase-5-fairness-evaluation-deployment-readiness/outputs
+### Master Orchestration Script
+
+Use the master script to run the complete workflow automatically:
+
+```bash
+# Run complete fairness assessment & mitigation for each method
+cd phase-5-fairness-assessment-mitigation
+
+./run_fairness_assessment_and_mitigation.sh gradient_boosting
+./run_fairness_assessment_and_mitigation.sh random_forest  
+./run_fairness_assessment_and_mitigation.sh logistic_regression
 ```
+
+**What the script does:**
+1. **Runs fairness evaluation** (always)
+2. **Checks if mitigation needed** (reads phase5_summary_for_phase6.json)
+3. **Runs mitigation** (conditionally - only if violations detected)
+4. **Generates combined summary** (evaluation + mitigation results)
+
+### Output Structure
+
+```
+phase-5-fairness-assessment-mitigation/outputs/{method}/
+├── evaluation/                           # Part A: Fairness evaluation
+│   ├── fairness_report.json
+│   ├── phase5_summary_for_phase6.json
+│   ├── statistical_tests.json
+│   ├── group_metrics_*.csv
+│   └── visualizations/
+├── mitigation/                           # Part B: Mitigation (if applied)
+│   ├── group_thresholds.json
+│   ├── mitigation_impact.json
+│   └── visualizations/
+└── phase5_complete_summary.json          # Combined final summary
+```
+
+---
+
+## Manual Usage (Run Individual Scripts)
+
+If you need to run scripts individually:
+
+### Step 1: Fairness Evaluation
+
+```bash
+# Gradient Boosting
+python evaluate_fairness_gradient_boosting.py \
+  --output-dir ./outputs/gradient_boosting/evaluation
+
+# Random Forest
+python evaluate_fairness_random_forest.py \
+  --output-dir ./outputs/random_forest/evaluation
+
+# Logistic Regression
+python evaluate_fairness_logistic_regression.py \
+  --output-dir ./outputs/logistic_regression/evaluation
+```
+
+### Step 2: Fairness Mitigation (conditional)
+
+Check `phase5_summary_for_phase6.json`. If `requires_mitigation: true`:
+
+```bash
+# Gradient Boosting
+python calculate_group_thresholds_gradient_boosting.py \
+  --phase5-summary ./outputs/gradient_boosting/evaluation/phase5_summary_for_phase6.json \
+  --output-dir ./outputs/gradient_boosting/mitigation
+
+# Random Forest
+python calculate_group_thresholds_random_forest.py \
+  --phase5-summary ./outputs/random_forest/evaluation/phase5_summary_for_phase6.json \
+  --output-dir ./outputs/random_forest/mitigation
+
+# Logistic Regression
+python calculate_group_thresholds_logistic_regression.py \
+  --phase5-summary ./outputs/logistic_regression/evaluation/phase5_summary_for_phase6.json \
+  --output-dir ./outputs/logistic_regression/mitigation
+```
+
+### Required Files
 
 - If using local files instead of HuggingFace, ensure the following exist:
   - `data/processed/splits/test.csv`
