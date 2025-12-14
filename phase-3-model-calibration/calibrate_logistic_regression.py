@@ -136,7 +136,9 @@ def load_and_preprocess_data(repo_id: str = "auphong2707/hospital-readmission-ri
 
 def load_logistic_regression_model(repo_id: str, cache_dir: str = "./models/downloaded", force_download: bool = False):
     """
-    Load the trained Logistic Regression model and scaler from HuggingFace Hub or local directory.
+    Load the trained Logistic Regression model from HuggingFace Hub or local directory.
+    
+    Note: No scaler is loaded - training data from Phase 1 is already scaled.
     
     Args:
         repo_id: HuggingFace repository ID
@@ -144,7 +146,7 @@ def load_logistic_regression_model(repo_id: str, cache_dir: str = "./models/down
         force_download: Force re-download even if cached
         
     Returns:
-        tuple: (model, scaler, training_summary)
+        tuple: (model, training_summary)
     """
     print_section("📥 Loading Pre-trained Logistic Regression Model", "-")
     
@@ -152,7 +154,6 @@ def load_logistic_regression_model(repo_id: str, cache_dir: str = "./models/down
     
     # Try loading from local directory first
     local_model_path = output_dir / "logistic_regression.pkl"
-    local_scaler_path = output_dir / "logistic_regression_scaler.pkl"
     local_summary_path = output_dir / "logistic_regression_training_summary.json"
     
     if local_model_path.exists() and not force_download:
@@ -162,16 +163,7 @@ def load_logistic_regression_model(repo_id: str, cache_dir: str = "./models/down
         with open(local_model_path, 'rb') as f:
             model = pickle.load(f)
         print(f"   ✅ Model loaded: {local_model_path}")
-        
-        # Load scaler (try to load, create new if doesn't exist)
-        if local_scaler_path.exists():
-            with open(local_scaler_path, 'rb') as f:
-                scaler = pickle.load(f)
-            print(f"   ✅ Scaler loaded: {local_scaler_path}")
-        else:
-            from sklearn.preprocessing import StandardScaler
-            scaler = StandardScaler()
-            print(f"   ⚠️  Scaler not found, created new StandardScaler")
+        print(f"   ℹ️  No scaler needed - data already scaled from Phase 1")
         
         # Load training summary
         training_summary = None
@@ -182,15 +174,13 @@ def load_logistic_regression_model(repo_id: str, cache_dir: str = "./models/down
         else:
             print(f"   ⚠️  Training summary not found")
         
-        return model, scaler, training_summary
+        return model, training_summary
     
     else:
         print(f"⏳ Model not found locally or force download requested")
         print(f"   Attempting to download from HuggingFace Hub: {repo_id}")
         
         try:
-            from huggingface_hub import hf_hub_download
-            
             # Download model
             model, training_summary = download_model_from_hf(
                 repo_id=repo_id,
@@ -199,28 +189,9 @@ def load_logistic_regression_model(repo_id: str, cache_dir: str = "./models/down
                 force_download=force_download
             )
             
-            # Download scaler from HuggingFace Hub
-            print(f"\n⏳ Downloading scaler from HuggingFace Hub...")
-            try:
-                scaler_path = hf_hub_download(
-                    repo_id=repo_id,
-                    filename="logistic_regression_scaler.pkl",
-                    cache_dir=cache_dir,
-                    force_download=force_download
-                )
-                
-                with open(scaler_path, 'rb') as f:
-                    scaler = pickle.load(f)
-                print(f"   ✅ Scaler downloaded from HuggingFace Hub")
-                
-            except Exception as scaler_error:
-                print(f"   ⚠️  Could not download scaler from HuggingFace: {scaler_error}")
-                print(f"   ⚠️  Creating new unfitted StandardScaler (predictions may be incorrect!)")
-                print(f"   💡 Please ensure Phase 2 completed successfully and uploaded scaler")
-                from sklearn.preprocessing import StandardScaler
-                scaler = StandardScaler()
+            print(f"   ℹ️  No scaler needed - data already scaled from Phase 1")
             
-            return model, scaler, training_summary
+            return model, training_summary
             
         except Exception as e:
             print(f"\n❌ Error downloading from HuggingFace: {e}")
@@ -229,7 +200,7 @@ def load_logistic_regression_model(repo_id: str, cache_dir: str = "./models/down
             raise
 
 
-def generate_uncalibrated_predictions(model, scaler, X_train, X_test, y_train, y_test):
+def generate_uncalibrated_predictions(model, X_train, X_test, y_train, y_test):
     """
     Generate uncalibrated predictions from the trained model.
     
@@ -238,11 +209,12 @@ def generate_uncalibrated_predictions(model, scaler, X_train, X_test, y_train, y
     - Train set: Used to fit the calibrator
     - Test set: Used to evaluate calibration quality
     
+    Note: X_train and X_test are already scaled from Phase 1.
+    
     Args:
         model: Trained Logistic Regression model
-        scaler: StandardScaler fitted during training
-        X_train: Training features
-        X_test: Test features
+        X_train: Training features (already scaled from Phase 1)
+        X_test: Test features (already scaled from Phase 1)
         y_train: Training labels
         y_test: Test labels
         
@@ -251,21 +223,19 @@ def generate_uncalibrated_predictions(model, scaler, X_train, X_test, y_train, y
     """
     print_section("🔮 Generating Uncalibrated Predictions", "-")
     
-    # Scale features
-    print("⏳ Scaling features...")
-    X_train_scaled = scaler.transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
+    # X_train and X_test are already scaled from Phase 1 - use directly
+    print("ℹ️  Using pre-scaled features from Phase 1...")
     
     # Generate predictions on train set (for fitting calibrator)
     print("\n⏳ Generating train set predictions...")
-    y_train_proba = model.predict_proba(X_train_scaled)[:, 1]
+    y_train_proba = model.predict_proba(X_train)[:, 1]
     print(f"   Train probabilities shape: {y_train_proba.shape}")
     print(f"   Train probability range: [{y_train_proba.min():.4f}, {y_train_proba.max():.4f}]")
     print(f"   Train mean probability: {y_train_proba.mean():.4f}")
     
     # Generate predictions on test set (for evaluation)
     print("\n⏳ Generating test set predictions...")
-    y_test_proba = model.predict_proba(X_test_scaled)[:, 1]
+    y_test_proba = model.predict_proba(X_test)[:, 1]
     print(f"   Test probabilities shape: {y_test_proba.shape}")
     print(f"   Test probability range: [{y_test_proba.min():.4f}, {y_test_proba.max():.4f}]")
     print(f"   Test mean probability: {y_test_proba.mean():.4f}")
@@ -427,16 +397,17 @@ def generate_comparison_report(y_test, uncalibrated_proba, calibrated_proba, out
     print(f"   ✅ Comparison metrics saved: {comparison_path}")
 
 
-def save_calibrated_model(model, scaler, calibrator, output_dir, method):
+def save_calibrated_model(model, calibrator, output_dir, method):
     """
     Save calibrated model for deployment.
     
-    This saves the original model, scaler, and the calibrator so they can be
+    This saves the original model and the calibrator so they can be
     loaded together for making calibrated predictions in production.
+    
+    Note: No scaler is saved - use Phase 1 scaler for deployment.
     
     Args:
         model: Original trained model
-        scaler: StandardScaler fitted during training
         calibrator: Fitted calibrator
         output_dir: Directory to save files
         method: Calibration method used
@@ -452,11 +423,8 @@ def save_calibrated_model(model, scaler, calibrator, output_dir, method):
         pickle.dump(model, f)
     print(f"✅ Original model saved: {model_path}")
     
-    # Save scaler
-    scaler_path = output_path / "logistic_regression_scaler.pkl"
-    with open(scaler_path, 'wb') as f:
-        pickle.dump(scaler, f)
-    print(f"✅ Scaler saved: {scaler_path}")
+    # Note about scaler
+    print(f"ℹ️  Scaler: Use Phase 1 scaler (data/processed/splits/scaler.pkl) for deployment")
     
     # Calibrator is already saved by calibrate_model_pipeline
     calibrator_path = output_path / "Logistic_Regression_calibrator.pkl"
@@ -472,13 +440,14 @@ The model has been calibrated using {method.upper()} to ensure reliable probabil
 
 ## Files
 - `logistic_regression_model_original.pkl`: Original trained Logistic Regression model
-- `logistic_regression_scaler.pkl`: StandardScaler for feature preprocessing
 - `Logistic_Regression_calibrator.pkl`: Calibration transformer ({method})
 - `Logistic_Regression_report.txt`: Detailed calibration report
 - `Logistic_Regression_metrics.json`: Calibration metrics (JSON)
 - `calibration_comparison_metrics.json`: Before/after comparison metrics
 - `reliability_diagram_comparison.png`: Calibration visualization
 - Various PNG files: Additional visualization plots
+
+**Note:** For the StandardScaler, use Phase 1 scaler: `data/processed/splits/scaler.pkl`
 
 ## Usage
 
@@ -487,23 +456,26 @@ The model has been calibrated using {method.upper()} to ensure reliable probabil
 ```python
 import pickle
 import pandas as pd
+import joblib
 from pathlib import Path
+
+# Load Phase 1 scaler
+scaler = joblib.load('data/processed/splits/scaler.pkl')
 
 # Load original model
 with open('logistic_regression_model_original.pkl', 'rb') as f:
     model = pickle.load(f)
 
-# Load scaler
-with open('logistic_regression_scaler.pkl', 'rb') as f:
-    scaler = pickle.load(f)
-
 # Load calibrator
 calibrator = ModelCalibrator.load('Logistic_Regression_calibrator.pkl')
 
-# Load your preprocessed features
+# Load your preprocessed features (already preprocessed with Phase 1 pipeline)
 X_new = pd.read_csv('your_features.csv')
 
-# Scale features
+# Apply Phase 1 preprocessing and scaling (outside this script)
+# Then load the already-preprocessed, scaled features
+
+# Scale features using Phase 1 scaler
 X_new_scaled = scaler.transform(X_new)
 
 # Make predictions
@@ -631,7 +603,7 @@ Examples:
     try:
         # STEP 1: Load model from HuggingFace Hub or local directory
         print_section("📥 Step 1: Load Pre-trained Model", "=")
-        model, scaler, training_summary = load_logistic_regression_model(
+        model, training_summary = load_logistic_regression_model(
             repo_id=args.repo_id,
             cache_dir="./models/downloaded",
             force_download=args.force_download
@@ -647,8 +619,9 @@ Examples:
         
         # STEP 3: Generate uncalibrated predictions
         print_section("🔮 Step 3: Generate Uncalibrated Predictions", "=")
+        # Note: X_train and X_test are already scaled from Phase 1
         predictions = generate_uncalibrated_predictions(
-            model, scaler, X_train, X_test, y_train, y_test
+            model, X_train, X_test, y_train, y_test
         )
         
         # STEP 4: Apply calibration
@@ -675,7 +648,7 @@ Examples:
         calibrator = ModelCalibrator.load(
             str(Path(args.output_dir) / "Logistic_Regression_calibrator.pkl")
         )
-        save_calibrated_model(model, scaler, calibrator, args.output_dir, args.method)
+        save_calibrated_model(model, calibrator, args.output_dir, args.method)
         
         # STEP 7: Upload to HuggingFace Hub (optional, automatic if HF_TOKEN set)
         print_section("📤 Step 7: Upload to HuggingFace Hub", "=")

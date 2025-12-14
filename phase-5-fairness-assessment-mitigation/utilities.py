@@ -273,29 +273,76 @@ def load_test_data_and_demographics(
     return X_test, y_test, demographics
 
 
-def load_calibrated_model_and_calibrator(
-    model_repo_id: str = "auphong2707/hospital-readmission-lgbm-calibrated",
+def load_model_and_calibrator(
+    model_repo_id: str = None,
     cache_dir: str = "./models/downloaded",
     use_local: bool = False,
     local_model_path: str = None,
-    local_calibrator_path: str = None
-) -> Tuple[Any, Any]:
+    local_calibrator_path: str = None,
+    local_scaler_path: str = None,
+    method: str = 'gradient_boosting'
+) -> Union[Tuple[Any, Any], Tuple[Any, Any, Any]]:
     """
-    Load calibrated model and calibrator from HuggingFace or local files.
+    Universal loader for calibrated models and calibrators.
+    
+    NOTE: For logistic_regression, the scaler is loaded from Phase 1 data repo
+    (auphong2707/hospital-readmission-risk-data/splits/scaler.pkl).
+    This is the universal scaler fitted on training data only (no data leakage).
     
     Args:
-        model_repo_id: HuggingFace model repository ID
+        model_repo_id: HuggingFace repo ID (auto-selected if None)
         cache_dir: Cache directory for downloads
         use_local: If True, load from local files
         local_model_path: Path to local model file
         local_calibrator_path: Path to local calibrator file
+        local_scaler_path: Path to local Phase 1 scaler file (logistic_regression only)
+        method: Model method - 'gradient_boosting', 'random_forest', or 'logistic_regression'
         
     Returns:
-        tuple: (model, calibrator)
+        tuple: (model, calibrator) for tree models, (model, scaler, calibrator) for logistic_regression
+               The scaler for logistic_regression is the Phase 1 universal scaler.
     """
+    # Define method-specific configurations
+    method_configs = {
+        'gradient_boosting': {
+            'default_repo': 'auphong2707/hospital-readmission-lgbm-calibrated',
+            'model_filename': 'gradient_boosting_model_original.joblib',
+            'calibrator_filename': 'Gradient_Boosting_(LightGBM)_calibrator.pkl',
+            'display_name': 'Gradient Boosting (LightGBM)',
+            'needs_scaler': False
+        },
+        'random_forest': {
+            'default_repo': 'auphong2707/hospital-readmission-rf-calibrated',
+            'model_filename': 'random_forest_model_original.joblib',
+            'calibrator_filename': 'Random_Forest_calibrator.pkl',
+            'display_name': 'Random Forest',
+            'needs_scaler': False
+        },
+        'logistic_regression': {
+            'default_repo': 'auphong2707/hospital-readmission-lr-calibrated',
+            'model_filename': 'logistic_regression_model_original.pkl',
+            # NOTE: No scaler needed in Phase 5 - test data already scaled from Phase 1
+            'calibrator_filename': 'Logistic_Regression_calibrator.pkl',
+            'display_name': 'Logistic Regression',
+            'needs_scaler': False
+        }
+    }
+    
+    if method not in method_configs:
+        raise ValueError(
+            f"Unknown method '{method}'. "
+            f"Supported: {list(method_configs.keys())}"
+        )
+    
+    config = method_configs[method]
+    repo_id = model_repo_id or config['default_repo']
+    needs_scaler = config.get('needs_scaler', False)
+    
     print("\n" + "="*80)
-    print("📥 Loading Calibrated Model and Calibrator")
+    print(f"📥 Loading {config['display_name']} Model and Calibrator")
     print("="*80)
+    
+    scaler = None
     
     if use_local:
         print(f"Loading from local files...")
@@ -305,10 +352,27 @@ def load_calibrated_model_and_calibrator(
         if not local_calibrator_path or not os.path.exists(local_calibrator_path):
             raise FileNotFoundError(f"Calibrator file not found: {local_calibrator_path}")
         
-        model = joblib.load(local_model_path)
-        calibrator = joblib.load(local_calibrator_path)
-        
+        # Load model (use pickle for .pkl files, joblib for .joblib files)
+        if local_model_path.endswith('.pkl'):
+            with open(local_model_path, 'rb') as f:
+                model = pickle.load(f)
+        else:
+            model = joblib.load(local_model_path)
         print(f"✅ Loaded model: {local_model_path}")
+        
+        # Load scaler if needed (logistic regression)
+        if needs_scaler:
+            if not local_scaler_path or not os.path.exists(local_scaler_path):
+                raise FileNotFoundError(f"Scaler file not found: {local_scaler_path}")
+            with open(local_scaler_path, 'rb') as f:
+                scaler = pickle.load(f)
+            print(f"✅ Loaded scaler: {local_scaler_path}")
+        
+        # Load calibrator
+        if local_calibrator_path.endswith('.pkl'):
+            calibrator = ModelCalibrator.load(local_calibrator_path)
+        else:
+            calibrator = joblib.load(local_calibrator_path)
         print(f"✅ Loaded calibrator: {local_calibrator_path}")
         
     else:
@@ -320,71 +384,87 @@ def load_calibrated_model_and_calibrator(
                 "Install with: pip install huggingface_hub"
             )
         
-        print(f"Loading from HuggingFace Hub: {model_repo_id}")
+        print(f"Loading from HuggingFace Hub: {repo_id}")
         
         # Download model
         model_path = hf_hub_download(
-            repo_id=model_repo_id,
-            filename="gradient_boosting_model_original.joblib",
+            repo_id=repo_id,
+            filename=config['model_filename'],
             repo_type="model",
             cache_dir=cache_dir
         )
-        model = joblib.load(model_path)
-        print(f"✅ Downloaded model")
+        # Load model (use pickle for .pkl files, joblib for .joblib files)
+        if config['model_filename'].endswith('.pkl'):
+            with open(model_path, 'rb') as f:
+                model = pickle.load(f)
+        else:
+            model = joblib.load(model_path)
+        print(f"✅ Downloaded {config['display_name']} model")
+        
+        # Download scaler if needed (logistic regression)
+        if needs_scaler:
+            # NOTE: Scaler is from Phase 1 data repo (universal for all models)
+            scaler_repo = config.get('scaler_repo', repo_id)
+            scaler_path = hf_hub_download(
+                repo_id=scaler_repo,
+                filename=config['scaler_filename'],
+                repo_type="dataset",  # Phase 1 scaler is in the data repo
+                cache_dir=cache_dir
+            )
+            with open(scaler_path, 'rb') as f:
+                scaler = pickle.load(f)
+            print(f"✅ Downloaded Phase 1 scaler (universal, no leakage)")
         
         # Download calibrator
         calibrator_path = hf_hub_download(
-            repo_id=model_repo_id,
-            filename="Gradient_Boosting_(LightGBM)_calibrator.pkl",
+            repo_id=repo_id,
+            filename=config['calibrator_filename'],
             repo_type="model",
             cache_dir=cache_dir
         )
-        calibrator = joblib.load(calibrator_path)
+        calibrator = ModelCalibrator.load(calibrator_path)
         print(f"✅ Downloaded calibrator")
     
     print("="*80 + "\n")
     
-    return model, calibrator
+    # Return scaler if needed (logistic regression)
+    if needs_scaler:
+        return model, scaler, calibrator
+    else:
+        return model, calibrator
 
 
-def load_calibrated_random_forest_model_and_calibrator(
-    model_repo_id: str = "auphong2707/hospital-readmission-rf-calibrated",
-    cache_dir: str = "./models/downloaded",
+def load_phase1_scaler(
+    scaler_repo_id: str = "auphong2707/hospital-readmission-risk-data",
+    cache_dir: str = "./data/downloaded",
     use_local: bool = False,
-    local_model_path: str = None,
-    local_calibrator_path: str = None
-) -> Tuple[Any, Any]:
+    local_scaler_path: str = None
+):
     """
-    Load calibrated Random Forest model and calibrator from HuggingFace or local files.
+    Load Phase 1 universal scaler (fitted on training data only).
+    
+    This scaler is used by all models (RF, GB, LR) and was fitted in Phase 1
+    with no data leakage (fitted only on training data).
     
     Args:
-        model_repo_id: HuggingFace model repository ID
+        scaler_repo_id: HuggingFace data repo ID
         cache_dir: Cache directory for downloads
-        use_local: If True, load from local files
-        local_model_path: Path to local model file
-        local_calibrator_path: Path to local calibrator file
+        use_local: If True, load from local file
+        local_scaler_path: Path to local scaler file
         
     Returns:
-        tuple: (model, calibrator)
+        StandardScaler: The fitted scaler from Phase 1
     """
     print("\n" + "="*80)
-    print("📥 Loading Calibrated Random Forest Model and Calibrator")
+    print("📥 Loading Phase 1 Universal Scaler")
     print("="*80)
     
     if use_local:
-        print(f"Loading from local files...")
-        
-        if not local_model_path or not os.path.exists(local_model_path):
-            raise FileNotFoundError(f"Model file not found: {local_model_path}")
-        if not local_calibrator_path or not os.path.exists(local_calibrator_path):
-            raise FileNotFoundError(f"Calibrator file not found: {local_calibrator_path}")
-        
-        model = joblib.load(local_model_path)
-        calibrator = joblib.load(local_calibrator_path)
-        
-        print(f"✅ Loaded model: {local_model_path}")
-        print(f"✅ Loaded calibrator: {local_calibrator_path}")
-        
+        if not local_scaler_path or not os.path.exists(local_scaler_path):
+            raise FileNotFoundError(f"Scaler file not found: {local_scaler_path}")
+        with open(local_scaler_path, 'rb') as f:
+            scaler = pickle.load(f)
+        print(f"✅ Loaded Phase 1 scaler: {local_scaler_path}")
     else:
         try:
             from huggingface_hub import hf_hub_download
@@ -394,31 +474,21 @@ def load_calibrated_random_forest_model_and_calibrator(
                 "Install with: pip install huggingface_hub"
             )
         
-        print(f"Loading from HuggingFace Hub: {model_repo_id}")
-        
-        # Download model
-        model_path = hf_hub_download(
-            repo_id=model_repo_id,
-            filename="random_forest_model_original.joblib",
-            repo_type="model",
+        print(f"Loading from HuggingFace Hub: {scaler_repo_id}")
+        scaler_path = hf_hub_download(
+            repo_id=scaler_repo_id,
+            filename="splits/scaler.pkl",
+            repo_type="dataset",
             cache_dir=cache_dir
         )
-        model = joblib.load(model_path)
-        print(f"✅ Downloaded Random Forest model")
-        
-        # Download calibrator
-        calibrator_path = hf_hub_download(
-            repo_id=model_repo_id,
-            filename="Random_Forest_calibrator.pkl",
-            repo_type="model",
-            cache_dir=cache_dir
-        )
-        calibrator = joblib.load(calibrator_path)
-        print(f"✅ Downloaded calibrator")
+        with open(scaler_path, 'rb') as f:
+            scaler = pickle.load(f)
+        print(f"✅ Downloaded Phase 1 scaler from {scaler_repo_id}")
     
+    print("ℹ️  This scaler was fitted on training data only (no data leakage)")
     print("="*80 + "\n")
     
-    return model, calibrator
+    return scaler
 
 
 def load_phase4_results(
@@ -457,6 +527,51 @@ def load_phase4_results(
     
     return phase4_results
 
+
+def load_phase5_summary(
+    phase5_summary_path: str = "./phase-5-fairness-assessment-mitigation/outputs/gradient_boosting/evaluation/phase5_summary_for_phase6.json"
+) -> Dict:
+    """
+    Load Phase 5 fairness evaluation summary.
+    
+    Args:
+        phase5_summary_path: Path to Phase 5 summary JSON
+        
+    Returns:
+        dict: Phase 5 results with fairness metrics and violations
+    """
+    print("\n" + "="*80)
+    print("📥 Loading Phase 5 Fairness Evaluation Summary")
+    print("="*80)
+    
+    if not os.path.exists(phase5_summary_path):
+        raise FileNotFoundError(
+            f"Phase 5 summary not found: {phase5_summary_path}\n"
+            f"Please run Phase 5 fairness evaluation first."
+        )
+    
+    with open(phase5_summary_path, 'r') as f:
+        phase5_results = json.load(f)
+    
+    print(f"✅ Loaded Phase 5 summary: {phase5_summary_path}")
+    print(f"\n📊 Phase 5 Key Findings:")
+    print(f"   Mitigation required: {phase5_results.get('mitigation_required', 'Unknown')}")
+    
+    if 'optimal_threshold' in phase5_results:
+        print(f"   Global threshold: {phase5_results['optimal_threshold']:.4f}")
+    
+    if 'fairness_violations' in phase5_results:
+        violations = phase5_results['fairness_violations']
+        if violations:
+            print(f"   Fairness violations: {len(violations)} detected")
+            for i, violation in enumerate(violations[:3], 1):
+                print(f"      {i}. {violation}")
+            if len(violations) > 3:
+                print(f"      ... and {len(violations) - 3} more")
+    
+    print("="*80 + "\n")
+    
+    return phase5_results
 
 def generate_calibrated_predictions(
     model: Any,

@@ -541,11 +541,40 @@ class CompletePreprocessor:
         
         return data
     
-    def scale_features(self, X):
-        """Scale numerical features using StandardScaler or RobustScaler."""
-        print(f"Scaling features using {self.scaler_type.capitalize()}Scaler...")
-        X_scaled = self.scaler.fit_transform(X)
-        return pd.DataFrame(X_scaled, columns=X.columns, index=X.index)
+    def scale_features_train_test(self, X_train, X_val, X_test):
+        """Scale features separately for train/val/test to prevent data leakage.
+        
+        Fits scaler ONLY on training data, then transforms all splits.
+        This prevents test set statistics from contaminating the scaler.
+        
+        Args:
+            X_train: Training features (DataFrame)
+            X_val: Validation features (DataFrame)
+            X_test: Test features (DataFrame)
+        
+        Returns:
+            Tuple of (X_train_scaled, X_val_scaled, X_test_scaled) as DataFrames
+        """
+        print(f"\n🔒 Scaling features using {self.scaler_type.capitalize()}Scaler...")
+        print("   Fitting scaler on TRAINING data only (prevents data leakage!)")
+        
+        # Fit scaler ONLY on training data
+        X_train_scaled = self.scaler.fit_transform(X_train)
+        
+        # Transform validation and test using the SAME scaler
+        X_val_scaled = self.scaler.transform(X_val)
+        X_test_scaled = self.scaler.transform(X_test)
+        
+        print(f"   ✅ Scaler fitted on {X_train.shape[0]:,} training samples")
+        print(f"   ✅ Transformed {X_val.shape[0]:,} validation samples")
+        print(f"   ✅ Transformed {X_test.shape[0]:,} test samples")
+        
+        # Return as DataFrames with original column names and indices
+        return (
+            pd.DataFrame(X_train_scaled, columns=X_train.columns, index=X_train.index),
+            pd.DataFrame(X_val_scaled, columns=X_val.columns, index=X_val.index),
+            pd.DataFrame(X_test_scaled, columns=X_test.columns, index=X_test.index)
+        )
     
     def fit_transform(self, data_path="./data/diabetic_data.csv"):
         """
@@ -593,8 +622,39 @@ class CompletePreprocessor:
         X = data.drop('target', axis=1)
         y = data['target']
         
-        # Step 9: Scale features
-        X = self.scale_features(X)
+        # Step 9: Create train/val/test splits BEFORE scaling (prevents leakage)
+        print(f"\n📊 Creating train/validation/test splits (before scaling)...")
+        test_size = 0.15
+        val_size = 0.15
+        
+        # First split: separate test set
+        X_temp, X_test, y_temp, y_test = train_test_split(
+            X, y, 
+            test_size=test_size, 
+            random_state=self.random_state,
+            stratify=y
+        )
+        
+        # Second split: separate validation from training
+        val_size_adjusted = val_size / (1 - test_size)
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_temp, y_temp,
+            test_size=val_size_adjusted,
+            random_state=self.random_state,
+            stratify=y_temp
+        )
+        
+        print(f"   Training: {X_train.shape[0]:,} samples ({X_train.shape[0]/len(X)*100:.1f}%)")
+        print(f"   Validation: {X_val.shape[0]:,} samples ({X_val.shape[0]/len(X)*100:.1f}%)")
+        print(f"   Test: {X_test.shape[0]:,} samples ({X_test.shape[0]/len(X)*100:.1f}%)")
+        
+        # Step 10: Scale features (fit on train only, transform val/test)
+        X_train, X_val, X_test = self.scale_features_train_test(X_train, X_val, X_test)
+        
+        # Store splits for later use (with demographics alignment)
+        self._train_indices = X_train.index
+        self._val_indices = X_val.index
+        self._test_indices = X_test.index
         
         print("\n" + "=" * 80)
         print("COMPLETE PREPROCESSING FINISHED - 100% README REQUIREMENTS COVERED!")
@@ -612,12 +672,54 @@ class CompletePreprocessor:
         print(f"✅ One-hot encoding (low-cardinality): Applied")
         print(f"✅ CV-safe target encoding (high-cardinality): Applied")
         print(f"✅ Column name sanitization (LightGBM compatibility): Applied")
-        print(f"✅ Feature scaling ({self.scaler_type.capitalize()}Scaler): Applied")
-        print(f"\n📊 Final dataset: {X.shape[0]} samples, {X.shape[1]} features")
-        print(f"📊 Target distribution: {dict(pd.Series(y).value_counts())}")
+        print(f"✅ Train/val/test splitting: Applied (before scaling)")
+        print(f"✅ Feature scaling ({self.scaler_type.capitalize()}Scaler): Applied (fit on train only!)")
+        print(f"\n📊 Final datasets:")
+        print(f"   Training: {X_train.shape[0]:,} samples, {X_train.shape[1]} features")
+        print(f"   Validation: {X_val.shape[0]:,} samples, {X_val.shape[1]} features")
+        print(f"   Test: {X_test.shape[0]:,} samples, {X_test.shape[1]} features")
+        print(f"\n📊 Target distribution:")
+        print(f"   Training: {dict(pd.Series(y_train).value_counts())}")
+        print(f"   Validation: {dict(pd.Series(y_val).value_counts())}")
+        print(f"   Test: {dict(pd.Series(y_test).value_counts())}")
         print(f"\n⚠️  Class imbalance handling: Use class_weight parameter in models.")
+        print(f"🔒 No data leakage: Scaler fitted only on training data!")
         
-        return X, y
+        return {
+            'X_train': X_train, 'y_train': y_train,
+            'X_val': X_val, 'y_val': y_val,
+            'X_test': X_test, 'y_test': y_test
+        }
+    
+    def save_scaler(self, output_dir="./data/processed"):
+        """Save the fitted scaler for deployment and later phases.
+        
+        CRITICAL: This scaler was fitted ONLY on training data,
+        ensuring no data leakage. It should be used in all downstream
+        phases (Phase 2-6) for consistent scaling.
+        
+        Args:
+            output_dir: Directory to save scaler
+            
+        Returns:
+            Path to saved scaler file
+        """
+        import joblib
+        
+        os.makedirs(output_dir, exist_ok=True)
+        scaler_path = os.path.join(output_dir, "scaler.pkl")
+        
+        joblib.dump(self.scaler, scaler_path)
+        print(f"   ✅ Saved scaler: {scaler_path}")
+        
+        # Also save to splits directory for HuggingFace upload
+        splits_dir = os.path.join(output_dir, "splits")
+        if os.path.exists(splits_dir):
+            scaler_split_path = os.path.join(splits_dir, "scaler.pkl")
+            joblib.dump(self.scaler, scaler_split_path)
+            print(f"   ✅ Saved scaler to splits: {scaler_split_path}")
+        
+        return scaler_path
     
     def save_processed_data(self, X, y, output_dir="./data/processed"):
         """Save the processed data to specified directory."""
@@ -684,51 +786,30 @@ class CompletePreprocessor:
             'metadata': metadata_file
         }
     
-    def create_train_test_split(self, X, y, test_size=0.15, val_size=0.15, output_dir="./data/processed"):
+    def create_train_test_split(self, splits_dict, output_dir="./data/processed"):
         """
-        Create train/validation/test splits and save them for ML workflows.
+        Save train/validation/test splits to files.
+        
+        NOTE: Splits and scaling are now done in fit_transform() to prevent data leakage.
+        This method just saves the already-split and scaled data.
         
         Args:
-            X: Features dataframe
-            y: Target series
-            test_size: Proportion for test set (default 0.15 = 15%)
-            val_size: Proportion for validation set from remaining data (default 0.15)
+            splits_dict: Dictionary with X_train, y_train, X_val, y_val, X_test, y_test
             output_dir: Directory to save split datasets
             
         Returns:
             Dictionary with split data paths and split information
         """
         
-        print(f"\n📊 Creating train/validation/test splits...")
-        print(f"Split strategy: Train: ~{(1-test_size)*(1-val_size)*100:.0f}%, Val: ~{(1-test_size)*val_size*100:.0f}%, Test: {test_size*100:.0f}%")
+        # Extract splits from dictionary
+        X_train = splits_dict['X_train']
+        y_train = splits_dict['y_train']
+        X_val = splits_dict['X_val']
+        y_val = splits_dict['y_val']
+        X_test = splits_dict['X_test']
+        y_test = splits_dict['y_test']
         
-        # First split: separate test set
-        X_temp, X_test, y_temp, y_test = train_test_split(
-            X, y, 
-            test_size=test_size, 
-            random_state=self.random_state,
-            stratify=y  # Stratify to maintain class distribution
-        )
-        
-        # Second split: separate validation from training
-        val_size_adjusted = val_size / (1 - test_size)  # Adjust val_size for remaining data
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_temp, y_temp,
-            test_size=val_size_adjusted,
-            random_state=self.random_state,
-            stratify=y_temp
-        )
-        
-        # Print split statistics
-        print(f"\n✅ Split completed:")
-        print(f"   Training set: {X_train.shape[0]:,} samples ({X_train.shape[0]/len(X)*100:.1f}%)")
-        print(f"   Validation set: {X_val.shape[0]:,} samples ({X_val.shape[0]/len(X)*100:.1f}%)")
-        print(f"   Test set: {X_test.shape[0]:,} samples ({X_test.shape[0]/len(X)*100:.1f}%)")
-        
-        print(f"\n📈 Class distribution:")
-        print(f"   Training: {dict(pd.Series(y_train).value_counts())}")
-        print(f"   Validation: {dict(pd.Series(y_val).value_counts())}")
-        print(f"   Test: {dict(pd.Series(y_test).value_counts())}")
+        print(f"\n� Saving train/validation/test splits to {output_dir}/splits/...")
         
         # Create splits directory
         splits_dir = os.path.join(output_dir, "splits")
@@ -783,20 +864,28 @@ class CompletePreprocessor:
         # Save split info
         split_info_file = os.path.join(splits_dir, "split_info.txt")
         with open(split_info_file, 'w') as f:
+            total_samples = X_train.shape[0] + X_val.shape[0] + X_test.shape[0]
             f.write("Train/Validation/Test Split Information\n")
             f.write("=" * 60 + "\n\n")
             f.write(f"Random seed: {self.random_state}\n")
-            f.write(f"Stratified split: Yes (maintains class distribution)\n\n")
-            f.write(f"Training set: {X_train.shape[0]:,} samples ({X_train.shape[0]/len(X)*100:.1f}%)\n")
-            f.write(f"Validation set: {X_val.shape[0]:,} samples ({X_val.shape[0]/len(X)*100:.1f}%)\n")
-            f.write(f"Test set: {X_test.shape[0]:,} samples ({X_test.shape[0]/len(X)*100:.1f}%)\n\n")
+            f.write(f"Stratified split: Yes (maintains class distribution)\n")
+            f.write(f"Scaling: Fitted on training data only (no leakage!)\n\n")
+            f.write(f"Training set: {X_train.shape[0]:,} samples ({X_train.shape[0]/total_samples*100:.1f}%)\n")
+            f.write(f"Validation set: {X_val.shape[0]:,} samples ({X_val.shape[0]/total_samples*100:.1f}%)\n")
+            f.write(f"Test set: {X_test.shape[0]:,} samples ({X_test.shape[0]/total_samples*100:.1f}%)\n\n")
             f.write(f"Class distribution:\n")
             f.write(f"  Training - No readmission: {(y_train==0).sum():,}, Readmission: {(y_train==1).sum():,}\n")
             f.write(f"  Validation - No readmission: {(y_val==0).sum():,}, Readmission: {(y_val==1).sum():,}\n")
             f.write(f"  Test - No readmission: {(y_test==0).sum():,}, Readmission: {(y_test==1).sum():,}\n")
         
         print(f"💾 Saved split info: {split_info_file}")
+        
+        # Save scaler (CRITICAL: fitted on training data only!)
+        print(f"\n🔒 Saving scaler (fitted on training data only)...")
+        self.save_scaler(output_dir=output_dir)
+        
         print(f"\n📁 All splits saved in: {splits_dir}/")
+        print(f"✅ Scaler saved for Phase 2-6 deployment (no data leakage!)")
         
         return {
             'train': train_file,
@@ -811,14 +900,13 @@ class CompletePreprocessor:
             'y_test': y_test
         }
     
-    def export_for_huggingface(self, X, y, output_dir="./data/processed/huggingface"):
+    def export_for_huggingface(self, splits_dict, output_dir="./data/processed/huggingface"):
         """
         Export processed data in Hugging Face compatible format.
         Creates a dataset card and proper structure for upload.
         
         Args:
-            X: Features dataframe
-            y: Target series
+            splits_dict: Dictionary with X_train, y_train, X_val, y_val, X_test, y_test
             output_dir: Directory for HuggingFace export
             
         Returns:
@@ -830,7 +918,18 @@ class CompletePreprocessor:
         # Create HuggingFace directory
         os.makedirs(output_dir, exist_ok=True)
         
-        # Combine features and target
+        # Extract splits
+        X_train = splits_dict['X_train']
+        y_train = splits_dict['y_train']
+        X_val = splits_dict['X_val']
+        y_val = splits_dict['y_val']
+        X_test = splits_dict['X_test']
+        y_test = splits_dict['y_test']
+        
+        # Combine all data for full dataset
+        X = pd.concat([X_train, X_val, X_test], axis=0)
+        y = pd.concat([y_train, y_val, y_test], axis=0)
+        
         dataset = X.copy()
         dataset['target'] = y
         
@@ -839,8 +938,8 @@ class CompletePreprocessor:
         dataset.to_csv(full_dataset_file, index=False)
         print(f"✅ Saved full dataset: {full_dataset_file}")
         
-        # Create train/val/test splits for HuggingFace
-        splits = self.create_train_test_split(X, y, output_dir=output_dir)
+        # Save splits for HuggingFace
+        splits = self.create_train_test_split(splits_dict, output_dir=output_dir)
         
         # Create README/dataset card for HuggingFace
         readme_file = os.path.join(output_dir, "README.md")
@@ -1054,33 +1153,41 @@ def main():
     preprocessor = CompletePreprocessor(random_state=42, scaler_type='standard')
     
     # Run complete preprocessing with all README requirements
-    X, y = preprocessor.fit_transform()
+    # Returns dictionary with train/val/test splits (already scaled with no leakage!)
+    splits_dict = preprocessor.fit_transform()
     
-    # Save processed data to data/processed/ folder
-    saved_files = preprocessor.save_processed_data(X, y)
+    # Extract for backward compatibility
+    X_train = splits_dict['X_train']
+    y_train = splits_dict['y_train']
+    X_val = splits_dict['X_val']
+    y_val = splits_dict['y_val']
+    X_test = splits_dict['X_test']
+    y_test = splits_dict['y_test']
     
-    # Create train/validation/test splits
+    # Save processed data splits to files
     print("\n" + "=" * 80)
-    splits = preprocessor.create_train_test_split(X, y)
+    saved_splits = preprocessor.create_train_test_split(splits_dict)
     
     # Export for Hugging Face
     print("\n" + "=" * 80)
-    hf_export = preprocessor.export_for_huggingface(X, y)
+    hf_export = preprocessor.export_for_huggingface(splits_dict)
     
     # Display final results
     print("\n" + "=" * 80)
     print("🎉 COMPLETE PREPROCESSING PIPELINE FINISHED!")
     print("=" * 80)
-    print(f"📈 Features shape: {X.shape}")
-    print(f"🎯 Target shape: {y.shape}")
-    print(f"🔧 Sample feature names: {list(X.columns)[:10]}...")
+    print(f"📈 Training set: {X_train.shape}")
+    print(f"📈 Validation set: {X_val.shape}")
+    print(f"📈 Test set: {X_test.shape}")
+    print(f"🔧 Sample feature names: {list(X_train.columns)[:10]}...")
     print(f"\n📁 Outputs:")
-    print(f"   - Processed data: ./data/processed/")
     print(f"   - Train/val/test splits: ./data/processed/splits/")
+    print(f"   - Scaler (no leakage): ./data/processed/splits/scaler.pkl")
     print(f"   - HuggingFace export: ./data/processed/huggingface/")
+    print(f"\n🔒 Scaler fitted on training data only - ready for deployment!")
     
-    return X, y, preprocessor, saved_files, splits, hf_export
+    return splits_dict, preprocessor, saved_splits, hf_export
 
 
 if __name__ == "__main__":
-    X, y, preprocessor, saved_files, splits, hf_export = main()
+    splits_dict, preprocessor, saved_splits, hf_export = main()

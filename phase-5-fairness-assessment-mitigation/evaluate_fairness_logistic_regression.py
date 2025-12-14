@@ -79,7 +79,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from utilities import (
     load_test_data_and_demographics,
-    load_calibrated_model_and_calibrator,
+    load_model_and_calibrator,
     load_phase4_results,
     generate_calibrated_predictions,
     GroupPerformanceAnalyzer,
@@ -125,12 +125,7 @@ def parse_arguments():
         default=None,
         help='Path to local model file'
     )
-    parser.add_argument(
-        '--local-scaler',
-        type=str,
-        default=None,
-        help='Path to local scaler file'
-    )
+    # Note: No --local-scaler argument - test data already scaled from Phase 1
     parser.add_argument(
         '--local-calibrator',
         type=str,
@@ -185,112 +180,28 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def load_logistic_regression_model_for_fairness(args):
-    """
-    Load calibrated Logistic Regression model, scaler, and calibrator.
-    
-    Args:
-        args: Command line arguments
-        
-    Returns:
-        tuple: (model, scaler, calibrator)
-    """
-    print_section("📥 Loading Calibrated Logistic Regression Model", "=")
-    
-    if args.use_local:
-        # Load from local files
-        print("Loading from local files...")
-        
-        # Determine paths
-        if args.local_model:
-            model_path = Path(args.local_model)
-        else:
-            model_path = Path("./calibration_outputs/logistic_regression/logistic_regression_model_original.pkl")
-        
-        if args.local_scaler:
-            scaler_path = Path(args.local_scaler)
-        else:
-            scaler_path = Path("./calibration_outputs/logistic_regression/logistic_regression_scaler.pkl")
-            
-        if args.local_calibrator:
-            calibrator_path = Path(args.local_calibrator)
-        else:
-            calibrator_path = Path("./calibration_outputs/logistic_regression/Logistic_Regression_calibrator.pkl")
-        
-        # Load model
-        with open(model_path, 'rb') as f:
-            model = pickle.load(f)
-        print(f"✅ Model loaded: {model_path}")
-        
-        # Load scaler
-        with open(scaler_path, 'rb') as f:
-            scaler = pickle.load(f)
-        print(f"✅ Scaler loaded: {scaler_path}")
-        
-        # Load calibrator
-        calibrator = ModelCalibrator.load(str(calibrator_path))
-        print(f"✅ Calibrator loaded: {calibrator_path}")
-        
-    else:
-        # Download from HuggingFace Hub
-        print(f"Downloading from HuggingFace Hub: {args.model_repo_id}")
-        from huggingface_hub import hf_hub_download
-        
-        # Download model
-        model_path = hf_hub_download(
-            repo_id=args.model_repo_id,
-            filename="logistic_regression_model_original.pkl",
-            cache_dir=args.cache_dir,
-            force_download=args.force_download
-        )
-        with open(model_path, 'rb') as f:
-            model = pickle.load(f)
-        print(f"✅ Model downloaded")
-        
-        # Download scaler
-        scaler_path = hf_hub_download(
-            repo_id=args.model_repo_id,
-            filename="logistic_regression_scaler.pkl",
-            cache_dir=args.cache_dir,
-            force_download=args.force_download
-        )
-        with open(scaler_path, 'rb') as f:
-            scaler = pickle.load(f)
-        print(f"✅ Scaler downloaded")
-        
-        # Download calibrator
-        calibrator_hf_path = hf_hub_download(
-            repo_id=args.model_repo_id,
-            filename="Logistic_Regression_calibrator.pkl",
-            cache_dir=args.cache_dir,
-            force_download=args.force_download
-        )
-        calibrator = ModelCalibrator.load(calibrator_hf_path)
-        print(f"✅ Calibrator downloaded")
-    
-    return model, scaler, calibrator
 
 
-def generate_lr_calibrated_predictions(model, scaler, calibrator, X_test):
+
+def generate_lr_calibrated_predictions(model, calibrator, X_test):
     """
     Generate calibrated predictions for Logistic Regression model.
     
+    Note: X_test should already be scaled from Phase 1 preprocessing.
+    
     Args:
         model: Trained Logistic Regression model
-        scaler: StandardScaler for features
         calibrator: Calibrator for probabilities
-        X_test: Test features
+        X_test: Test features (already scaled from Phase 1)
         
     Returns:
         np.ndarray: Calibrated probabilities
     """
     print("🔮 Generating calibrated predictions...")
     
-    # Scale features
-    X_test_scaled = scaler.transform(X_test)
-    
+    # X_test is already scaled from Phase 1 - no need to scale again!
     # Get uncalibrated probabilities
-    y_pred_proba_uncalibrated = model.predict_proba(X_test_scaled)[:, 1]
+    y_pred_proba_uncalibrated = model.predict_proba(X_test)[:, 1]
     
     # Apply calibration
     try:
@@ -345,7 +256,15 @@ def main():
         
         # STEP 2: Load calibrated model
         print_section("📥 Step 2: Load Calibrated Model", "=")
-        model, scaler, calibrator = load_logistic_regression_model_for_fairness(args)
+        # Note: No scaler needed - test data already scaled from Phase 1
+        model, calibrator = load_model_and_calibrator(
+            model_repo_id=args.model_repo_id,
+            cache_dir=args.cache_dir,
+            use_local=args.use_local,
+            local_model_path=args.local_model,
+            local_calibrator_path=args.local_calibrator,
+            method='logistic_regression'
+        )
         
         # STEP 3: Load Phase 4 results
         print_section("📊 Step 3: Load Phase 4 Results", "=")
@@ -359,7 +278,8 @@ def main():
         
         # STEP 4: Generate calibrated predictions
         print_section("🔮 Step 4: Generate Calibrated Predictions", "=")
-        y_pred_proba = generate_lr_calibrated_predictions(model, scaler, calibrator, X_test)
+        # X_test is already scaled from Phase 1, no need to scale again
+        y_pred_proba = generate_lr_calibrated_predictions(model, calibrator, X_test)
         y_pred = (y_pred_proba >= optimal_threshold).astype(int)
         
         # STEP 5: Overall performance metrics

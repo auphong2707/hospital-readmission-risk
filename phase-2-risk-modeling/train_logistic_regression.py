@@ -45,7 +45,6 @@ from typing import Dict, Optional
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
-from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import make_scorer, roc_auc_score
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -80,6 +79,9 @@ class LogisticRegressionTrainer:
     - Stratified K-fold cross-validation
     - Grid search optimization
     - Feature importance analysis
+    
+    NOTE: Data is already scaled in Phase 1 (fitted on training data only).
+          No additional scaling is performed here to avoid double-scaling.
     """
     
     def __init__(self, random_state=42):
@@ -87,7 +89,6 @@ class LogisticRegressionTrainer:
         self.best_model = None
         self.grid_search = None
         self.feature_names = None
-        self.scaler = StandardScaler()
     
     def create_hyperparameter_grid(self):
         """
@@ -280,13 +281,9 @@ class LogisticRegressionTrainer:
         
         print(f"\n✅ Model saved to: {model_path}")
         
-        # Save scaler (CRITICAL for Phase 3 calibration)
-        scaler_filename = f"logistic_regression_scaler.pkl"
-        scaler_path = os.path.join(output_dir, scaler_filename)
-        with open(scaler_path, 'wb') as f:
-            pickle.dump(self.scaler, f)
-        
-        print(f"✅ Scaler saved to: {scaler_path}")
+        # NOTE: Scaler is saved in Phase 1 (fitted on training data only)
+        # No need to save it here - use Phase 1 scaler for deployment
+        print(f"ℹ️  Scaler: Use Phase 1 scaler (data/processed/splits/scaler.pkl)")
         
         # Save metadata
         if include_metadata:
@@ -480,18 +477,15 @@ def main():
         print(f"   Fold train size: {len(X_fold_train)}")
         print(f"   Fold test size: {len(X_fold_test)}")
         
-        # Scale features
-        scaler = StandardScaler()
-        X_fold_train_scaled = scaler.fit_transform(X_fold_train)
-        X_fold_test_scaled = scaler.transform(X_fold_test)
+        # NOTE: Data is already scaled from Phase 1 (no additional scaling needed)
         
         # Train model with best parameters
         fold_model = LogisticRegression(**best_params, random_state=args.random_state)
-        fold_model.fit(X_fold_train_scaled, y_fold_train)
+        fold_model.fit(X_fold_train, y_fold_train)
         
         # Evaluate on fold test set
-        y_fold_pred = fold_model.predict(X_fold_test_scaled)
-        y_fold_proba = fold_model.predict_proba(X_fold_test_scaled)[:, 1]
+        y_fold_pred = fold_model.predict(X_fold_test)
+        y_fold_proba = fold_model.predict_proba(X_fold_test)[:, 1]
         
         fold_metrics = calculate_comprehensive_metrics(y_fold_test, y_fold_proba, threshold=0.5)
         
@@ -539,17 +533,15 @@ def main():
     print(f"   Inner train size: {len(X_dev_train)}")
     print(f"   Inner val size: {len(X_dev_val)}")
     
-    # Scale features
-    X_dev_train_scaled = trainer.scaler.fit_transform(X_dev_train)
-    X_dev_val_scaled = trainer.scaler.transform(X_dev_val)
+    # NOTE: Data is already scaled from Phase 1 (no additional scaling needed)
     
     # Train final model
     final_model = LogisticRegression(**best_params, random_state=args.random_state)
-    final_model.fit(X_dev_train_scaled, y_dev_train)
+    final_model.fit(X_dev_train, y_dev_train)
     trainer.best_model = final_model
     
     # Monitor validation performance
-    y_dev_val_proba = final_model.predict_proba(X_dev_val_scaled)[:, 1]
+    y_dev_val_proba = final_model.predict_proba(X_dev_val)[:, 1]
     dev_val_auc = roc_auc_score(y_dev_val, y_dev_val_proba)
     
     print(f"✅ Final model trained on {len(X_dev_train)} samples")
@@ -559,9 +551,9 @@ def main():
     print_section("🎯 Step 5: Final Evaluation on Untouched Test Set", "=")
     print("Evaluating final model on the untouched final test set...")
     
-    X_final_test_scaled = trainer.scaler.transform(X_final_test)
-    y_final_pred = final_model.predict(X_final_test_scaled)
-    y_final_proba = final_model.predict_proba(X_final_test_scaled)[:, 1]
+    # NOTE: Data is already scaled from Phase 1
+    y_final_pred = final_model.predict(X_final_test)
+    y_final_proba = final_model.predict_proba(X_final_test)[:, 1]
     
     final_metrics = calculate_comprehensive_metrics(y_final_test, y_final_proba, threshold=0.5)
     print_metrics_table(final_metrics, "🎯 FINAL TEST SET RESULTS")
@@ -580,7 +572,7 @@ def main():
     print_section("📊 Generating Comprehensive Visualizations", "-")
     save_visualizations(
         y_final_test, y_final_proba, y_final_pred, output_dir,
-        model=final_model, X=X_final_test_scaled, feature_names=trainer.feature_names
+        model=final_model, X=X_final_test, feature_names=trainer.feature_names
     )
     
     # Plot CV results

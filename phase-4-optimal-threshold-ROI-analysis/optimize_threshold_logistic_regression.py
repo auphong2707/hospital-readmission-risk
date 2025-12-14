@@ -176,13 +176,15 @@ def load_logistic_regression_calibrated(model_repo_id, cache_dir, force_download
     """
     Load calibrated logistic regression model from local directory or HuggingFace Hub.
     
+    Note: No scaler is loaded - test data from Phase 1 is already scaled.
+    
     Args:
         model_repo_id: HuggingFace repository ID
         cache_dir: Directory to cache downloaded files
         force_download: Force re-download even if cached
         
     Returns:
-        tuple: (model, scaler, calibrator)
+        tuple: (model, calibrator)
     """
     print("📥 Loading calibrated Logistic Regression model...")
     
@@ -197,12 +199,7 @@ def load_logistic_regression_calibrated(model_repo_id, cache_dir, force_download
         with open(model_path, 'rb') as f:
             model = pickle.load(f)
         print(f"   ✅ Model loaded")
-        
-        # Load scaler
-        scaler_path = local_calib_dir / "logistic_regression_scaler.pkl"
-        with open(scaler_path, 'rb') as f:
-            scaler = pickle.load(f)
-        print(f"   ✅ Scaler loaded")
+        print(f"   ℹ️  No scaler needed - data already scaled from Phase 1")
         
         # Load calibrator
         from utilities import ModelCalibrator
@@ -210,12 +207,10 @@ def load_logistic_regression_calibrated(model_repo_id, cache_dir, force_download
         calibrator = ModelCalibrator.load(str(calibrator_path))
         print(f"   ✅ Calibrator loaded")
         
-        return model, scaler, calibrator
+        return model, calibrator
     
     # Try HuggingFace Hub
     try:
-        from huggingface_hub import hf_hub_download
-        
         print(f"⏳ Attempting to download from HuggingFace Hub: {model_repo_id}")
         model, calibrator = load_calibrated_model(
             repo_id=model_repo_id,
@@ -224,25 +219,9 @@ def load_logistic_regression_calibrated(model_repo_id, cache_dir, force_download
             force_download=force_download
         )
         
-        # Download scaler from HuggingFace Hub
-        print(f"⏳ Downloading scaler from HuggingFace Hub...")
-        try:
-            scaler_path = hf_hub_download(
-                repo_id=model_repo_id,
-                filename="logistic_regression_scaler.pkl",
-                cache_dir=cache_dir,
-                force_download=force_download
-            )
-            with open(scaler_path, 'rb') as f:
-                scaler = pickle.load(f)
-            print(f"   ✅ Scaler downloaded from HuggingFace Hub")
-        except Exception as scaler_error:
-            print(f"   ⚠️  Could not download scaler: {scaler_error}")
-            print(f"   ⚠️  Creating new unfitted StandardScaler (predictions may be incorrect!)")
-            from sklearn.preprocessing import StandardScaler
-            scaler = StandardScaler()
+        print(f"   ℹ️  No scaler needed - data already scaled from Phase 1")
         
-        return model, scaler, calibrator
+        return model, calibrator
         
     except FileNotFoundError:
         print("\n❌ ERROR: Calibrated model not found!")
@@ -255,26 +234,25 @@ def load_logistic_regression_calibrated(model_repo_id, cache_dir, force_download
         sys.exit(1)
 
 
-def generate_calibrated_predictions_lr(model, scaler, calibrator, X_test):
+def generate_calibrated_predictions_lr(model, calibrator, X_test):
     """
     Generate calibrated predictions for logistic regression model.
     
+    Note: X_test should already be scaled from Phase 1.
+    
     Args:
         model: Trained logistic regression model
-        scaler: StandardScaler for features
         calibrator: Calibrator for probabilities
-        X_test: Test features
+        X_test: Test features (already scaled from Phase 1)
         
     Returns:
         np.ndarray: Calibrated probabilities
     """
     print("🔮 Generating calibrated predictions...")
+    print("ℹ️  Using pre-scaled features from Phase 1...")
     
-    # Scale features
-    X_test_scaled = scaler.transform(X_test)
-    
-    # Get uncalibrated probabilities
-    y_pred_proba_uncalibrated = model.predict_proba(X_test_scaled)[:, 1]
+    # Get uncalibrated probabilities (X_test already scaled from Phase 1)
+    y_pred_proba_uncalibrated = model.predict_proba(X_test)[:, 1]
     
     # Apply calibration
     try:
@@ -327,7 +305,7 @@ def main():
     
     # Load calibrated model
     print("\n📥 Loading calibrated model...")
-    model, scaler, calibrator = load_logistic_regression_calibrated(
+    model, calibrator = load_logistic_regression_calibrated(
         model_repo_id=args.model_repo_id,
         cache_dir=args.cache_dir,
         force_download=args.force_download
@@ -336,7 +314,7 @@ def main():
     # Generate calibrated predictions
     print("\n🔮 Generating calibrated predictions...")
     y_pred_proba_calibrated = generate_calibrated_predictions_lr(
-        model, scaler, calibrator, X_test
+        model, calibrator, X_test
     )
     
     # ========================================================================

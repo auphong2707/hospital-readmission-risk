@@ -209,13 +209,15 @@ def load_phase5_fairness_report(report_path):
 
 def load_lr_model_for_mitigation(args):
     """
-    Load Logistic Regression model, scaler, and calibrator.
+    Load Logistic Regression model and calibrator.
+    
+    Note: No scaler is loaded - validation data from Phase 1 is already scaled.
     
     Args:
         args: Command line arguments
         
     Returns:
-        tuple: (model, scaler, calibrator)
+        tuple: (model, calibrator)
     """
     print("📥 Loading Logistic Regression model...")
     
@@ -225,11 +227,6 @@ def load_lr_model_for_mitigation(args):
             model_path = Path(args.local_model)
         else:
             model_path = Path("./calibration_outputs/logistic_regression/logistic_regression_model_original.pkl")
-        
-        if args.local_scaler:
-            scaler_path = Path(args.local_scaler)
-        else:
-            scaler_path = Path("./calibration_outputs/logistic_regression/logistic_regression_scaler.pkl")
             
         if args.local_calibrator:
             calibrator_path = Path(args.local_calibrator)
@@ -238,11 +235,10 @@ def load_lr_model_for_mitigation(args):
         
         with open(model_path, 'rb') as f:
             model = pickle.load(f)
-        with open(scaler_path, 'rb') as f:
-            scaler = pickle.load(f)
         calibrator = ModelCalibrator.load(str(calibrator_path))
         
         print(f"✅ Loaded from local files")
+        print(f"ℹ️  No scaler needed - data already scaled from Phase 1")
         
     else:
         # Download from HuggingFace Hub
@@ -257,15 +253,6 @@ def load_lr_model_for_mitigation(args):
         with open(model_path, 'rb') as f:
             model = pickle.load(f)
         
-        scaler_path = hf_hub_download(
-            repo_id=args.model_repo_id,
-            filename="logistic_regression_scaler.pkl",
-            cache_dir=args.cache_dir,
-            force_download=args.force_download
-        )
-        with open(scaler_path, 'rb') as f:
-            scaler = pickle.load(f)
-        
         calibrator_path = hf_hub_download(
             repo_id=args.model_repo_id,
             filename="Logistic_Regression_calibrator.pkl",
@@ -275,28 +262,29 @@ def load_lr_model_for_mitigation(args):
         calibrator = ModelCalibrator.load(calibrator_path)
         
         print(f"✅ Downloaded from HuggingFace Hub")
+        print(f"ℹ️  No scaler needed - data already scaled from Phase 1")
     
-    return model, scaler, calibrator
+    return model, calibrator
 
 
-def generate_lr_predictions(model, scaler, calibrator, X_test):
+def generate_lr_predictions(model, calibrator, X_test):
     """
     Generate calibrated predictions for Logistic Regression.
     
+    Note: X_test should already be scaled from Phase 1.
+    
     Args:
         model: Trained Logistic Regression model
-        scaler: StandardScaler
         calibrator: Calibrator
-        X_test: Test features
+        X_test: Test features (already scaled from Phase 1)
         
     Returns:
         np.ndarray: Calibrated probabilities
     """
-    # Scale features
-    X_test_scaled = scaler.transform(X_test)
+    # X_test is already scaled from Phase 1 - use directly
     
     # Get uncalibrated probabilities
-    y_pred_proba_uncalibrated = model.predict_proba(X_test_scaled)[:, 1]
+    y_pred_proba_uncalibrated = model.predict_proba(X_test)[:, 1]
     
     # Apply calibration
     try:
@@ -360,13 +348,13 @@ def main():
         print("\n" + "="*80)
         print("Step 3: Load Calibrated Model")
         print("="*80)
-        model, scaler, calibrator = load_lr_model_for_mitigation(args)
+        model, calibrator = load_lr_model_for_mitigation(args)
         
         # STEP 4: Generate predictions
         print("\n" + "="*80)
         print("Step 4: Generate Calibrated Predictions")
         print("="*80)
-        y_pred_proba = generate_lr_predictions(model, scaler, calibrator, X_test)
+        y_pred_proba = generate_lr_predictions(model, calibrator, X_test)
         print(f"✅ Generated {len(y_pred_proba)} calibrated predictions")
         
         # STEP 4b: Evaluate Baseline (Global Threshold)
