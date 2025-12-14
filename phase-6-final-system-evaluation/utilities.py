@@ -284,16 +284,18 @@ def load_deployment_config(fairness_repo_id: str, output_base: str) -> dict:
     print("="*80)
     
     # Download deployment config from Phase 5
+    # Note: Phase 5 uploads files to outputs/ subdirectory
     print("\n📥 Downloading deployment configuration from Phase 5...")
     config_path = hf_hub_download(
         repo_id=fairness_repo_id,
-        filename="deployment_config.json",
+        filename="outputs/deployment_config.json",  # Phase 5 uploads to outputs/ directory
         repo_type="model"
     )
     
     # Load config
     loader = DeploymentConfigLoader(config_path)
     config = loader.load_config()
+    print("✓ Successfully loaded deployment_config.json from Phase 5")
     
     return config
 
