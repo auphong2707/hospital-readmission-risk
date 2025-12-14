@@ -249,7 +249,8 @@ mitigation_dir = Path("$MITIGATION_OUTPUT")
 # ============================================================================
 
 # Determine deployment configuration
-is_mitigated = $MITIGATION_APPLIED
+# Convert bash boolean to Python boolean
+is_mitigated = True if "$MITIGATION_APPLIED" == "true" else False
 use_group_thresholds = False
 threshold_source = None
 group_thresholds = None
