@@ -100,7 +100,9 @@ fi
 
 # Auto-set repo-id if not provided
 if [ -z "${REPO_ID}" ]; then
-    REPO_ID="auphong2707/hospital-readmission-${METHOD}-final"
+    # Convert underscores to hyphens for consistent repo naming
+    METHOD_HYPHENATED="${METHOD//_/-}"
+    REPO_ID="auphong2707/hospital-readmission-${METHOD_HYPHENATED}-final"
     echo -e "${YELLOW}Note: Using auto-generated repo-id: ${REPO_ID}${NC}"
 fi
 

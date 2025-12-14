@@ -78,13 +78,28 @@ The script requires you to specify which method to collect and publish.
 - `random_forest` - Full pipeline (Phases 1-6): all evaluation phases completed
 - `logistic_regression` - Full pipeline (Phases 1-6): all evaluation phases completed
 
+### Repository Naming Convention
+
+All HuggingFace repositories follow a **consistent naming pattern** using **hyphens** (not underscores):
+
+| Phase | Pattern | Example (Gradient Boosting) |
+|-------|---------|----------------------------|
+| Phase 4 | `hospital-readmission-{method}-threshold-results` | `hospital-readmission-gradient-boosting-threshold-results` |
+| Phase 5 | `hospital-readmission-{method}-fairness-assessment-mitigation` | `hospital-readmission-gradient-boosting-fairness-assessment-mitigation` |
+| Phase 7 | `hospital-readmission-{method}-final` | `hospital-readmission-gradient-boosting-final` |
+
+**Method names** (always use hyphens):
+- `gradient-boosting` (NOT gradient_boosting)
+- `random-forest` (NOT random_forest)
+- `logistic-regression` (NOT logistic_regression)
+
 ### Examples
 
 **Basic Usage** (auto-generated repo ID):
 ```bash
 # From project root
 ./phase-7-results-collection-publication/collect_and_publish.sh --method gradient_boosting
-# Creates repository: auphong2707/hospital-readmission-gradient_boosting-final
+# Creates repository: auphong2707/hospital-readmission-gradient-boosting-final
 ```
 
 **With Custom Repository**:

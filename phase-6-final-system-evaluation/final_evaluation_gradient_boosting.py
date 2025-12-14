@@ -31,7 +31,7 @@ Usage (from project root):
     python ./phase-6-final-system-evaluation/final_evaluation_gradient_boosting.py \
         --data-repo-id your-username/hospital-readmission-risk-data \
         --model-repo-id your-username/hospital-readmission-lgbm-calibrated \
-        --fairness-repo-id your-username/hospital-readmission-gradient_boosting-fairness-assessment-mitigation
+        --fairness-repo-id your-username/hospital-readmission-gradient-boosting-fairness-assessment-mitigation
 
 Requirements:
     pip install pandas numpy scikit-learn matplotlib seaborn huggingface_hub joblib
@@ -88,8 +88,8 @@ def parse_arguments():
     parser.add_argument(
         '--fairness-repo-id',
         type=str,
-        default='auphong2707/hospital-readmission-gradient_boosting-fairness-assessment-mitigation',
-        help='HuggingFace repository ID for fairness assessment outputs'
+        default='auphong2707/hospital-readmission-gradient-boosting-fairness-assessment-mitigation',
+        help='HuggingFace repository ID for fairness assessment & mitigation results'
     )
     
     # Output directory

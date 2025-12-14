@@ -44,9 +44,9 @@ While previous phases evaluated different aspects of the model:
   - Random Forest: `auphong2707/hospital-readmission-rf-calibrated`
   - Logistic Regression: `auphong2707/hospital-readmission-lr-calibrated`
 - Deployment configs from Phase 5:
-  - Gradient Boosting: `auphong2707/hospital-readmission-gradient_boosting-fairness-assessment-mitigation`
-  - Random Forest: `auphong2707/hospital-readmission-random_forest-fairness-assessment-mitigation`
-  - Logistic Regression: `auphong2707/hospital-readmission-logistic_regression-fairness-assessment-mitigation`
+  - Gradient Boosting: `auphong2707/hospital-readmission-gradient-boosting-fairness-assessment-mitigation`
+  - Random Forest: `auphong2707/hospital-readmission-random-forest-fairness-assessment-mitigation`
+  - Logistic Regression: `auphong2707/hospital-readmission-logistic-regression-fairness-assessment-mitigation`
 
 ## Outputs
 

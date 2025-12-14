@@ -59,8 +59,8 @@ def parse_arguments():
     parser.add_argument(
         '--fairness-repo-id',
         type=str,
-        default='auphong2707/hospital-readmission-logistic_regression-fairness-assessment-mitigation',
-        help='HuggingFace repository ID for fairness assessment outputs'
+        default='auphong2707/hospital-readmission-logistic-regression-fairness-assessment-mitigation',
+        help='HuggingFace repository ID for fairness assessment & mitigation results'
     )
     
     # Output directory
