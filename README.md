@@ -411,10 +411,7 @@ python phase-4-optimal-threshold-ROI-analysis/optimize_threshold_gradient_boosti
     --intervention-cost 500
 
 # Phase 5: Fairness Assessment & Mitigation (unified script)
-./phase-5-fairness-assessment-mitigation/run_fairness_assessment_and_mitigation.sh \
-    --method gradient_boosting \
-    --readmission-cost 15000 \
-    --intervention-cost 500
+./phase-5-fairness-assessment-mitigation/run_fairness_assessment_and_mitigation.sh gradient_boosting
 
 # Phase 6: Final System Evaluation
 python phase-6-final-system-evaluation/final_evaluation_gradient_boosting.py \
@@ -461,21 +458,16 @@ python phase-2-risk-modeling/train_logistic_regression.py
     --repo-id auphong2707/hospital-readmission-logistic-regression-final
 ```
 
-### Running All Phase Orchestrators
+### Running All Methods
 
-Several phases have orchestrator scripts that can run all methods at once:
+To run all three methods, run the scripts individually for each method:
 
-**Phase 5 Orchestrator** (Fairness Assessment & Mitigation):
+**Phase 5 Example** (Fairness Assessment & Mitigation):
 ```bash
-# Run for all three methods with default costs
-./phase-5-fairness-assessment-mitigation/run_fairness_assessment_and_mitigation.sh \
-    --all-methods
-
-# Or with custom costs
-./phase-5-fairness-assessment-mitigation/run_fairness_assessment_and_mitigation.sh \
-    --all-methods \
-    --readmission-cost 15000 \
-    --intervention-cost 500
+# Run for each method individually
+./phase-5-fairness-assessment-mitigation/run_fairness_assessment_and_mitigation.sh gradient_boosting
+./phase-5-fairness-assessment-mitigation/run_fairness_assessment_and_mitigation.sh random_forest
+./phase-5-fairness-assessment-mitigation/run_fairness_assessment_and_mitigation.sh logistic_regression
 ```
 
 **Phase 6 Orchestrator** (Final System Evaluation):
@@ -512,8 +504,7 @@ python phase-3-model-calibration/calibrate_gradient_boosting.py
 python phase-4-optimal-threshold-ROI-analysis/optimize_threshold_gradient_boosting.py
 
 # Phase 5: Fairness (Assessment + Conditional Mitigation)
-./phase-5-fairness-assessment-mitigation/run_fairness_assessment_and_mitigation.sh \
-    --method gradient_boosting
+./phase-5-fairness-assessment-mitigation/run_fairness_assessment_and_mitigation.sh gradient_boosting
 
 # Phase 6: Final Evaluation
 python phase-6-final-system-evaluation/final_evaluation_gradient_boosting.py
