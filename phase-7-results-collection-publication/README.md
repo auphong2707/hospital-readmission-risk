@@ -6,13 +6,25 @@ Phase 7 collects all outputs from Phases 1-6, creates a comprehensive summary, a
 
 **Single Command Execution**:
 ```bash
-bash collect_and_publish.sh
+bash collect_and_publish.sh --method <method_name>
 ```
 
 This script will:
-1. Collect all 89-91 files from previous phases
-2. Generate `aggregated_results.json` and `model_card.md`
-3. Upload everything to HuggingFace Hub
+1. Collect all files from previous phases (structured by phase)
+2. Generate `aggregated_results.json` using **Phase 6 final_system_metrics.json as the single source of truth**
+3. Create comprehensive `MODEL_CARD.md`
+4. Upload everything to HuggingFace Hub
+
+## Key Changes (Refactored)
+
+🎯 **Phase 6 is Now the Authoritative Source**: 
+- `phase6_final_evaluation/final_system_metrics.json` contains the **SINGLE SOURCE OF TRUTH**
+- Previous phase metrics included for transparency and research purposes
+- Phase 6 uses the deployed threshold configuration from Phase 5
+
+📊 **Updated Phase Structure**:
+- **Phase 5**: Now "Fairness Assessment & Mitigation" (unified evaluation + mitigation)
+- **Phase 6**: Now "Final System Evaluation" (comprehensive final metrics with deployed config)
 
 ## Prerequisites
 
@@ -20,14 +32,14 @@ This script will:
 
 | Phase | Files | Description |
 |-------|-------|-------------|
-| **Phase 1** | 5 files | Preprocessing metadata, train/val/test splits, demographics |
-| **Phase 2** | 6 files + 27 plots | 3 models (LR, RF, GB), metrics, visualizations |
-| **Phase 3** | 3 files + 1 plot | Calibrator, calibration metrics, reliability diagram |
-| **Phase 4** | 4 files + 8 plots | Optimal thresholds, ROI metrics, optimization plots |
-| **Phase 5** | 7 files + ~21 plots | Fairness report, group metrics, statistical tests |
-| **Phase 6** | 2-3 files + 5 plots | Group thresholds, mitigation impact (optional) |
+| **Phase 1** | 1 file | Preprocessing metadata (CSV files on HuggingFace) |
+| **Phase 2** | 4-5 files + ~8 plots | Model, metrics, training logs, visualizations |
+| **Phase 3** | 3 files + 5 plots | Calibrated model, calibration metrics, visualizations |
+| **Phase 4** | 4 files + 8 plots | Optimal thresholds, ROI metrics, optimization visualizations |
+| **Phase 5** | 4-7 files + 11-16 plots | Fairness evaluation, mitigation (if applied), deployment config |
+| **Phase 6** | 2 files + 9 plots | **Final system metrics (AUTHORITATIVE)**, deployment report |
 
-**Total**: 27-28 files + 62-63 visualizations = **89-91 items**
+**Total per Method**: ~59-67 files (varies based on whether fairness mitigation was applied)
 
 ### Setup Requirements
 
@@ -57,50 +69,56 @@ The script requires you to specify which method to collect and publish.
 **IMPORTANT**: Run the script from the **project root directory**, not from inside the phase-7 folder.
 
 ```bash
-# From project root (d:\Git\hospital-readmission-risk)
-./phase-7-results-collection-publication/collect_and_publish.sh --method <method_name> --repo-id <username/repo>
+# From project root
+./phase-7-results-collection-publication/collect_and_publish.sh --method <method_name>
 ```
 
 **Available Methods:**
-- `gradient_boosting` - Full pipeline (Phases 1-6): model, calibration, thresholds, fairness
-- `random_forest` - Phase 2 only: model and metrics
-- `logistic_regression` - Phase 2 only: model and metrics
+- `gradient_boosting` - Full pipeline (Phases 1-6): all evaluation phases completed
+- `random_forest` - Full pipeline (Phases 1-6): all evaluation phases completed
+- `logistic_regression` - Full pipeline (Phases 1-6): all evaluation phases completed
 
 ### Examples
 
-**Gradient Boosting** (recommended - includes all phases):
+**Basic Usage** (auto-generated repo ID):
 ```bash
 # From project root
-./phase-7-results-collection-publication/collect_and_publish.sh --method gradient_boosting --repo-id auphong2707/hospital-readmission-final-gb
+./phase-7-results-collection-publication/collect_and_publish.sh --method gradient_boosting
+# Creates repository: auphong2707/hospital-readmission-gradient_boosting-final
 ```
 
-**Random Forest**:
+**With Custom Repository**:
 ```bash
 # From project root
-./phase-7-results-collection-publication/collect_and_publish.sh --method random_forest --repo-id auphong2707/hospital-readmission-final-rf
+./phase-7-results-collection-publication/collect_and_publish.sh \
+    --method random_forest \
+    --repo-id myusername/hospital-readmission-rf-final
 ```
 
-**Logistic Regression**:
+**Dry Run** (preview without uploading):
 ```bash
-# From project root
-./phase-7-results-collection-publication/collect_and_publish.sh --method logistic_regression --repo-id auphong2707/hospital-readmission-final-lr
+# From project root - recommended for first run!
+./phase-7-results-collection-publication/collect_and_publish.sh \
+    --method logistic_regression \
+    --dry-run
+```
+
+**Complete Example with All Options**:
+```bash
+./phase-7-results-collection-publication/collect_and_publish.sh \
+    --method gradient_boosting \
+    --repo-id myusername/my-hospital-model \
+    --private \
+    --dry-run
 ```
 
 ### Optional Flags
 
 ```bash
-# Create private repository (from project root)
-./phase-7-results-collection-publication/collect_and_publish.sh --method gradient_boosting --repo-id user/repo --private
-
-# Preview without uploading (recommended first run)
-./phase-7-results-collection-publication/collect_and_publish.sh --method gradient_boosting --repo-id user/repo --dry-run
-
-# Auto-generate repo name (if --repo-id not provided)
-./phase-7-results-collection-publication/collect_and_publish.sh --method gradient_boosting
-# Creates: auphong2707/hospital-readmission-risk-gradient_boosting
-
-# Show help
-./phase-7-results-collection-publication/collect_and_publish.sh --help
+--repo-id <username/repo>   # Custom HuggingFace repository (auto-generated if omitted)
+--private                   # Create private repository (default: public)
+--dry-run                   # Preview collection without uploading
+--help                      # Show help message
 ```
 
 ### What the Script Does
