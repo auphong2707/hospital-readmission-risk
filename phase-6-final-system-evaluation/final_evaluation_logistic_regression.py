@@ -23,6 +23,12 @@ from huggingface_hub import hf_hub_download
 # Add parent directory to path for utilities import
 sys.path.append(str(Path(__file__).parent))
 from utilities import (
+    load_data_and_predictions,
+    load_deployment_config,
+    apply_deployed_thresholds,
+    calculate_all_metrics,
+    generate_visualizations,
+    generate_reports,
     DeploymentConfigLoader,
     ThresholdApplicator,
     FinalMetricsCalculator,
@@ -31,10 +37,6 @@ from utilities import (
     FinalEvaluationVisualizer,
     DeploymentReportGenerator
 )
-
-# Import main function components from gradient boosting script
-sys.path.append(str(Path(__file__).parent))
-import final_evaluation_gradient_boosting as gb_eval
 
 
 def parse_arguments():
@@ -117,31 +119,31 @@ def main():
     
     try:
         # Step 1: Load data and predictions
-        y_true, y_proba, demographics = gb_eval.load_data_and_predictions(
+        y_true, y_proba, demographics = load_data_and_predictions(
             args.data_repo_id, args.model_repo_id
         )
         
         # Step 2: Load deployment configuration
-        config = gb_eval.load_deployment_config(args.fairness_repo_id, args.output_dir)
+        config = load_deployment_config(args.fairness_repo_id, args.output_dir)
         
         # Step 3: Apply deployed thresholds
-        y_pred, threshold_summary = gb_eval.apply_deployed_thresholds(
+        y_pred, threshold_summary = apply_deployed_thresholds(
             y_proba, demographics, config
         )
         
         # Step 4: Calculate all metrics
-        metrics = gb_eval.calculate_all_metrics(
+        metrics = calculate_all_metrics(
             y_true, y_pred, y_proba, demographics, cost_matrix
         )
         
         # Step 5: Generate visualizations
-        gb_eval.generate_visualizations(
+        generate_visualizations(
             y_true, y_pred, y_proba, demographics, metrics,
             threshold_summary, args.output_dir
         )
         
         # Step 6: Generate reports
-        gb_eval.generate_reports(
+        generate_reports(
             "Logistic Regression",
             config,
             metrics,
