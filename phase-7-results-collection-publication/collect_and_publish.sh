@@ -262,31 +262,13 @@ PYTHON_EOF
 echo "" | tee -a "${SUMMARY_FILE}"
 echo -e "${BLUE}Phase 1 - Data Preprocessing:${NC}" | tee -a "${SUMMARY_FILE}"
 
-# Note: CSV files are too large, we only collect metadata
-# Try local first, then download from HuggingFace
-if ! copy_file \
-    "./data/processed/huggingface/preprocessing_metadata.txt" \
-    "${COLLECTION_DIR}/phase1_preprocessing/preprocessing_metadata.txt" \
-    "Preprocessing metadata (HF export)" && \
-   ! copy_file \
-    "./data/processed/preprocessing_metadata.txt" \
-    "${COLLECTION_DIR}/phase1_preprocessing/preprocessing_metadata.txt" \
-    "Preprocessing metadata"; then
-    # Download from HuggingFace dataset repo
-    echo -e "  ${YELLOW}ℹ${NC}  Preprocessing metadata not found locally, downloading from HuggingFace..."
-    download_from_hf \
-        "auphong2707/hospital-readmission-risk-data" \
-        "preprocessing_metadata.txt" \
-        "${COLLECTION_DIR}/phase1_preprocessing/preprocessing_metadata.txt" \
-        "Preprocessing metadata" \
-        "dataset"
-fi
-
+# Phase 1 only uploads split_info.txt to HuggingFace
+# Download split_info.txt from HuggingFace dataset repo
 if ! copy_file \
     "./data/processed/splits/split_info.txt" \
     "${COLLECTION_DIR}/phase1_preprocessing/split_info.txt" \
     "Split information"; then
-    # Download from HuggingFace dataset repo
+    echo -e "  ${YELLOW}ℹ${NC}  Downloading from HuggingFace dataset repo..."
     download_from_hf \
         "auphong2707/hospital-readmission-risk-data" \
         "splits/split_info.txt" \
@@ -296,6 +278,7 @@ if ! copy_file \
 fi
 
 echo -e "  ${YELLOW}ℹ${NC}  Note: CSV data files (train/val/test) not collected (too large, available on HF dataset)"
+echo -e "  ${YELLOW}ℹ${NC}  Note: preprocessing_metadata.txt was never created/uploaded by Phase 1"
 
 ################################################################################
 # Phase 2: Risk Modeling

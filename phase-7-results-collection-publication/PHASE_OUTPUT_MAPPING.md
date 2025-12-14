@@ -4,16 +4,19 @@ This document maps the actual outputs from each phase based on the code implemen
 
 ## Phase 1: Data Preprocessing
 
-**Output Directory**: `data/processed/` (contains `huggingface/` and `splits/` subdirectories)
-**Files**:
-- `huggingface/preprocessing_metadata.txt` - Preprocessing metadata
-- `splits/split_info.txt` - Split statistics (uploaded to HF as `splits/split_info.txt`)
-- `splits/train.csv` - Training data (uploaded to HF)
-- `splits/validation.csv` - Validation data (uploaded to HF)
-- `splits/test.csv` - Test data (uploaded to HF)
-- `splits/scaler.pkl` - Feature scaler (fitted on train only)
+**Output Directory**: `data/processed/splits/` (local) + HuggingFace dataset repo
+**Files Created Locally** (but NOT all uploaded):
+- `splits/split_info.txt` - Split statistics ✅ **UPLOADED to HF**
+- `splits/train.csv` - Training data ✅ **UPLOADED to HF**
+- `splits/validation.csv` - Validation data ✅ **UPLOADED to HF**
+- `splits/test.csv` - Test data ✅ **UPLOADED to HF**
+- `splits/train_demographics.csv` - Demographics ✅ **UPLOADED to HF**
+- `splits/validation_demographics.csv` - Demographics ✅ **UPLOADED to HF**
+- `splits/test_demographics.csv` - Demographics ✅ **UPLOADED to HF**
+- `splits/scaler.pkl` - Feature scaler ❌ **NOT uploaded**
+- `preprocessing_metadata.txt` - Metadata ❌ **NEVER CREATED**
 
-**Phase 7 Collection**: Copy from `data/processed/huggingface/` and `data/processed/splits/`, skip CSV files (too large)
+**Phase 7 Collection**: Download `splits/split_info.txt` from HF dataset repo, skip CSV files (too large)
 
 ## Phase 2: Risk Modeling
 
