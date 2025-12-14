@@ -411,8 +411,8 @@ for viz_file in "${viz_files[@]}"; do
         cp "${local_viz}" "${dest_viz}"
         ((viz_count++))
     else
-        # Try downloading from HuggingFace
-        if download_from_hf "${HF_REPO}" "${viz_file}" "${dest_viz}" "model"; then
+        # Try downloading from HuggingFace using PHASE2_HF_REPO
+        if download_from_hf "${PHASE2_HF_REPO}" "${viz_file}" "${dest_viz}" "Phase 2 ${viz_file}" "model"; then
             ((viz_count++))
         fi
     fi
