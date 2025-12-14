@@ -518,6 +518,12 @@ echo -e "${GREEN}[x] Collection complete!${NC}"
 echo ""
 echo -e "${YELLOW}[Step 2/3] Creating aggregated results and model card...${NC}"
 
+# Export variables for Python script
+export MODEL
+export MODEL_DISPLAY
+export MODEL_FILE
+export CALIBRATOR_FILE
+
 # Create aggregated results JSON using Python
 python3 << 'PYTHON_SCRIPT'
 import json
@@ -526,8 +532,18 @@ from datetime import datetime
 from pathlib import Path
 
 # Configuration
-project_root = "."
-output_dir = "./outputs"
+project_root = ".."
+model = os.getenv('MODEL', 'gradient_boosting')
+model_display = os.getenv('MODEL_DISPLAY', 'Gradient Boosting (LightGBM)')
+model_file = os.getenv('MODEL_FILE', 'gradient_boosting_model_original.joblib')
+calibrator_file = os.getenv('CALIBRATOR_FILE', 'Gradient_Boosting_calibrator.pkl')
+
+# Set output directory based on model
+if model == 'random_forest':
+    output_dir = "./outputs_random_forest"
+else:
+    output_dir = "./outputs"
+    
 collection_dir = f"{output_dir}/collection"
 metrics_dir = f"{collection_dir}/metrics"
 
@@ -535,28 +551,44 @@ metrics_dir = f"{collection_dir}/metrics"
 aggregated_results = {
     "project_info": {
         "name": "Hospital Readmission Risk Prediction",
+        "model": model_display,
         "dataset": "Diabetes 130-US Hospitals (1999-2008)",
         "collection_date": datetime.now().strftime("%Y-%m-%d"),
         "repository": "https://github.com/auphong2707/hospital-readmission-risk"
     }
 }
 
-# Load Phase 2 metrics (Gradient Boosting primary model)
+# Load Phase 2 metrics
 try:
-    with open(f"{metrics_dir}/Gradient_Boosting_metrics.json") as f:
-        gb_metrics = json.load(f)
-    aggregated_results["phase_2_modeling"] = {
-        "models_trained": 3,
-        "primary_model": "Gradient Boosting (LightGBM)",
-        "gradient_boosting": {
-            "roc_auc": gb_metrics.get("roc_auc"),
-            "pr_auc": gb_metrics.get("pr_auc"),
-            "f1_score": gb_metrics.get("f1_score"),
-            "precision": gb_metrics.get("precision"),
-            "recall": gb_metrics.get("recall"),
-            "brier_score": gb_metrics.get("brier_score")
+    if model == 'gradient_boosting':
+        with open(f"{metrics_dir}/phase2_gradient_boosting_metrics.json") as f:
+            model_metrics = json.load(f)
+        aggregated_results["phase_2_modeling"] = {
+            "models_trained": 3,
+            "primary_model": "Gradient Boosting (LightGBM)",
+            "gradient_boosting": {
+                "roc_auc": model_metrics.get("roc_auc"),
+                "pr_auc": model_metrics.get("pr_auc"),
+                "f1_score": model_metrics.get("f1_score"),
+                "precision": model_metrics.get("precision"),
+                "recall": model_metrics.get("recall"),
+                "brier_score": model_metrics.get("brier_score")
+            }
         }
-    }
+    else:  # random_forest
+        with open(f"{metrics_dir}/phase2_random_forest_metrics.json") as f:
+            model_metrics = json.load(f)
+        aggregated_results["phase_2_modeling"] = {
+            "primary_model": "Random Forest (scikit-learn)",
+            "random_forest": {
+                "roc_auc": model_metrics.get("roc_auc"),
+                "pr_auc": model_metrics.get("pr_auc"),
+                "f1_score": model_metrics.get("f1_score"),
+                "precision": model_metrics.get("precision"),
+                "recall": model_metrics.get("recall"),
+                "brier_score": model_metrics.get("brier_score")
+            }
+        }
 except Exception as e:
     print(f"Warning: Could not load Phase 2 metrics: {e}")
     aggregated_results["phase_2_modeling"] = {
@@ -646,12 +678,15 @@ with open(f"{output_dir}/aggregated_results.json", "w") as f:
 print("[x] Created aggregated_results.json")
 
 # Create Model Card
+model_key = 'gradient_boosting' if model == 'gradient_boosting' else 'random_forest'
+model_type_display = model_display
+
 model_card = f"""# Hospital Readmission Risk Prediction Model
 
 ## Model Details
 
 - **Model Name**: Hospital 30-Day Readmission Risk Predictor
-- **Model Type**: Gradient Boosting Classifier (LightGBM)
+- **Model Type**: {model_type_display}
 - **Version**: 1.0
 - **Date**: {datetime.now().strftime("%Y-%m-%d")}
 - **Developers**: auphong2707
@@ -677,11 +712,11 @@ This model predicts the risk of 30-day hospital readmission for diabetic patient
 ## Performance Metrics
 
 ### Classification Performance
-- **ROC-AUC**: {aggregated_results.get('phase_2_modeling', {}).get('gradient_boosting', {}).get('roc_auc', 'N/A')}
-- **PR-AUC**: {aggregated_results.get('phase_2_modeling', {}).get('gradient_boosting', {}).get('pr_auc', 'N/A')}
-- **F1-Score**: {aggregated_results.get('phase_2_modeling', {}).get('gradient_boosting', {}).get('f1_score', 'N/A')}
-- **Precision**: {aggregated_results.get('phase_2_modeling', {}).get('gradient_boosting', {}).get('precision', 'N/A')}
-- **Recall**: {aggregated_results.get('phase_2_modeling', {}).get('gradient_boosting', {}).get('recall', 'N/A')}
+- **ROC-AUC**: {aggregated_results.get('phase_2_modeling', {}).get(model_key, {}).get('roc_auc', 'N/A')}
+- **PR-AUC**: {aggregated_results.get('phase_2_modeling', {}).get(model_key, {}).get('pr_auc', 'N/A')}
+- **F1-Score**: {aggregated_results.get('phase_2_modeling', {}).get(model_key, {}).get('f1_score', 'N/A')}
+- **Precision**: {aggregated_results.get('phase_2_modeling', {}).get(model_key, {}).get('precision', 'N/A')}
+- **Recall**: {aggregated_results.get('phase_2_modeling', {}).get(model_key, {}).get('recall', 'N/A')}
 
 ### Calibration Quality
 - **Calibration Method**: Platt Scaling
@@ -752,9 +787,9 @@ pip install huggingface-hub joblib numpy pandas scikit-learn
 from huggingface_hub import hf_hub_download
 import joblib
 
-repo_id = "auphong2707/hospital-readmission-risk"
-model = joblib.load(hf_hub_download(repo_id, "models/gradient_boosting_model_original.joblib"))
-calibrator = joblib.load(hf_hub_download(repo_id, "models/Gradient_Boosting_calibrator.pkl"))
+repo_id = "auphong2707/hospital-readmission-risk{'-random-forest' if model == 'random_forest' else ''}"
+model = joblib.load(hf_hub_download(repo_id, "models/{model_file}"))
+calibrator = joblib.load(hf_hub_download(repo_id, "models/{calibrator_file}"))
 ```
 
 ### Make Predictions
@@ -878,8 +913,8 @@ from huggingface_hub import hf_hub_download
 import joblib
 
 # Download model
-model = joblib.load(hf_hub_download("${REPO_ID}", "models/gradient_boosting_model_original.joblib"))
-calibrator = joblib.load(hf_hub_download("${REPO_ID}", "models/Gradient_Boosting_calibrator.pkl"))
+model = joblib.load(hf_hub_download("${REPO_ID}", "models/${MODEL_FILE}"))
+calibrator = joblib.load(hf_hub_download("${REPO_ID}", "models/${CALIBRATOR_FILE}"))
 
 # Make prediction
 risk_score = calibrator.predict_proba([[model.predict_proba(patient_features)[0, 1]]])[0, 1]
@@ -889,18 +924,20 @@ risk_score = calibrator.predict_proba([[model.predict_proba(patient_features)[0,
 
 This repository contains a complete hospital readmission risk prediction system trained on the Diabetes 130-US Hospitals dataset (1999-2008, 101,766 patients).
 
+**Model**: ${MODEL_DISPLAY}
+
 **Key Features**:
-- 🎯 Gradient Boosting (LightGBM) classifier with 113 engineered features
+- 🎯 ${MODEL_DISPLAY} with 113 engineered features
 - 📊 Platt scaling calibration for reliable probability estimates
 - ⚖️ Fairness evaluation across race, gender, and age groups
 - 💰 ROI-optimized decision thresholds ($15K readmission cost vs $500 intervention)
-- 📈 Comprehensive evaluation with 60+ visualizations
+- 📈 Comprehensive evaluation with visualizations
 
 ## Repository Contents
 
 \`\`\`
 ${REPO_ID}/
-|-- models/                    # 3 trained models + calibrator
+|-- models/                    # Trained model + calibrator
 |-- thresholds/                # Optimal decision thresholds
 |-- metrics/                   # Performance, calibration, fairness metrics
 |-- visualizations/            # 60+ plots from all phases

@@ -304,6 +304,48 @@ def load_model_and_calibrator(
     return model, calibrator
 
 
+def load_random_forest_model_and_calibrator(
+    model_repo_id: str = "auphong2707/hospital-readmission-rf-calibrated",
+    cache_dir: str = "./models/downloaded",
+    use_local: bool = False,
+    local_model_path: str = None,
+    local_calibrator_path: str = None
+) -> Tuple[Any, Any]:
+    """Load calibrated Random Forest model and calibrator."""
+    import joblib
+    
+    print("📥 Loading calibrated Random Forest model and calibrator...")
+    
+    if use_local:
+        model = joblib.load(local_model_path)
+        calibrator = joblib.load(local_calibrator_path)
+    else:
+        try:
+            from huggingface_hub import hf_hub_download
+        except ImportError:
+            raise ImportError("huggingface_hub required. Install: pip install huggingface_hub")
+        
+        model_path = hf_hub_download(
+            repo_id=model_repo_id,
+            filename="random_forest_model_original.joblib",
+            repo_type="model",
+            cache_dir=cache_dir
+        )
+        model = joblib.load(model_path)
+        
+        calibrator_path = hf_hub_download(
+            repo_id=model_repo_id,
+            filename="Random_Forest_calibrator.pkl",
+            repo_type="model",
+            cache_dir=cache_dir
+        )
+        calibrator = joblib.load(calibrator_path)
+    
+    print(f"✅ Random Forest model and calibrator loaded")
+    
+    return model, calibrator
+
+
 # ============================================================================
 # THRESHOLD OPTIMIZATION
 # ============================================================================

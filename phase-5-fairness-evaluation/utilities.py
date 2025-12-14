@@ -347,6 +347,80 @@ def load_calibrated_model_and_calibrator(
     return model, calibrator
 
 
+def load_calibrated_random_forest_model_and_calibrator(
+    model_repo_id: str = "auphong2707/hospital-readmission-rf-calibrated",
+    cache_dir: str = "./models/downloaded",
+    use_local: bool = False,
+    local_model_path: str = None,
+    local_calibrator_path: str = None
+) -> Tuple[Any, Any]:
+    """
+    Load calibrated Random Forest model and calibrator from HuggingFace or local files.
+    
+    Args:
+        model_repo_id: HuggingFace model repository ID
+        cache_dir: Cache directory for downloads
+        use_local: If True, load from local files
+        local_model_path: Path to local model file
+        local_calibrator_path: Path to local calibrator file
+        
+    Returns:
+        tuple: (model, calibrator)
+    """
+    print("\n" + "="*80)
+    print("📥 Loading Calibrated Random Forest Model and Calibrator")
+    print("="*80)
+    
+    if use_local:
+        print(f"Loading from local files...")
+        
+        if not local_model_path or not os.path.exists(local_model_path):
+            raise FileNotFoundError(f"Model file not found: {local_model_path}")
+        if not local_calibrator_path or not os.path.exists(local_calibrator_path):
+            raise FileNotFoundError(f"Calibrator file not found: {local_calibrator_path}")
+        
+        model = joblib.load(local_model_path)
+        calibrator = joblib.load(local_calibrator_path)
+        
+        print(f"✅ Loaded model: {local_model_path}")
+        print(f"✅ Loaded calibrator: {local_calibrator_path}")
+        
+    else:
+        try:
+            from huggingface_hub import hf_hub_download
+        except ImportError:
+            raise ImportError(
+                "huggingface_hub library required. "
+                "Install with: pip install huggingface_hub"
+            )
+        
+        print(f"Loading from HuggingFace Hub: {model_repo_id}")
+        
+        # Download model
+        model_path = hf_hub_download(
+            repo_id=model_repo_id,
+            filename="random_forest_model_original.joblib",
+            repo_type="model",
+            cache_dir=cache_dir
+        )
+        model = joblib.load(model_path)
+        print(f"✅ Downloaded Random Forest model")
+        
+        # Download calibrator
+        calibrator_path = hf_hub_download(
+            repo_id=model_repo_id,
+            filename="Random_Forest_calibrator.pkl",
+            repo_type="model",
+            cache_dir=cache_dir
+        )
+        calibrator = joblib.load(calibrator_path)
+        print(f"✅ Downloaded calibrator")
+    
+    print("="*80 + "\n")
+    
+    return model, calibrator
+
+
 def load_phase4_results(
     phase4_summary_path: str = "./phase-4-optimal-threshold-ROI-analysis/outputs/phase4_summary_for_phase5.json"
 ) -> Dict:
