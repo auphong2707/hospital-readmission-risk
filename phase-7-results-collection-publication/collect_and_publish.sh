@@ -1,14 +1,26 @@
 #!/bin/bash
 
 ################################################################################
-# Phase 7: Results Collection & Publication (REFACTORED)
+# Phase 7: Results Collection & Publication (CORRECTED)
 #
 # Collects outputs from Phases 1-6 and publishes to HuggingFace for reproducibility
 #
-# Key Changes:
-# - Phase 5: Now collects from fairness-assessment-mitigation (evaluation + mitigation)
-# - Phase 6: Now collects from final-system-evaluation (NEW - comprehensive final metrics)
-# - Uses Phase 6 final_system_metrics.json as the SINGLE SOURCE OF TRUTH
+# FIXES APPLIED (Dec 15, 2025):
+# ==============================
+# Phase 1: Fixed paths to data/processed/huggingface/ and data/processed/splits/
+# Phase 2: Fixed GB/RF filenames (cv_fold_details.json, training_summary.json)
+#          Fixed LR scaler path (uses Phase 1 scaler, not own scaler)
+# Phase 3: Fixed to actual filenames (model_original.joblib, *_calibrator.pkl, etc.)
+#          Fixed visualization path (directly in calibration/, not visualizations/)
+# Phase 4: Fixed filenames (threshold_results.csv, phase4_summary_for_phase5.json)
+# Phase 5: Fixed paths to phase-5-fairness-assessment-mitigation/outputs/${METHOD}/
+#          Fixed file patterns (group_metrics_{attribute}.csv, multiple files)
+# Phase 6: Already correct (outputs/${METHOD}/final_evaluation/)
+#
+# Key Architecture:
+# - Phase 5: Collects from phase-5-fairness-assessment-mitigation/outputs/{method}/
+# - Phase 6: Uses Phase 6 final_system_metrics.json as SINGLE SOURCE OF TRUTH
+# - All others: Collect from outputs/{method}/{phase_name}/
 #
 # Usage:
 #   bash collect_and_publish.sh --method <method_name> [--repo-id <username/repo>] [OPTIONS]
@@ -207,10 +219,20 @@ echo "" | tee -a "${SUMMARY_FILE}"
 echo -e "${BLUE}Phase 1 - Data Preprocessing:${NC}" | tee -a "${SUMMARY_FILE}"
 
 # Note: CSV files are too large, we only collect metadata
+# Phase 1 saves to either ./data/processed/huggingface/ or ./data/processed/splits/
+copy_file \
+    "./data/processed/huggingface/preprocessing_metadata.txt" \
+    "${COLLECTION_DIR}/phase1_preprocessing/preprocessing_metadata.txt" \
+    "Preprocessing metadata (HF export)" || \
 copy_file \
     "./data/processed/preprocessing_metadata.txt" \
     "${COLLECTION_DIR}/phase1_preprocessing/preprocessing_metadata.txt" \
     "Preprocessing metadata"
+
+copy_file \
+    "./data/processed/splits/split_info.txt" \
+    "${COLLECTION_DIR}/phase1_preprocessing/split_info.txt" \
+    "Split information"
 
 echo -e "  ${YELLOW}ℹ${NC}  Note: CSV data files (train/val/test) not collected (too large, available on HF dataset)"
 
@@ -253,22 +275,38 @@ copy_file \
     "${COLLECTION_DIR}/phase2_modeling/${MODEL_PREFIX}_metrics.json" \
     "${DISPLAY_NAME} metrics"
 
-copy_file \
-    "./outputs/${METHOD}/${MODEL_PREFIX}_fold_details.json" \
-    "${COLLECTION_DIR}/phase2_modeling/${MODEL_PREFIX}_fold_details.json" \
-    "${DISPLAY_NAME} fold details"
-
-copy_file \
-    "./outputs/${METHOD}/${MODEL_PREFIX}_training_summary.json" \
-    "${COLLECTION_DIR}/phase2_modeling/${MODEL_PREFIX}_training_summary.json" \
-    "${DISPLAY_NAME} training summary"
-
-# For logistic regression, also copy scaler
+# Copy fold details (different naming for LR vs GB/RF)
 if [ "${METHOD}" = "logistic_regression" ]; then
     copy_file \
-        "./outputs/${METHOD}/logistic_regression_scaler.pkl" \
+        "./outputs/${METHOD}/logistic_regression_cv_fold_details.json" \
+        "${COLLECTION_DIR}/phase2_modeling/${MODEL_PREFIX}_fold_details.json" \
+        "${DISPLAY_NAME} fold details"
+else
+    copy_file \
+        "./outputs/${METHOD}/cv_fold_details.json" \
+        "${COLLECTION_DIR}/phase2_modeling/${MODEL_PREFIX}_fold_details.json" \
+        "${DISPLAY_NAME} fold details"
+fi
+
+# Copy training summary (different naming for LR vs GB/RF)
+if [ "${METHOD}" = "logistic_regression" ]; then
+    copy_file \
+        "./outputs/${METHOD}/logistic_regression_training_summary.json" \
+        "${COLLECTION_DIR}/phase2_modeling/${MODEL_PREFIX}_training_summary.json" \
+        "${DISPLAY_NAME} training summary"
+else
+    copy_file \
+        "./outputs/${METHOD}/training_summary.json" \
+        "${COLLECTION_DIR}/phase2_modeling/${MODEL_PREFIX}_training_summary.json" \
+        "${DISPLAY_NAME} training summary"
+fi
+
+# For logistic regression, copy Phase 1 scaler (LR doesn't create its own)
+if [ "${METHOD}" = "logistic_regression" ]; then
+    copy_file \
+        "./data/processed/splits/scaler.pkl" \
         "${COLLECTION_DIR}/phase2_modeling/logistic_regression_scaler.pkl" \
-        "Feature scaler"
+        "Feature scaler (from Phase 1)"
 fi
 
 # Copy visualizations
@@ -284,29 +322,94 @@ copy_dir \
 echo "" | tee -a "${SUMMARY_FILE}"
 echo -e "${BLUE}Phase 3 - Model Calibration:${NC}" | tee -a "${SUMMARY_FILE}"
 
-# Copy calibrated model
-copy_file \
-    "./outputs/${METHOD}/calibration/calibrated_model.joblib" \
-    "${COLLECTION_DIR}/phase3_calibration/calibrated_model.joblib" \
-    "Calibrated model"
+# Phase 3 saves different files based on method
+# Gradient Boosting: gradient_boosting_model_original.joblib + Gradient_Boosting_(LightGBM)_calibrator.pkl
+# Random Forest: random_forest_model_original.joblib + Random_Forest_calibrator.pkl  
+# Logistic Regression: logistic_regression_model_original.joblib + Logistic_Regression_calibrator.pkl
 
-# Copy calibration metrics
-copy_file \
-    "./outputs/${METHOD}/calibration/calibration_metrics.json" \
-    "${COLLECTION_DIR}/phase3_calibration/calibration_metrics.json" \
-    "Calibration metrics"
+# Copy original model
+if [ "${METHOD}" = "gradient_boosting" ]; then
+    copy_file \
+        "./outputs/${METHOD}/calibration/gradient_boosting_model_original.joblib" \
+        "${COLLECTION_DIR}/phase3_calibration/model_original.joblib" \
+        "Original uncalibrated model"
+    
+    copy_file \
+        "./outputs/${METHOD}/calibration/Gradient_Boosting_(LightGBM)_calibrator.pkl" \
+        "${COLLECTION_DIR}/phase3_calibration/calibrator.pkl" \
+        "Calibrator (Platt Scaling)"
+    
+    copy_file \
+        "./outputs/${METHOD}/calibration/Gradient_Boosting_(LightGBM)_metrics.json" \
+        "${COLLECTION_DIR}/phase3_calibration/calibration_metrics.json" \
+        "Calibration metrics"
+    
+    copy_file \
+        "./outputs/${METHOD}/calibration/Gradient_Boosting_(LightGBM)_report.txt" \
+        "${COLLECTION_DIR}/phase3_calibration/calibration_report.txt" \
+        "Calibration report"
+        
+elif [ "${METHOD}" = "random_forest" ]; then
+    copy_file \
+        "./outputs/${METHOD}/calibration/random_forest_model_original.joblib" \
+        "${COLLECTION_DIR}/phase3_calibration/model_original.joblib" \
+        "Original uncalibrated model"
+    
+    copy_file \
+        "./outputs/${METHOD}/calibration/Random_Forest_calibrator.pkl" \
+        "${COLLECTION_DIR}/phase3_calibration/calibrator.pkl" \
+        "Calibrator (Platt Scaling)"
+    
+    copy_file \
+        "./outputs/${METHOD}/calibration/Random_Forest_metrics.json" \
+        "${COLLECTION_DIR}/phase3_calibration/calibration_metrics.json" \
+        "Calibration metrics"
+    
+    copy_file \
+        "./outputs/${METHOD}/calibration/Random_Forest_report.txt" \
+        "${COLLECTION_DIR}/phase3_calibration/calibration_report.txt" \
+        "Calibration report"
+        
+elif [ "${METHOD}" = "logistic_regression" ]; then
+    copy_file \
+        "./outputs/${METHOD}/calibration/logistic_regression_model_original.joblib" \
+        "${COLLECTION_DIR}/phase3_calibration/model_original.joblib" \
+        "Original uncalibrated model"
+    
+    copy_file \
+        "./outputs/${METHOD}/calibration/Logistic_Regression_calibrator.pkl" \
+        "${COLLECTION_DIR}/phase3_calibration/calibrator.pkl" \
+        "Calibrator (Platt Scaling)"
+    
+    copy_file \
+        "./outputs/${METHOD}/calibration/Logistic_Regression_metrics.json" \
+        "${COLLECTION_DIR}/phase3_calibration/calibration_metrics.json" \
+        "Calibration metrics"
+    
+    copy_file \
+        "./outputs/${METHOD}/calibration/Logistic_Regression_report.txt" \
+        "${COLLECTION_DIR}/phase3_calibration/calibration_report.txt" \
+        "Calibration report"
+fi
 
-# Copy calibrated predictions
+# Copy comparison metrics (common across all methods)
 copy_file \
-    "./outputs/${METHOD}/calibration/test_predictions_calibrated.csv" \
-    "${COLLECTION_DIR}/phase3_calibration/test_predictions_calibrated.csv" \
-    "Calibrated predictions"
+    "./outputs/${METHOD}/calibration/calibration_comparison_metrics.json" \
+    "${COLLECTION_DIR}/phase3_calibration/calibration_comparison.json" \
+    "Before/after comparison"
 
-# Copy visualizations
-copy_dir \
-    "./outputs/${METHOD}/calibration/visualizations" \
-    "${COLLECTION_DIR}/phase3_calibration/visualizations" \
-    "Phase 3 visualizations"
+# Copy visualizations (Phase 3 saves directly in calibration/, not calibration/visualizations/)
+# Create visualizations subdirectory and copy PNG files
+mkdir -p "${COLLECTION_DIR}/phase3_calibration/visualizations"
+if ls ./outputs/${METHOD}/calibration/*.png 1> /dev/null 2>&1; then
+    cp ./outputs/${METHOD}/calibration/*.png "${COLLECTION_DIR}/phase3_calibration/visualizations/" 2>/dev/null || true
+    local viz_count=$(ls -1 "${COLLECTION_DIR}/phase3_calibration/visualizations" 2>/dev/null | wc -l)
+    if [ ${viz_count} -gt 0 ]; then
+        echo -e "  ${GREEN}✓${NC} Phase 3 visualizations (${viz_count} files)"
+        echo "  [✓] Phase 3 visualizations (${viz_count} files)" >> "${SUMMARY_FILE}"
+        FILE_COUNT=$((FILE_COUNT + viz_count))
+    fi
+fi
 
 ################################################################################
 # Phase 4: Optimal Threshold & ROI Analysis
@@ -315,10 +418,10 @@ copy_dir \
 echo "" | tee -a "${SUMMARY_FILE}"
 echo -e "${BLUE}Phase 4 - Threshold Optimization & ROI:${NC}" | tee -a "${SUMMARY_FILE}"
 
-# Copy threshold results
+# Copy threshold results (actual filename is threshold_results.csv, not threshold_search_results.csv)
 copy_file \
-    "./outputs/${METHOD}/threshold_optimization/threshold_search_results.csv" \
-    "${COLLECTION_DIR}/phase4_threshold_optimization/threshold_search_results.csv" \
+    "./outputs/${METHOD}/threshold_optimization/threshold_results.csv" \
+    "${COLLECTION_DIR}/phase4_threshold_optimization/threshold_results.csv" \
     "Threshold search results"
 
 copy_file \
@@ -332,17 +435,30 @@ copy_file \
     "${COLLECTION_DIR}/phase4_threshold_optimization/roi_metrics.json" \
     "ROI metrics"
 
-# Copy Phase 5 input summary
 copy_file \
-    "./outputs/${METHOD}/threshold_optimization/phase5_input_summary.json" \
+    "./outputs/${METHOD}/threshold_optimization/roi_report.txt" \
+    "${COLLECTION_DIR}/phase4_threshold_optimization/roi_report.txt" \
+    "ROI detailed report"
+
+# Copy Phase 5 input summary (actual filename is phase4_summary_for_phase5.json)
+copy_file \
+    "./outputs/${METHOD}/threshold_optimization/phase4_summary_for_phase5.json" \
     "${COLLECTION_DIR}/phase4_threshold_optimization/phase5_input_summary.json" \
     "Phase 5 input summary"
 
-# Copy visualizations
+# Copy visualizations (Phase 4 may save directly or in visualizations subdirectory)
 copy_dir \
     "./outputs/${METHOD}/threshold_optimization/visualizations" \
     "${COLLECTION_DIR}/phase4_threshold_optimization/visualizations" \
-    "Phase 4 visualizations"
+    "Phase 4 visualizations (from visualizations/)" || \
+# Try copying PNG files directly from threshold_optimization directory
+(mkdir -p "${COLLECTION_DIR}/phase4_threshold_optimization/visualizations" && \
+ cp ./outputs/${METHOD}/threshold_optimization/*.png "${COLLECTION_DIR}/phase4_threshold_optimization/visualizations/" 2>/dev/null && \
+ local viz_count=$(ls -1 "${COLLECTION_DIR}/phase4_threshold_optimization/visualizations" 2>/dev/null | wc -l) && \
+ [ ${viz_count} -gt 0 ] && \
+ echo -e "  ${GREEN}✓${NC} Phase 4 visualizations (${viz_count} files from root)" && \
+ echo "  [✓] Phase 4 visualizations (${viz_count} files from root)" >> "${SUMMARY_FILE}" && \
+ FILE_COUNT=$((FILE_COUNT + viz_count)))
 
 ################################################################################
 # Phase 5: Fairness Assessment & Mitigation
@@ -351,69 +467,115 @@ copy_dir \
 echo "" | tee -a "${SUMMARY_FILE}"
 echo -e "${BLUE}Phase 5 - Fairness Assessment & Mitigation:${NC}" | tee -a "${SUMMARY_FILE}"
 
+# Phase 5 outputs are in phase-5-fairness-assessment-mitigation/outputs/${METHOD}/
+# NOT in ./outputs/${METHOD}/fairness/
+PHASE5_OUTPUT_DIR="./phase-5-fairness-assessment-mitigation/outputs/${METHOD}"
+
 # Part A: Evaluation (always present)
 echo -e "  ${BLUE}Part A: Evaluation${NC}"
 
 copy_file \
-    "./outputs/${METHOD}/fairness/evaluation/group_metrics.csv" \
-    "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation/group_metrics.csv" \
-    "Group performance metrics"
+    "${PHASE5_OUTPUT_DIR}/evaluation/fairness_report.json" \
+    "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation/fairness_report.json" \
+    "Fairness evaluation report"
 
 copy_file \
-    "./outputs/${METHOD}/fairness/evaluation/statistical_tests.json" \
+    "${PHASE5_OUTPUT_DIR}/evaluation/statistical_tests.json" \
     "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation/statistical_tests.json" \
     "Statistical significance tests"
 
 copy_file \
-    "./outputs/${METHOD}/fairness/evaluation/risk_stratification.csv" \
-    "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation/risk_stratification.csv" \
-    "Risk stratification analysis"
+    "${PHASE5_OUTPUT_DIR}/evaluation/phase5_summary_for_phase6.json" \
+    "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation/phase5_summary_for_phase6.json" \
+    "Phase 6 input summary"
 
-copy_file \
-    "./outputs/${METHOD}/fairness/evaluation/fairness_report.json" \
-    "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation/fairness_report.json" \
-    "Fairness evaluation report"
+# Group metrics - Phase 5 creates separate files for each demographic attribute
+# We'll collect all of them
+if ls ${PHASE5_OUTPUT_DIR}/evaluation/group_metrics_*.csv 1> /dev/null 2>&1; then
+    cp ${PHASE5_OUTPUT_DIR}/evaluation/group_metrics_*.csv "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation/" 2>/dev/null || true
+    local group_count=$(ls -1 "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation"/group_metrics_*.csv 2>/dev/null | wc -l)
+    if [ ${group_count} -gt 0 ]; then
+        echo -e "  ${GREEN}✓${NC} Group metrics (${group_count} files)"
+        echo "  [✓] Group metrics (${group_count} files)" >> "${SUMMARY_FILE}"
+        FILE_COUNT=$((FILE_COUNT + group_count))
+    fi
+fi
+
+# Risk stratification - also separate files per attribute
+if ls ${PHASE5_OUTPUT_DIR}/evaluation/risk_categories_*.csv 1> /dev/null 2>&1; then
+    cp ${PHASE5_OUTPUT_DIR}/evaluation/risk_categories_*.csv "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation/" 2>/dev/null || true
+    local risk_count=$(ls -1 "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation"/risk_categories_*.csv 2>/dev/null | wc -l)
+    if [ ${risk_count} -gt 0 ]; then
+        echo -e "  ${GREEN}✓${NC} Risk stratification (${risk_count} files)"
+        echo "  [✓] Risk stratification (${risk_count} files)" >> "${SUMMARY_FILE}"
+        FILE_COUNT=$((FILE_COUNT + risk_count))
+    fi
+fi
 
 # Part B: Mitigation (conditional - only if violations detected)
 echo -e "  ${BLUE}Part B: Mitigation${NC}"
 
-if [ -f "./outputs/${METHOD}/fairness/mitigation/group_thresholds.json" ]; then
+if [ -f "${PHASE5_OUTPUT_DIR}/mitigation/group_thresholds.json" ]; then
     copy_file \
-        "./outputs/${METHOD}/fairness/mitigation/group_thresholds.json" \
+        "${PHASE5_OUTPUT_DIR}/mitigation/group_thresholds.json" \
         "${COLLECTION_DIR}/phase5_fairness_assessment/mitigation/group_thresholds.json" \
         "Group-specific thresholds"
     
     copy_file \
-        "./outputs/${METHOD}/fairness/mitigation/mitigation_impact.json" \
+        "${PHASE5_OUTPUT_DIR}/mitigation/mitigation_impact.json" \
         "${COLLECTION_DIR}/phase5_fairness_assessment/mitigation/mitigation_impact.json" \
         "Mitigation impact analysis"
     
     copy_file \
-        "./outputs/${METHOD}/fairness/mitigation/tradeoff_analysis.json" \
+        "${PHASE5_OUTPUT_DIR}/mitigation/tradeoff_analysis.json" \
         "${COLLECTION_DIR}/phase5_fairness_assessment/mitigation/tradeoff_analysis.json" \
         "Performance-fairness tradeoffs"
     
+    copy_file \
+        "${PHASE5_OUTPUT_DIR}/mitigation/phase6_deployment_config.json" \
+        "${COLLECTION_DIR}/phase5_fairness_assessment/mitigation/phase6_deployment_config.json" \
+        "Phase 6 deployment config (with mitigation)"
+    
     echo -e "  ${GREEN}✓${NC} Mitigation was applied"
 else
-    copy_file \
-        "./outputs/${METHOD}/fairness/mitigation/no_mitigation_needed.json" \
-        "${COLLECTION_DIR}/phase5_fairness_assessment/mitigation/no_mitigation_needed.json" \
-        "Mitigation not needed (placeholder)"
+    # Check if placeholder exists
+    if [ -f "${PHASE5_OUTPUT_DIR}/mitigation/no_mitigation_needed.json" ]; then
+        copy_file \
+            "${PHASE5_OUTPUT_DIR}/mitigation/no_mitigation_needed.json" \
+            "${COLLECTION_DIR}/phase5_fairness_assessment/mitigation/no_mitigation_needed.json" \
+            "Mitigation not needed (placeholder)"
+    fi
     
     echo -e "  ${YELLOW}ℹ${NC}  Mitigation was not needed (no fairness violations detected)"
 fi
 
-# Deployment configuration (always present)
+# Deployment configuration (created by run script after evaluation/mitigation)
 copy_file \
-    "./outputs/${METHOD}/fairness/deployment_config.json" \
+    "${PHASE5_OUTPUT_DIR}/deployment_config.json" \
     "${COLLECTION_DIR}/phase5_fairness_assessment/deployment_config.json" \
-    "Deployment configuration"
+    "Final deployment configuration"
 
-# Copy visualizations
-copy_dir \
-    "./outputs/${METHOD}/fairness/visualizations" \
-    "${COLLECTION_DIR}/phase5_fairness_assessment/visualizations" \
-    "Phase 5 visualizations"
+# Copy visualizations from evaluation (Phase 5 creates visualizations in evaluation output dir)
+mkdir -p "${COLLECTION_DIR}/phase5_fairness_assessment/visualizations"
+if ls ${PHASE5_OUTPUT_DIR}/evaluation/*.png 1> /dev/null 2>&1; then
+    cp ${PHASE5_OUTPUT_DIR}/evaluation/*.png "${COLLECTION_DIR}/phase5_fairness_assessment/visualizations/" 2>/dev/null || true
+    local eval_viz_count=$(ls -1 "${COLLECTION_DIR}/phase5_fairness_assessment/visualizations"/*.png 2>/dev/null | wc -l)
+    if [ ${eval_viz_count} -gt 0 ]; then
+        echo -e "  ${GREEN}✓${NC} Evaluation visualizations (${eval_viz_count} files)"
+        echo "  [✓] Evaluation visualizations (${eval_viz_count} files)" >> "${SUMMARY_FILE}"
+        FILE_COUNT=$((FILE_COUNT + eval_viz_count))
+    fi
+fi
+
+# Copy visualizations from mitigation (if they exist)
+if ls ${PHASE5_OUTPUT_DIR}/mitigation/*.png 1> /dev/null 2>&1; then
+    cp ${PHASE5_OUTPUT_DIR}/mitigation/*.png "${COLLECTION_DIR}/phase5_fairness_assessment/visualizations/" 2>/dev/null || true
+    local mit_viz_count=$(ls -1 "${COLLECTION_DIR}/phase5_fairness_assessment/visualizations"/*mitigation*.png 2>/dev/null | wc -l)
+    if [ ${mit_viz_count} -gt 0 ]; then
+        echo -e "  ${GREEN}✓${NC} Mitigation visualizations (${mit_viz_count} files)"
+        echo "  [✓] Mitigation visualizations (${mit_viz_count} files)" >> "${SUMMARY_FILE}"
+    fi
+fi
 
 ################################################################################
 # Phase 6: Final System Evaluation (NEW - SINGLE SOURCE OF TRUTH)

@@ -4,14 +4,16 @@ This document maps the actual outputs from each phase based on the code implemen
 
 ## Phase 1: Data Preprocessing
 
-**Output Directory**: `data/processed/` or HuggingFace dataset
+**Output Directory**: `data/processed/` (contains `huggingface/` and `splits/` subdirectories)
 **Files**:
-- `split_info.txt` - Split statistics (uploaded to HF as `splits/split_info.txt`)
-- `train.csv` - Training data (uploaded to HF)
-- `val.csv` - Validation data (uploaded to HF)
-- `test.csv` - Test data (uploaded to HF)
+- `huggingface/preprocessing_metadata.txt` - Preprocessing metadata
+- `splits/split_info.txt` - Split statistics (uploaded to HF as `splits/split_info.txt`)
+- `splits/train.csv` - Training data (uploaded to HF)
+- `splits/validation.csv` - Validation data (uploaded to HF)
+- `splits/test.csv` - Test data (uploaded to HF)
+- `splits/scaler.pkl` - Feature scaler (fitted on train only)
 
-**Phase 7 Collection**: Download `split_info.txt` from HF dataset, skip CSV files (too large)
+**Phase 7 Collection**: Copy from `data/processed/huggingface/` and `data/processed/splits/`, skip CSV files (too large)
 
 ## Phase 2: Risk Modeling
 
@@ -20,8 +22,8 @@ This document maps the actual outputs from each phase based on the code implemen
 **Files**:
 - `gradient_boosting_model.joblib` - Trained model
 - `gradient_boosting_metrics.json` - Performance metrics
-- `gradient_boosting_fold_details.json` - Cross-validation fold metrics
-- `gradient_boosting_training_summary.json` - Training log
+- `cv_fold_details.json` - Cross-validation fold metrics (**NOT** gradient_boosting_fold_details.json)
+- `training_summary.json` - Training log (**NOT** gradient_boosting_training_summary.json)
 **Visualizations** (in `visualizations/` subdirectory):
 - `gradient_boosting_roc_curve.png`
 - `gradient_boosting_pr_curve.png`
@@ -37,8 +39,8 @@ This document maps the actual outputs from each phase based on the code implemen
 **Files**:
 - `random_forest_model.joblib` - Trained model
 - `random_forest_metrics.json` - Performance metrics
-- `random_forest_fold_details.json` - Cross-validation fold metrics
-- `random_forest_training_summary.json` - Training log
+- `cv_fold_details.json` - Cross-validation fold metrics (**NOT** random_forest_fold_details.json)
+- `training_summary.json` - Training log (**NOT** random_forest_training_summary.json)
 **Visualizations** (in `visualizations/` subdirectory):
 - `random_forest_roc_curve.png`
 - `random_forest_pr_curve.png`
@@ -53,9 +55,9 @@ This document maps the actual outputs from each phase based on the code implemen
 **Output Directory**: `outputs/logistic_regression/` + HuggingFace model repo
 **Files**:
 - `logistic_regression.pkl` - Trained model
-- `logistic_regression_scaler.pkl` - Feature scaler
+- **NO SCALER** - Uses Phase 1 scaler from `data/processed/splits/scaler.pkl`
 - `logistic_regression_metrics.json` - Performance metrics
-- `logistic_regression_fold_details.json` - Cross-validation fold metrics
+- `logistic_regression_cv_fold_details.json` - Cross-validation fold metrics (**NOTE**: includes "cv" prefix)
 - `logistic_regression_training_summary.json` - Training log
 **Visualizations** (in `visualizations/` subdirectory):
 - `logistic_regression_roc_curve.png`
@@ -71,52 +73,49 @@ This document maps the actual outputs from each phase based on the code implemen
 ### Gradient Boosting
 **Output Directory**: `outputs/gradient_boosting/calibration/` + HuggingFace model repo
 **Files**:
-- `calibrated_model.joblib` - Calibrated model wrapper
-- `calibration_metrics.json` - Calibration metrics
-- `test_predictions_calibrated.csv` - Calibrated predictions
-**Visualizations** (in `visualizations/` subdirectory):
+- `gradient_boosting_model_original.joblib` - Original uncalibrated model (**NOT** calibrated_model.joblib)
+- `Gradient_Boosting_(LightGBM)_calibrator.pkl` - Platt scaling calibrator
+- `Gradient_Boosting_(LightGBM)_metrics.json` - Calibration metrics (**NOT** calibration_metrics.json)
+- `Gradient_Boosting_(LightGBM)_report.txt` - Text report
+- `calibration_comparison_metrics.json` - Before/after comparison
+**Visualizations** (saved directly in calibration/, **NOT** in visualizations/ subdirectory):
 - `reliability_diagram.png`
-- `calibration_by_race.png`
-- `calibration_by_gender.png`
-- `calibration_by_age.png`
-- `brier_score_decomposition.png`
+- `reliability_diagram_comparison.png`
+- Various demographic-specific calibration plots
 
 ### Random Forest
 **Output Directory**: `outputs/random_forest/calibration/` + HuggingFace model repo
 **Files**:
-- `calibrated_model.joblib` - Calibrated model wrapper
-- `calibration_metrics.json` - Calibration metrics
-- `test_predictions_calibrated.csv` - Calibrated predictions
-**Visualizations** (in `visualizations/` subdirectory):
-- `reliability_diagram.png`
-- `calibration_by_race.png`
-- `calibration_by_gender.png`
-- `calibration_by_age.png`
-- `brier_score_decomposition.png`
+- `random_forest_model_original.joblib` - Original uncalibrated model
+- `Random_Forest_calibrator.pkl` - Platt scaling calibrator
+- `Random_Forest_metrics.json` - Calibration metrics
+- `Random_Forest_report.txt` - Text report
+- `calibration_comparison_metrics.json` - Before/after comparison
+**Visualizations** (saved directly in calibration/):
+- Similar structure to Gradient Boosting
 
 ### Logistic Regression
 **Output Directory**: `outputs/logistic_regression/calibration/` + HuggingFace model repo
 **Files**:
-- `calibrated_model.joblib` - Calibrated model wrapper
-- `calibration_metrics.json` - Calibration metrics
-- `test_predictions_calibrated.csv` - Calibrated predictions
-**Visualizations** (in `visualizations/` subdirectory):
-- `reliability_diagram.png`
-- `calibration_by_race.png`
-- `calibration_by_gender.png`
-- `calibration_by_age.png`
-- `brier_score_decomposition.png`
+- `logistic_regression_model_original.joblib` - Original uncalibrated model
+- `Logistic_Regression_calibrator.pkl` - Platt scaling calibrator
+- `Logistic_Regression_metrics.json` - Calibration metrics
+- `Logistic_Regression_report.txt` - Text report
+- `calibration_comparison_metrics.json` - Before/after comparison
+**Visualizations** (saved directly in calibration/):
+- Similar structure to Gradient Boosting
 
 ## Phase 4: Optimal Threshold & ROI Analysis
 
 ### Gradient Boosting
 **Output Directory**: `outputs/gradient_boosting/threshold_optimization/` + HuggingFace model repo
 **Files**:
-- `threshold_search_results.csv` - Full threshold search results
+- `threshold_results.csv` - Full threshold search results (**NOT** threshold_search_results.csv)
 - `optimal_thresholds.json` - Selected optimal thresholds
 - `roi_metrics.json` - ROI calculations
-- `phase5_input_summary.json` - Summary for Phase 5
-**Visualizations** (in `visualizations/` subdirectory):
+- `roi_report.txt` - Detailed ROI report
+- `phase4_summary_for_phase5.json` - Summary for Phase 5 (**NOT** phase5_input_summary.json)
+**Visualizations** (may be in `visualizations/` subdirectory or root):
 - `expected_value_curve.png`
 - `confusion_matrix_at_optimal.png`
 - `roi_breakdown.png`
@@ -139,15 +138,16 @@ This document maps the actual outputs from each phase based on the code implemen
 ## Phase 5: Fairness Assessment & Mitigation
 
 ### Part A: Evaluation (always runs)
-**Output Directory**: `outputs/{method}/fairness/evaluation/`
+**Output Directory**: `phase-5-fairness-assessment-mitigation/outputs/{method}/evaluation/`
 
 **Files**:
-- `group_metrics.csv` - Performance metrics by demographic group
+- `group_metrics_{attribute}.csv` - Performance metrics by demographic (one file per attribute: race, gender, age)
 - `statistical_tests.json` - Statistical significance tests
-- `risk_stratification.csv` - Risk analysis by demographics
+- `risk_categories_{attribute}.csv` - Risk analysis by demographics (one file per attribute)
 - `fairness_report.json` - Comprehensive fairness report
+- `phase5_summary_for_phase6.json` - Summary for Phase 6
 
-**Visualizations** (in `visualizations/` subdirectory):
+**Visualizations** (saved directly in evaluation/, **NOT** in visualizations/ subdirectory):
 - `tpr_by_race.png`
 - `fpr_by_race.png`
 - `ppv_by_race.png`
@@ -161,14 +161,15 @@ This document maps the actual outputs from each phase based on the code implemen
 - `performance_overview.png`
 
 ### Part B: Mitigation (conditional - only if violations detected)
-**Output Directory**: `outputs/{method}/fairness/mitigation/`
+**Output Directory**: `phase-5-fairness-assessment-mitigation/outputs/{method}/mitigation/`
 
 **Files**:
 - `group_thresholds.json` - Optimized group-specific thresholds
 - `mitigation_impact.json` - Before/after comparison
 - `tradeoff_analysis.json` - Performance-fairness tradeoffs
+- `phase6_deployment_config.json` - Deployment config with mitigation
 
-**Visualizations** (in `visualizations/` subdirectory):
+**Visualizations** (saved directly in mitigation/):
 - `threshold_comparison.png`
 - `disparity_reduction.png`
 - `group_performance_change.png`
@@ -178,8 +179,9 @@ This document maps the actual outputs from each phase based on the code implemen
 **Note**: If no violations, mitigation folder contains `no_mitigation_needed.json` placeholder
 
 ### Combined Output (always created)
-**File**: `deployment_config.json` (at `outputs/{method}/fairness/`)
+**File**: `deployment_config.json` (at `phase-5-fairness-assessment-mitigation/outputs/{method}/`)
 - Contains: is_mitigated flag, use_group_thresholds flag, threshold_configuration, phase6_instructions
+- Created by the run script after evaluation (and optionally mitigation)
 
 ## Phase 6: Final System Evaluation
 
