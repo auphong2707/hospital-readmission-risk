@@ -379,6 +379,175 @@ This preprocessing script will:
 
 **Prerequisites**: Ensure pandas, numpy, scikit-learn, and python-dotenv are installed.
 
+## Running the Complete Pipeline
+
+This section provides commands to run the **complete end-to-end pipeline** for each method through all 7 phases.
+
+### Pipeline Overview
+
+```
+Phase 1: Data Preprocessing → Phase 2: Risk Modeling → Phase 3: Calibration →
+Phase 4: Threshold & ROI → Phase 5: Fairness Assessment & Mitigation →
+Phase 6: Final System Evaluation → Phase 7: Results Collection & Publication
+```
+
+### Gradient Boosting (Full Pipeline: Phases 1-7)
+
+Gradient Boosting is the **primary model** that goes through all phases:
+
+```bash
+# Phase 1: Data Preprocessing (run once for all methods)
+python phase-1-data-explore-preprocessing/simple_preprocessing.py
+
+# Phase 2: Train Gradient Boosting Model
+python phase-2-risk-modeling/train_gradient_boosting.py
+
+# Phase 3: Calibrate Model
+python phase-3-model-calibration/calibrate_gradient_boosting.py
+
+# Phase 4: Optimize Threshold & ROI Analysis
+python phase-4-optimal-threshold-ROI-analysis/optimize_threshold_gradient_boosting.py \
+    --readmission-cost 15000 \
+    --intervention-cost 500
+
+# Phase 5: Fairness Assessment & Mitigation (unified script)
+./phase-5-fairness-assessment-mitigation/run_fairness_assessment_and_mitigation.sh \
+    --method gradient_boosting \
+    --readmission-cost 15000 \
+    --intervention-cost 500
+
+# Phase 6: Final System Evaluation
+python phase-6-final-system-evaluation/final_evaluation_gradient_boosting.py \
+    --readmission-cost 15000 \
+    --intervention-cost 500
+
+# Phase 7: Collect & Publish Results
+./phase-7-results-collection-publication/collect_and_publish.sh \
+    --method gradient_boosting \
+    --repo-id auphong2707/hospital-readmission-gradient-boosting-final
+```
+
+### Random Forest (Phases 1-2 only)
+
+Random Forest trains through Phase 2 only (alternative model for comparison):
+
+```bash
+# Phase 1: Data Preprocessing (if not already done)
+python phase-1-data-explore-preprocessing/simple_preprocessing.py
+
+# Phase 2: Train Random Forest Model
+python phase-2-risk-modeling/train_random_forest.py
+
+# Optional: Collect & Publish Phase 2 Results
+./phase-7-results-collection-publication/collect_and_publish.sh \
+    --method random_forest \
+    --repo-id auphong2707/hospital-readmission-random-forest-final
+```
+
+### Logistic Regression (Phases 1-2 only)
+
+Logistic Regression trains through Phase 2 only (baseline model):
+
+```bash
+# Phase 1: Data Preprocessing (if not already done)
+python phase-1-data-explore-preprocessing/simple_preprocessing.py
+
+# Phase 2: Train Logistic Regression Model
+python phase-2-risk-modeling/train_logistic_regression.py
+
+# Optional: Collect & Publish Phase 2 Results
+./phase-7-results-collection-publication/collect_and_publish.sh \
+    --method logistic_regression \
+    --repo-id auphong2707/hospital-readmission-logistic-regression-final
+```
+
+### Running All Phase Orchestrators
+
+Several phases have orchestrator scripts that can run all methods at once:
+
+**Phase 5 Orchestrator** (Fairness Assessment & Mitigation):
+```bash
+# Run for all three methods with default costs
+./phase-5-fairness-assessment-mitigation/run_fairness_assessment_and_mitigation.sh \
+    --all-methods
+
+# Or with custom costs
+./phase-5-fairness-assessment-mitigation/run_fairness_assessment_and_mitigation.sh \
+    --all-methods \
+    --readmission-cost 15000 \
+    --intervention-cost 500
+```
+
+**Phase 6 Orchestrator** (Final System Evaluation):
+```bash
+# Run for all three methods
+./phase-6-final-system-evaluation/run_final_evaluation.sh \
+    --readmission-cost 15000 \
+    --intervention-cost 500
+
+# Or skip specific methods
+./phase-6-final-system-evaluation/run_final_evaluation.sh \
+    --skip-random-forest \
+    --skip-logistic-regression
+```
+
+### Quick Start: Complete Gradient Boosting Pipeline
+
+For a complete end-to-end run with all phases:
+
+```bash
+#!/bin/bash
+# Run complete Gradient Boosting pipeline (Phases 1-7)
+
+# Phase 1: Preprocessing
+python phase-1-data-explore-preprocessing/simple_preprocessing.py
+
+# Phase 2: Risk Modeling
+python phase-2-risk-modeling/train_gradient_boosting.py
+
+# Phase 3: Calibration
+python phase-3-model-calibration/calibrate_gradient_boosting.py
+
+# Phase 4: Threshold Optimization
+python phase-4-optimal-threshold-ROI-analysis/optimize_threshold_gradient_boosting.py
+
+# Phase 5: Fairness (Assessment + Conditional Mitigation)
+./phase-5-fairness-assessment-mitigation/run_fairness_assessment_and_mitigation.sh \
+    --method gradient_boosting
+
+# Phase 6: Final Evaluation
+python phase-6-final-system-evaluation/final_evaluation_gradient_boosting.py
+
+# Phase 7: Results Collection & Publication
+./phase-7-results-collection-publication/collect_and_publish.sh \
+    --method gradient_boosting \
+    --dry-run  # Remove --dry-run to actually upload
+```
+
+### Pipeline Notes
+
+**Cost Parameters:**
+- Default readmission cost: $15,000
+- Default intervention cost: $500
+- These can be adjusted via command-line arguments in Phases 4-6
+
+**HuggingFace Integration:**
+- Phase 1 uploads preprocessed data to HuggingFace Hub
+- Phases 2-6 can download data/models from previous phases
+- Phase 7 collects all outputs and creates final repository
+
+**Output Locations:**
+- Each phase creates outputs in `outputs/{method}/{phase_name}/`
+- Phase 7 collects everything into `outputs/collection_{method}/`
+
+**Repository Naming Convention:**
+- All HuggingFace repos use **hyphens** (not underscores)
+- Pattern: `hospital-readmission-{method}-{suffix}`
+- Examples:
+  - Phase 4: `hospital-readmission-gradient-boosting-threshold-results`
+  - Phase 5: `hospital-readmission-gradient-boosting-fairness-assessment-mitigation`
+  - Phase 7: `hospital-readmission-gradient-boosting-final`
+
 **Data Structure**: The script expects the following data files in the `data/` folder:
 - `data/diabetic_data.csv` - Main dataset (automatically loaded by the script)
 - `data/IDS_mapping.csv` - ID mappings (reference file)
