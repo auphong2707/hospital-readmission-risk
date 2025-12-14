@@ -31,7 +31,8 @@
 #   - logistic_regression: Full pipeline (Phases 1-6)
 ################################################################################
 
-set -e  # Exit on error
+# Note: NOT using 'set -e' to allow collection to continue even if some files are missing
+# We'll track success/failure per file instead
 
 # Default configuration
 REPO_ID=""
