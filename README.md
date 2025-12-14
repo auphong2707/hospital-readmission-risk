@@ -1,5 +1,7 @@
 # Hospital Readmission Risk - Operational Analytics
 
+> ⚠️ **IMPORTANT**: See [REFINEMENT_PLAN.md](REFINEMENT_PLAN.md) for critical updates needed in Phase 7 to ensure published metrics reflect actual deployed system performance.
+
 ## Project Overview
 
 This project focuses on predicting 30-day hospital readmissions for diabetic patients and designing care pathway interventions to reduce readmission rates. By leveraging machine learning and operational analytics, we aim to identify high-risk patients and provide actionable insights for healthcare providers.
