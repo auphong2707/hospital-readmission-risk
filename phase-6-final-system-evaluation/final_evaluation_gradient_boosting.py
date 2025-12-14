@@ -132,7 +132,7 @@ def load_data_and_predictions(data_repo_id: str, model_repo_id: str):
     print("LOADING DATA AND PREDICTIONS")
     print("="*80)
     
-    # Load test data demographics from Phase 1
+    # Load test data from Phase 1
     print("\n📥 Downloading test data from HuggingFace...")
     test_data_path = hf_hub_download(
         repo_id=data_repo_id,
@@ -142,9 +142,19 @@ def load_data_and_predictions(data_repo_id: str, model_repo_id: str):
     test_data = pd.read_csv(test_data_path)
     print(f"✓ Loaded test data: {test_data.shape}")
     
-    # Extract true labels and demographics
-    y_true = test_data['readmitted'].values
-    demographics = test_data[['race', 'gender', 'age']].copy()
+    # Load demographics from separate file (Phase 1 saves this separately)
+    print("\n📥 Downloading demographics from HuggingFace...")
+    demographics_path = hf_hub_download(
+        repo_id=data_repo_id,
+        filename="splits/test_demographics.csv",
+        repo_type="dataset"
+    )
+    demographics = pd.read_csv(demographics_path)
+    print(f"✓ Loaded demographics: {demographics.shape}")
+    
+    # Extract true labels (Phase 1 uses 'target' as column name)
+    target_col = 'target' if 'target' in test_data.columns else 'readmitted'
+    y_true = test_data[target_col].values
     
     print(f"✓ True labels: {len(y_true)} samples")
     print(f"  - Readmission rate: {np.mean(y_true):.2%}")
