@@ -136,7 +136,7 @@ def load_data_and_predictions(data_repo_id: str, model_repo_id: str):
     print("\n📥 Downloading test data from HuggingFace...")
     test_data_path = hf_hub_download(
         repo_id=data_repo_id,
-        filename="test.csv",
+        filename="splits/test.csv",
         repo_type="dataset"
     )
     test_data = pd.read_csv(test_data_path)
