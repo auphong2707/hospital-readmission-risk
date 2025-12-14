@@ -159,17 +159,36 @@ def load_data_and_predictions(data_repo_id: str, model_repo_id: str):
     print(f"✓ True labels: {len(y_true)} samples")
     print(f"  - Readmission rate: {np.mean(y_true):.2%}")
     
-    # Load calibrated predictions from Phase 3
-    print("\n📥 Downloading calibrated predictions...")
-    pred_path = hf_hub_download(
+    # Load model and calibrator from Phase 3
+    print("\n📥 Downloading model and calibrator from Phase 3...")
+    model_path = hf_hub_download(
         repo_id=model_repo_id,
-        filename="test_predictions_calibrated.csv",
+        filename="gradient_boosting_model_original.joblib",
         repo_type="model"
     )
-    predictions = pd.read_csv(pred_path)
-    y_proba = predictions['probability_calibrated'].values
+    model = joblib.load(model_path)
+    print(f"✓ Loaded model")
     
-    print(f"✓ Loaded calibrated predictions: {len(y_proba)} samples")
+    calibrator_path = hf_hub_download(
+        repo_id=model_repo_id,
+        filename="Gradient_Boosting_(LightGBM)_calibrator.pkl",
+        repo_type="model"
+    )
+    calibrator = joblib.load(calibrator_path)
+    print(f"✓ Loaded calibrator")
+    
+    # Generate calibrated predictions
+    print("\n🔮 Generating calibrated predictions...")
+    # Extract features (drop target column)
+    X_test = test_data.drop(columns=[target_col])
+    
+    # Get uncalibrated predictions
+    y_proba_uncalibrated = model.predict_proba(X_test)[:, 1]
+    
+    # Apply calibration
+    y_proba = calibrator.predict_proba(y_proba_uncalibrated)
+    
+    print(f"✓ Generated calibrated predictions: {len(y_proba)} samples")
     print(f"  - Mean probability: {np.mean(y_proba):.4f}")
     print(f"  - Probability range: [{np.min(y_proba):.4f}, {np.max(y_proba):.4f}]")
     
