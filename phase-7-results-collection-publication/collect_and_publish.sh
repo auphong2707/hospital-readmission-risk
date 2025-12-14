@@ -211,6 +211,50 @@ copy_dir() {
     return 1
 }
 
+# Helper function to download file from HuggingFace
+download_from_hf() {
+    local repo_id="$1"
+    local file_path="$2"
+    local dst="$3"
+    local desc="$4"
+    local repo_type="${5:-model}"  # Default to model repo
+    
+    echo -e "  ${YELLOW}⏳${NC} Downloading from HF: ${desc}..."
+    
+    # Use huggingface-cli or Python to download
+    python3 - <<PYTHON_EOF
+import os
+from huggingface_hub import hf_hub_download
+try:
+    downloaded_path = hf_hub_download(
+        repo_id="${repo_id}",
+        filename="${file_path}",
+        repo_type="${repo_type}",
+        cache_dir=None
+    )
+    # Copy to destination
+    os.makedirs(os.path.dirname("${dst}"), exist_ok=True)
+    import shutil
+    shutil.copy(downloaded_path, "${dst}")
+    print("✓ Downloaded successfully")
+    exit(0)
+except Exception as e:
+    print(f"✗ Download failed: {e}")
+    exit(1)
+PYTHON_EOF
+    
+    if [ $? -eq 0 ] && [ -f "${dst}" ]; then
+        echo -e "  ${GREEN}✓${NC} ${desc} (from HuggingFace)"
+        echo "  [✓] ${desc} (from HuggingFace)" >> "${SUMMARY_FILE}"
+        ((FILE_COUNT++))
+        return 0
+    else
+        echo -e "  ${RED}✗${NC} ${desc} (download failed)"
+        echo "  [✗] ${desc} (download failed)" >> "${SUMMARY_FILE}"
+        return 1
+    fi
+}
+
 ################################################################################
 # Phase 1: Data Preprocessing
 ################################################################################
@@ -219,20 +263,37 @@ echo "" | tee -a "${SUMMARY_FILE}"
 echo -e "${BLUE}Phase 1 - Data Preprocessing:${NC}" | tee -a "${SUMMARY_FILE}"
 
 # Note: CSV files are too large, we only collect metadata
-# Phase 1 saves to either ./data/processed/huggingface/ or ./data/processed/splits/
-copy_file \
+# Try local first, then download from HuggingFace
+if ! copy_file \
     "./data/processed/huggingface/preprocessing_metadata.txt" \
     "${COLLECTION_DIR}/phase1_preprocessing/preprocessing_metadata.txt" \
-    "Preprocessing metadata (HF export)" || \
-copy_file \
+    "Preprocessing metadata (HF export)" && \
+   ! copy_file \
     "./data/processed/preprocessing_metadata.txt" \
     "${COLLECTION_DIR}/phase1_preprocessing/preprocessing_metadata.txt" \
-    "Preprocessing metadata"
+    "Preprocessing metadata"; then
+    # Download from HuggingFace dataset repo
+    echo -e "  ${YELLOW}ℹ${NC}  Preprocessing metadata not found locally, downloading from HuggingFace..."
+    download_from_hf \
+        "auphong2707/hospital-readmission-risk-data" \
+        "preprocessing_metadata.txt" \
+        "${COLLECTION_DIR}/phase1_preprocessing/preprocessing_metadata.txt" \
+        "Preprocessing metadata" \
+        "dataset"
+fi
 
-copy_file \
+if ! copy_file \
     "./data/processed/splits/split_info.txt" \
     "${COLLECTION_DIR}/phase1_preprocessing/split_info.txt" \
-    "Split information"
+    "Split information"; then
+    # Download from HuggingFace dataset repo
+    download_from_hf \
+        "auphong2707/hospital-readmission-risk-data" \
+        "splits/split_info.txt" \
+        "${COLLECTION_DIR}/phase1_preprocessing/split_info.txt" \
+        "Split information" \
+        "dataset"
+fi
 
 echo -e "  ${YELLOW}ℹ${NC}  Note: CSV data files (train/val/test) not collected (too large, available on HF dataset)"
 
@@ -243,62 +304,93 @@ echo -e "  ${YELLOW}ℹ${NC}  Note: CSV data files (train/val/test) not collecte
 echo "" | tee -a "${SUMMARY_FILE}"
 echo -e "${BLUE}Phase 2 - Risk Modeling (${METHOD}):${NC}" | tee -a "${SUMMARY_FILE}"
 
-# Map method to filenames
+# Map method to filenames and HuggingFace repo IDs
 case "${METHOD}" in
     gradient_boosting)
         MODEL_PREFIX="gradient_boosting"
         DISPLAY_NAME="Gradient Boosting"
+        PHASE2_HF_REPO="auphong2707/hospital-readmission-lgbm"
         ;;
     random_forest)
         MODEL_PREFIX="random_forest"
         DISPLAY_NAME="Random Forest"
+        PHASE2_HF_REPO="auphong2707/hospital-readmission-rf"
         ;;
     logistic_regression)
         MODEL_PREFIX="logistic_regression"
         DISPLAY_NAME="Logistic Regression"
+        PHASE2_HF_REPO="auphong2707/hospital-readmission-lr"
         ;;
 esac
 
-# Copy model files
-copy_file \
+echo -e "  ${YELLOW}ℹ${NC}  HuggingFace Repo: ${PHASE2_HF_REPO}"
+
+# Copy model files (try local first, then HF)
+if ! copy_file \
     "./outputs/${METHOD}/${MODEL_PREFIX}_model.joblib" \
     "${COLLECTION_DIR}/phase2_modeling/${MODEL_PREFIX}_model.joblib" \
-    "${DISPLAY_NAME} model" || \
-copy_file \
+    "${DISPLAY_NAME} model" && \
+   ! copy_file \
     "./outputs/${METHOD}/${MODEL_PREFIX}_model_original.joblib" \
     "${COLLECTION_DIR}/phase2_modeling/${MODEL_PREFIX}_model.joblib" \
-    "${DISPLAY_NAME} model (original)"
+    "${DISPLAY_NAME} model (original)"; then
+    download_from_hf \
+        "${PHASE2_HF_REPO}" \
+        "${MODEL_PREFIX}_model.joblib" \
+        "${COLLECTION_DIR}/phase2_modeling/${MODEL_PREFIX}_model.joblib" \
+        "${DISPLAY_NAME} model" \
+        "model"
+fi
 
 # Copy metrics
-copy_file \
+if ! copy_file \
     "./outputs/${METHOD}/${MODEL_PREFIX}_metrics.json" \
     "${COLLECTION_DIR}/phase2_modeling/${MODEL_PREFIX}_metrics.json" \
-    "${DISPLAY_NAME} metrics"
+    "${DISPLAY_NAME} metrics"; then
+    download_from_hf \
+        "${PHASE2_HF_REPO}" \
+        "${MODEL_PREFIX}_metrics.json" \
+        "${COLLECTION_DIR}/phase2_modeling/${MODEL_PREFIX}_metrics.json" \
+        "${DISPLAY_NAME} metrics" \
+        "model"
+fi
 
 # Copy fold details (different naming for LR vs GB/RF)
 if [ "${METHOD}" = "logistic_regression" ]; then
-    copy_file \
-        "./outputs/${METHOD}/logistic_regression_cv_fold_details.json" \
-        "${COLLECTION_DIR}/phase2_modeling/${MODEL_PREFIX}_fold_details.json" \
-        "${DISPLAY_NAME} fold details"
+    FOLD_DETAILS_FILE="logistic_regression_cv_fold_details.json"
 else
-    copy_file \
-        "./outputs/${METHOD}/cv_fold_details.json" \
+    FOLD_DETAILS_FILE="cv_fold_details.json"
+fi
+
+if ! copy_file \
+    "./outputs/${METHOD}/${FOLD_DETAILS_FILE}" \
+    "${COLLECTION_DIR}/phase2_modeling/${MODEL_PREFIX}_fold_details.json" \
+    "${DISPLAY_NAME} fold details"; then
+    download_from_hf \
+        "${PHASE2_HF_REPO}" \
+        "${FOLD_DETAILS_FILE}" \
         "${COLLECTION_DIR}/phase2_modeling/${MODEL_PREFIX}_fold_details.json" \
-        "${DISPLAY_NAME} fold details"
+        "${DISPLAY_NAME} fold details" \
+        "model"
 fi
 
 # Copy training summary (different naming for LR vs GB/RF)
 if [ "${METHOD}" = "logistic_regression" ]; then
-    copy_file \
-        "./outputs/${METHOD}/logistic_regression_training_summary.json" \
-        "${COLLECTION_DIR}/phase2_modeling/${MODEL_PREFIX}_training_summary.json" \
-        "${DISPLAY_NAME} training summary"
+    TRAINING_SUMMARY_FILE="logistic_regression_training_summary.json"
 else
-    copy_file \
-        "./outputs/${METHOD}/training_summary.json" \
+    TRAINING_SUMMARY_FILE="training_summary.json"
+fi
+
+if ! copy_file \
+    "./outputs/${METHOD}/${TRAINING_SUMMARY_FILE}" \
+    "${COLLECTION_DIR}/phase2_modeling/${MODEL_PREFIX}_training_summary.json" \
+    "${DISPLAY_NAME} training summary"; then
+    download_from_hf \
+        "${PHASE2_HF_REPO}" \
+        "${TRAINING_SUMMARY_FILE}" \
         "${COLLECTION_DIR}/phase2_modeling/${MODEL_PREFIX}_training_summary.json" \
-        "${DISPLAY_NAME} training summary"
+        "${DISPLAY_NAME} training summary" \
+        "model"
 fi
 
 # For logistic regression, copy Phase 1 scaler (LR doesn't create its own)
