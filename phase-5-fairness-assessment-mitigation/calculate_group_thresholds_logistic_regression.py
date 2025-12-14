@@ -505,16 +505,15 @@ def main():
             output_dir=str(output_dir)
         )
         
-        # STEP 9: Upload to HuggingFace Hub
+        # Note: HuggingFace Upload
+        # Upload is now handled by the orchestrator script after combining
+        # evaluation and mitigation results. This avoids duplicate uploads.
+        # See: run_fairness_assessment_and_mitigation.sh
         print("\n" + "="*80)
-        print("Step 9: Upload to HuggingFace Hub")
+        print("📁 Mitigation Results Saved")
         print("="*80)
-        
-        upload_results_to_hf(
-            output_dir=str(output_dir),
-            repo_id=args.model_repo_id,
-            commit_message="Upload Phase 6 Logistic Regression fairness mitigation results"
-        )
+        print(f"✅ Results saved locally to: {output_dir}")
+        print(f"📤 Upload will be handled by orchestrator with combined results")
         
         # FINAL SUMMARY
         print("\n" + "="*80)

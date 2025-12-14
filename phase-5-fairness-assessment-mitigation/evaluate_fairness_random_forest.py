@@ -689,25 +689,17 @@ def main():
         print(f"   4. Implement production monitoring for fairness metrics")
     
     # ========================================================================
-    # Upload to HuggingFace Hub
+    # Note: HuggingFace Upload
     # ========================================================================
-    
-    print_section("Step 13: Upload Results to HuggingFace Hub", "=")
-    
-    try:
-        repo_url = upload_results_to_hf(
-            output_dir=args.output_dir,
-            repo_id='auphong2707/hospital-readmission-random-forest-fairness-results',
-            commit_message="Upload Phase 5 fairness evaluation results - Random Forest"
-        )
-        print(f"✅ Results uploaded successfully!")
-        print(f"🌐 View at: {repo_url}")
-    except Exception as e:
-        print(f"❌ Upload failed: {e}")
-        print(f"💡 You can upload manually later or set HF_TOKEN environment variable")
+    # Upload is now handled by the orchestrator script after combining
+    # evaluation and mitigation results. This avoids duplicate uploads.
+    # See: run_fairness_assessment_and_mitigation.sh
     
     print("\n" + "="*80)
-    print("✅ Phase 5 Completed Successfully!")
+    print("✅ Phase 5 Part A (Evaluation) Completed Successfully!")
+    print("="*80)
+    print(f"📁 Results saved to: {args.output_dir}")
+    print(f"� Upload will be handled by orchestrator after mitigation check")
     print("="*80 + "\n")
 
 

@@ -271,6 +271,52 @@ EOF
 echo ""
 
 ################################################################################
+# STEP 5: Upload to HuggingFace Hub (Once, with All Results)
+################################################################################
+
+echo "================================================================================"
+echo "STEP 5: Upload Results to HuggingFace Hub"
+echo "================================================================================"
+echo ""
+
+# Determine repo name based on method
+if [[ "$METHOD" == "gradient_boosting" ]]; then
+    REPO_ID="auphong2707/hospital-readmission-gradient-boosting-fairness-assessment-mitigation"
+elif [[ "$METHOD" == "random_forest" ]]; then
+    REPO_ID="auphong2707/hospital-readmission-random-forest-fairness-assessment-mitigation"
+else
+    REPO_ID="auphong2707/hospital-readmission-logistic-regression-fairness-assessment-mitigation"
+fi
+
+echo -e "${BLUE}📤 Uploading combined results to HuggingFace Hub...${NC}"
+echo "   Repository: $REPO_ID"
+echo ""
+
+# Run Python upload script
+python3 << EOF
+import sys
+sys.path.insert(0, "$SCRIPT_DIR")
+
+from utilities import upload_results_to_hf
+
+try:
+    repo_url = upload_results_to_hf(
+        output_dir="$OUTPUT_DIR",
+        repo_id="$REPO_ID",
+        commit_message="Phase 5: Fairness Assessment & Mitigation - $METHOD (Combined Results)",
+        include_visualizations=True
+    )
+    print(f"✅ Successfully uploaded to HuggingFace Hub!")
+    print(f"🌐 View results at: {repo_url}")
+except Exception as e:
+    print(f"⚠️  Upload to HuggingFace failed: {e}")
+    print(f"💡 Results are still saved locally in $OUTPUT_DIR")
+    print(f"   You can upload manually later or set HF_TOKEN environment variable")
+EOF
+
+echo ""
+
+################################################################################
 # FINAL SUMMARY
 ################################################################################
 
@@ -288,6 +334,7 @@ if [ "$MITIGATION_APPLIED" = true ]; then
     echo "   Mitigation results: $MITIGATION_OUTPUT"
 fi
 echo "   Combined summary: $OUTPUT_DIR/phase5_complete_summary.json"
+echo "   HuggingFace Repository: $REPO_ID"
 echo ""
 echo "🎯 Next Steps:"
 if [ "$MITIGATION_APPLIED" = true ]; then

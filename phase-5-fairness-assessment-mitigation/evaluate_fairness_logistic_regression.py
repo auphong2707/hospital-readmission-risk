@@ -586,21 +586,13 @@ def main():
             json.dump(fairness_report_serializable, f, indent=2)
         print(f"✅ Fairness report saved: {report_path}")
         
-        # STEP 12: Upload to HuggingFace Hub
-        print_section("📤 Step 12: Upload to HuggingFace Hub", "=")
-        
-        try:
-            repo_url = upload_results_to_hf(
-                output_dir=str(output_dir),
-                repo_id="auphong2707/hospital-readmission-logistic-regression-fairness-results",
-                commit_message="Phase 5: Fairness evaluation for Logistic Regression model",
-                include_visualizations=True
-            )
-            print(f"\n✅ Successfully uploaded to HuggingFace Hub!")
-            print(f"🌐 View results at: {repo_url}")
-        except Exception as e:
-            print(f"\n⚠️  Upload to HuggingFace failed: {e}")
-            print(f"💡 Results are still saved locally in {output_dir}")
+        # Note: HuggingFace Upload
+        # Upload is now handled by the orchestrator script after combining
+        # evaluation and mitigation results. This avoids duplicate uploads.
+        # See: run_fairness_assessment_and_mitigation.sh
+        print_section("📁 Evaluation Results Saved", "=")
+        print(f"✅ Results saved locally to: {output_dir}")
+        print(f"📤 Upload will be handled by orchestrator after mitigation check")
         
         # FINAL SUMMARY
         print_section("✨ Fairness Evaluation Complete!", "=")

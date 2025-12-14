@@ -486,27 +486,17 @@ def main():
         print(f"   5. Revisit mitigation strategy or retrain model")
     
     # ========================================================================
-    # Step 9: Upload to HuggingFace Hub
+    # Note: HuggingFace Upload
     # ========================================================================
+    # Upload is now handled by the orchestrator script after combining
+    # evaluation and mitigation results. This avoids duplicate uploads.
+    # See: run_fairness_assessment_and_mitigation.sh
     
     print("\n" + "="*80)
-    print("Step 9: Upload Results to HuggingFace Hub")
+    print("✅ Phase 5 Part B (Mitigation) Completed Successfully!")
     print("="*80)
-    
-    try:
-        repo_url = upload_results_to_hf(
-            output_dir=args.output_dir,
-            repo_id='auphong2707/hospital-readmission-random-forest-mitigation-results',
-            commit_message="Upload Phase 6 fairness mitigation results for Random Forest"
-        )
-        print(f"✅ Results uploaded successfully!")
-        print(f"🌐 View at: {repo_url}")
-    except Exception as e:
-        print(f"❌ Upload failed: {e}")
-        print(f"💡 You can upload manually later or set HF_TOKEN environment variable")
-    
-    print("\n" + "="*80)
-    print("✅ Phase 6 Completed Successfully!")
+    print(f"📁 Results saved to: {args.output_dir}")
+    print(f"� Upload will be handled by orchestrator with combined results")
     print("="*80 + "\n")
 
 
