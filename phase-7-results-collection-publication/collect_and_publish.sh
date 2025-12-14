@@ -385,11 +385,44 @@ if [ "${METHOD}" = "logistic_regression" ]; then
         "Feature scaler (from Phase 1)"
 fi
 
-# Copy visualizations
-copy_dir \
-    "./outputs/${METHOD}/visualizations" \
-    "${COLLECTION_DIR}/phase2_modeling/visualizations" \
-    "Phase 2 visualizations"
+# Copy visualizations - try local first, then download from HuggingFace
+echo "" | tee -a "${SUMMARY_FILE}"
+echo "  Collecting Phase 2 visualizations..." | tee -a "${SUMMARY_FILE}"
+mkdir -p "${COLLECTION_DIR}/phase2_modeling/visualizations"
+
+viz_files=(
+    "roc_curve.png"
+    "precision_recall_curve.png"
+    "confusion_matrix.png"
+    "calibration_curve.png"
+    "feature_importance.png"
+    "feature_importance.csv"
+    "learning_curves.png"
+    "metrics_comparison_across_folds.png"
+    "validation_curves.png"
+)
+
+viz_count=0
+for viz_file in "${viz_files[@]}"; do
+    local_viz="./outputs/${METHOD}/visualizations/${viz_file}"
+    dest_viz="${COLLECTION_DIR}/phase2_modeling/visualizations/${viz_file}"
+    
+    if [ -f "${local_viz}" ]; then
+        cp "${local_viz}" "${dest_viz}"
+        ((viz_count++))
+    else
+        # Try downloading from HuggingFace
+        if download_from_hf "${HF_REPO}" "${viz_file}" "${dest_viz}" "model"; then
+            ((viz_count++))
+        fi
+    fi
+done
+
+if [ ${viz_count} -gt 0 ]; then
+    echo -e "  ${GREEN}✓${NC} Phase 2 visualizations (${viz_count} files)" | tee -a "${SUMMARY_FILE}"
+else
+    echo -e "  ${YELLOW}⚠${NC} Phase 2 visualizations (empty or not found)" | tee -a "${SUMMARY_FILE}"
+fi
 
 ################################################################################
 # Phase 3: Model Calibration
@@ -479,7 +512,7 @@ copy_file \
 mkdir -p "${COLLECTION_DIR}/phase3_calibration/visualizations"
 if ls ./outputs/${METHOD}/calibration/*.png 1> /dev/null 2>&1; then
     cp ./outputs/${METHOD}/calibration/*.png "${COLLECTION_DIR}/phase3_calibration/visualizations/" 2>/dev/null || true
-    local viz_count=$(ls -1 "${COLLECTION_DIR}/phase3_calibration/visualizations" 2>/dev/null | wc -l)
+    viz_count=$(ls -1 "${COLLECTION_DIR}/phase3_calibration/visualizations" 2>/dev/null | wc -l)
     if [ ${viz_count} -gt 0 ]; then
         echo -e "  ${GREEN}✓${NC} Phase 3 visualizations (${viz_count} files)"
         echo "  [✓] Phase 3 visualizations (${viz_count} files)" >> "${SUMMARY_FILE}"
@@ -569,7 +602,7 @@ copy_file \
 # We'll collect all of them
 if ls ${PHASE5_OUTPUT_DIR}/evaluation/group_metrics_*.csv 1> /dev/null 2>&1; then
     cp ${PHASE5_OUTPUT_DIR}/evaluation/group_metrics_*.csv "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation/" 2>/dev/null || true
-    local group_count=$(ls -1 "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation"/group_metrics_*.csv 2>/dev/null | wc -l)
+    group_count=$(ls -1 "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation"/group_metrics_*.csv 2>/dev/null | wc -l)
     if [ ${group_count} -gt 0 ]; then
         echo -e "  ${GREEN}✓${NC} Group metrics (${group_count} files)"
         echo "  [✓] Group metrics (${group_count} files)" >> "${SUMMARY_FILE}"
@@ -580,7 +613,7 @@ fi
 # Risk stratification - also separate files per attribute
 if ls ${PHASE5_OUTPUT_DIR}/evaluation/risk_categories_*.csv 1> /dev/null 2>&1; then
     cp ${PHASE5_OUTPUT_DIR}/evaluation/risk_categories_*.csv "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation/" 2>/dev/null || true
-    local risk_count=$(ls -1 "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation"/risk_categories_*.csv 2>/dev/null | wc -l)
+    risk_count=$(ls -1 "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation"/risk_categories_*.csv 2>/dev/null | wc -l)
     if [ ${risk_count} -gt 0 ]; then
         echo -e "  ${GREEN}✓${NC} Risk stratification (${risk_count} files)"
         echo "  [✓] Risk stratification (${risk_count} files)" >> "${SUMMARY_FILE}"
@@ -635,7 +668,7 @@ copy_file \
 mkdir -p "${COLLECTION_DIR}/phase5_fairness_assessment/visualizations"
 if ls ${PHASE5_OUTPUT_DIR}/evaluation/*.png 1> /dev/null 2>&1; then
     cp ${PHASE5_OUTPUT_DIR}/evaluation/*.png "${COLLECTION_DIR}/phase5_fairness_assessment/visualizations/" 2>/dev/null || true
-    local eval_viz_count=$(ls -1 "${COLLECTION_DIR}/phase5_fairness_assessment/visualizations"/*.png 2>/dev/null | wc -l)
+    eval_viz_count=$(ls -1 "${COLLECTION_DIR}/phase5_fairness_assessment/visualizations"/*.png 2>/dev/null | wc -l)
     if [ ${eval_viz_count} -gt 0 ]; then
         echo -e "  ${GREEN}✓${NC} Evaluation visualizations (${eval_viz_count} files)"
         echo "  [✓] Evaluation visualizations (${eval_viz_count} files)" >> "${SUMMARY_FILE}"
@@ -646,7 +679,7 @@ fi
 # Copy visualizations from mitigation (if they exist)
 if ls ${PHASE5_OUTPUT_DIR}/mitigation/*.png 1> /dev/null 2>&1; then
     cp ${PHASE5_OUTPUT_DIR}/mitigation/*.png "${COLLECTION_DIR}/phase5_fairness_assessment/visualizations/" 2>/dev/null || true
-    local mit_viz_count=$(ls -1 "${COLLECTION_DIR}/phase5_fairness_assessment/visualizations"/*mitigation*.png 2>/dev/null | wc -l)
+    mit_viz_count=$(ls -1 "${COLLECTION_DIR}/phase5_fairness_assessment/visualizations"/*mitigation*.png 2>/dev/null | wc -l)
     if [ ${mit_viz_count} -gt 0 ]; then
         echo -e "  ${GREEN}✓${NC} Mitigation visualizations (${mit_viz_count} files)"
         echo "  [✓] Mitigation visualizations (${mit_viz_count} files)" >> "${SUMMARY_FILE}"
