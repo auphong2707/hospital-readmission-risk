@@ -2,6 +2,152 @@
 
 > ⚠️ **IMPORTANT**: See [REFINEMENT_PLAN.md](REFINEMENT_PLAN.md) for critical updates needed in Phase 7 to ensure published metrics reflect actual deployed system performance.
 
+---
+
+## 🚨 CRITICAL: Data Leakage & Double-Scaling Bugs Fixed - Complete Pipeline Re-run Required
+
+**Issues Found**: 
+1. **Phase 1**: Scaler was fitted on ALL data (train+val+test) causing data leakage
+2. **Phase 2 (LR only)**: Was re-scaling already-scaled data 
+3. **Phases 3-5 (LR only)**: Were applying scaling to already-scaled data (double-scaling)
+
+**Fixes Applied**: 
+1. **Phase 1**: Now splits data BEFORE scaling, fits scaler ONLY on training data
+2. **Phases 2-5 (LR)**: Removed all scaler usage - data already scaled from Phase 1
+3. **All models (RF, GB, LR)**: Now work consistently - no scaling in Phases 2-5
+
+### ✅ Complete Re-run Checklist (All Models)
+
+**Status**: All code fixed, but entire pipeline needs re-run because Phase 1 data changed.
+
+#### Phase 1: Data Preprocessing (Required for ALL models)
+
+- [ ] **Run Phase 1 Preprocessing**
+  ```bash
+  python phase-1-data-explore-preprocessing/simple_preprocessing.py
+  ```
+  - **CRITICAL**: Splits data BEFORE scaling (fixes data leakage)
+  - Fits scaler ONLY on training data (no test data contamination)
+  - Generates properly scaled train/val/test.csv files
+  - Saves scaler.pkl to splits/ directory (for deployment only)
+  - Upload data to HuggingFace: `auphong2707/hospital-readmission-risk-data`
+
+#### Phase 2-7: Model Training (All Three Models)
+
+Since Phase 1 data changed, ALL models must be retrained:
+
+##### Logistic Regression (LR) - All Phases
+
+- [ ] **Phase 2**: Train LR Model
+  ```bash
+  python phase-2-risk-modeling/train_logistic_regression.py
+  ```
+  - Trains on NEW pre-scaled data from Phase 1
+  - **Fixed**: No scaler usage (data already scaled)
+
+- [ ] **Phase 3**: Calibrate LR Model
+  ```bash
+  python phase-3-model-calibration/calibrate_logistic_regression.py
+  ```
+  - Uses NEW pre-scaled data from Phase 1
+  - **Fixed**: No scaler usage (removed double-scaling bug)
+
+- [ ] **Phase 4**: LR Threshold Optimization
+  ```bash
+  python phase-4-optimal-threshold-ROI-analysis/optimize_threshold_logistic_regression.py
+  ```
+  - Uses NEW pre-scaled test data
+  - **Fixed**: No scaler usage (removed double-scaling bug)
+
+- [ ] **Phase 5**: LR Fairness Assessment
+  ```bash
+  python phase-5-fairness-assessment-mitigation/evaluate_fairness_logistic_regression.py
+  python phase-5-fairness-assessment-mitigation/calculate_group_thresholds_logistic_regression.py
+  ```
+  - Uses NEW pre-scaled data
+  - **Fixed**: No scaler usage (removed double-scaling bug)
+
+- [ ] **Phase 6**: LR Final Evaluation
+  ```bash
+  python phase-6-final-system-evaluation/final_evaluation_logistic_regression.py
+  ```
+
+##### Random Forest (RF) - Phases 2-7
+
+- [ ] **Phase 2**: Train RF Model
+  ```bash
+  python phase-2-risk-modeling/train_random_forest.py
+  ```
+  - Trains on NEW pre-scaled data from Phase 1
+
+- [ ] **Phase 3**: Calibrate RF Model
+  ```bash
+  python phase-3-model-calibration/calibrate_random_forest.py
+  ```
+
+- [ ] **Phase 4**: RF Threshold Optimization
+  ```bash
+  python phase-4-optimal-threshold-ROI-analysis/optimize_threshold_random_forest.py
+  ```
+
+- [ ] **Phase 5**: RF Fairness Assessment
+  ```bash
+  python phase-5-fairness-assessment-mitigation/evaluate_fairness_random_forest.py
+  python phase-5-fairness-assessment-mitigation/calculate_group_thresholds_random_forest.py
+  ```
+
+- [ ] **Phase 6**: RF Final Evaluation
+  ```bash
+  python phase-6-final-system-evaluation/final_evaluation_random_forest.py
+  ```
+
+##### Gradient Boosting (GB) - Phases 2-7
+
+- [ ] **Phase 2**: Train GB Model
+  ```bash
+  python phase-2-risk-modeling/train_gradient_boosting.py
+  ```
+  - Trains on NEW pre-scaled data from Phase 1
+
+- [ ] **Phase 3**: Calibrate GB Model
+  ```bash
+  python phase-3-model-calibration/calibrate_gradient_boosting.py
+  ```
+
+- [ ] **Phase 4**: GB Threshold Optimization
+  ```bash
+  python phase-4-optimal-threshold-ROI-analysis/optimize_threshold_gradient_boosting.py
+  ```
+
+- [ ] **Phase 5**: GB Fairness Assessment
+  ```bash
+  python phase-5-fairness-assessment-mitigation/evaluate_fairness_gradient_boosting.py
+  python phase-5-fairness-assessment-mitigation/calculate_group_thresholds_gradient_boosting.py
+  ```
+
+- [ ] **Phase 6**: GB Final Evaluation
+  ```bash
+  python phase-6-final-system-evaluation/final_evaluation_gradient_boosting.py
+  ```
+
+#### Phase 7: Collect & Publish Results (All Models)
+
+- [ ] **Phase 7**: Publish Final Results
+  ```bash
+  bash phase-7-results-collection-publication/collect_and_publish.sh
+  ```
+  - Collects results from all three models
+  - Publishes to HuggingFace
+
+**Critical Notes**:
+- ⚠️ **ALL previous results are INVALID** due to Phase 1 data leakage
+- ⚠️ Must re-run Phase 1 first (affects all models)
+- ⚠️ Must retrain ALL models (RF, GB, LR) on new Phase 1 data
+- ⚠️ Phase 1 scaler is ONLY for deployment (new raw data), NOT for Phases 2-5
+- ✅ All models now consistent: RF, GB, and LR work identically (no scaling in Phase 2-5)
+
+---
+
 ## Project Overview
 
 This project focuses on predicting 30-day hospital readmissions for diabetic patients and designing care pathway interventions to reduce readmission rates. By leveraging machine learning and operational analytics, we aim to identify high-risk patients and provide actionable insights for healthcare providers.
