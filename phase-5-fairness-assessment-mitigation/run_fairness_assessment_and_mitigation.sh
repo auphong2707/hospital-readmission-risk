@@ -48,10 +48,14 @@ fi
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 
-# Output directory
+# Output directory - ALWAYS use consistent subdirectory structure
 OUTPUT_DIR="$SCRIPT_DIR/outputs/$METHOD"
 EVALUATION_OUTPUT="$OUTPUT_DIR/evaluation"
 MITIGATION_OUTPUT="$OUTPUT_DIR/mitigation"
+
+# Create output directories upfront
+mkdir -p "$EVALUATION_OUTPUT"
+mkdir -p "$MITIGATION_OUTPUT"
 
 echo "================================================================================"
 echo "PHASE 5: FAIRNESS ASSESSMENT & MITIGATION"
@@ -59,8 +63,8 @@ echo "Hospital Readmission Risk Prediction - $METHOD"
 echo "================================================================================"
 echo ""
 echo "📁 Output directory: $OUTPUT_DIR"
-echo "   Evaluation: $EVALUATION_OUTPUT"
-echo "   Mitigation: $MITIGATION_OUTPUT"
+echo "   Evaluation: $EVALUATION_OUTPUT (always)"
+echo "   Mitigation: $MITIGATION_OUTPUT (conditional)"
 echo ""
 
 ################################################################################
@@ -179,7 +183,7 @@ with open('$SUMMARY_FILE', 'r') as f:
 else
     echo -e "${GREEN}✅ NO FAIRNESS VIOLATIONS DETECTED${NC}"
     echo "   No mitigation required"
-    echo "   Skipping mitigation step"
+    echo "   Creating placeholder for consistent structure"
     echo ""
     
     echo "================================================================================"
@@ -187,6 +191,33 @@ else
     echo "================================================================================"
     echo ""
     echo -e "${GREEN}✅ Mitigation step skipped - no fairness violations${NC}"
+    
+    # Create a mitigation summary indicating no mitigation was needed
+    python3 << EOF
+import json
+from pathlib import Path
+
+mitigation_dir = Path("$MITIGATION_OUTPUT")
+mitigation_dir.mkdir(parents=True, exist_ok=True)
+
+# Create a summary file indicating mitigation was not needed
+no_mitigation_summary = {
+    "mitigation_applied": False,
+    "reason": "No fairness violations detected",
+    "message": "Model meets fairness criteria with global threshold",
+    "recommendation": {
+        "use_group_thresholds": False,
+        "threshold_configuration": "global",
+        "deployment_ready": True
+    }
+}
+
+with open(mitigation_dir / "no_mitigation_needed.json", 'w') as f:
+    json.dump(no_mitigation_summary, f, indent=2)
+
+print(f"✅ Created no-mitigation placeholder: $MITIGATION_OUTPUT/no_mitigation_needed.json")
+EOF
+    
     echo ""
     
     MITIGATION_APPLIED=false
@@ -201,7 +232,7 @@ echo "STEP 4: Generate Combined Summary"
 echo "================================================================================"
 echo ""
 
-# Create combined summary using Python
+# Create unified deployment configuration for Phase 6
 python3 << EOF
 import json
 from pathlib import Path
@@ -211,61 +242,90 @@ eval_dir = Path("$EVALUATION_OUTPUT")
 with open(eval_dir / "fairness_report.json", 'r') as f:
     fairness_report = json.load(f)
 
-# Initialize combined summary
-combined_summary = {
+mitigation_dir = Path("$MITIGATION_OUTPUT")
+
+# ============================================================================
+# UNIFIED OUTPUT FORMAT - Same structure for both cases
+# ============================================================================
+
+# Determine deployment configuration
+is_mitigated = $MITIGATION_APPLIED
+use_group_thresholds = False
+threshold_source = None
+group_thresholds = None
+
+if is_mitigated:
+    # Load mitigation results
+    if (mitigation_dir / "mitigation_impact.json").exists():
+        with open(mitigation_dir / "mitigation_impact.json", 'r') as f:
+            mitigation_impact = json.load(f)
+            use_group_thresholds = mitigation_impact.get("summary", {}).get("recommended_for_deployment", False)
+    
+    if use_group_thresholds and (mitigation_dir / "group_thresholds.json").exists():
+        with open(mitigation_dir / "group_thresholds.json", 'r') as f:
+            group_thresholds = json.load(f)
+        threshold_source = "phase5_mitigation"
+
+# Standard deployment config for Phase 6 (ALWAYS same format)
+deployment_config = {
     "method": "$METHOD",
+    "is_mitigated": is_mitigated,
+    "use_group_thresholds": use_group_thresholds,
+    "threshold_configuration": {
+        "type": "group_specific" if use_group_thresholds else "global",
+        "source": threshold_source if use_group_thresholds else "phase4_roi_optimization",
+        "group_thresholds": group_thresholds if use_group_thresholds else None
+    },
+    "fairness_status": {
+        "bias_detected": fairness_report.get("bias_detected", False),
+        "mitigation_applied": is_mitigated,
+        "fairness_compliant": not fairness_report.get("bias_detected", False) or is_mitigated
+    },
+    "phase6_instructions": {
+        "load_thresholds_from": threshold_source if use_group_thresholds else "phase4",
+        "apply_group_specific": use_group_thresholds,
+        "evaluation_type": "mitigated_system" if use_group_thresholds else "global_threshold_system"
+    }
+}
+
+# Save deployment config (standardized for Phase 6)
+output_dir = Path("$OUTPUT_DIR")
+output_dir.mkdir(parents=True, exist_ok=True)
+
+with open(output_dir / "deployment_config.json", 'w') as f:
+    json.dump(deployment_config, f, indent=2)
+
+# Also save complete summary for human review
+complete_summary = {
+    "method": "$METHOD",
+    "phase": "Phase 5: Fairness Assessment & Mitigation",
+    "deployment_config": deployment_config,
     "evaluation": {
         "output_dir": "$EVALUATION_OUTPUT",
         "bias_detected": fairness_report.get("bias_detected", False),
         "overall_performance": fairness_report.get("overall_performance", {}),
         "fairness_summary": fairness_report
     },
-    "mitigation_applied": $MITIGATION_APPLIED
+    "mitigation": {}
 }
 
-# Add mitigation results if applied
-if $MITIGATION_APPLIED:
-    mitigation_dir = Path("$MITIGATION_OUTPUT")
-    
-    # Load group thresholds
-    if (mitigation_dir / "group_thresholds.json").exists():
-        with open(mitigation_dir / "group_thresholds.json", 'r') as f:
-            combined_summary["group_thresholds"] = json.load(f)
-    
-    # Load mitigation impact
+if is_mitigated:
+    complete_summary["mitigation"]["status"] = "applied"
+    complete_summary["mitigation"]["output_dir"] = "$MITIGATION_OUTPUT"
     if (mitigation_dir / "mitigation_impact.json").exists():
         with open(mitigation_dir / "mitigation_impact.json", 'r') as f:
-            mitigation_impact = json.load(f)
-            combined_summary["mitigation"] = {
-                "output_dir": "$MITIGATION_OUTPUT",
-                "impact": mitigation_impact,
-                "recommended_for_deployment": mitigation_impact.get("summary", {}).get("recommended_for_deployment", False)
-            }
-
-# Add deployment recommendation
-if combined_summary["mitigation_applied"]:
-    recommended = combined_summary.get("mitigation", {}).get("recommended_for_deployment", False)
-    combined_summary["deployment_recommendation"] = {
-        "use_group_thresholds": recommended,
-        "threshold_configuration": "group_specific" if recommended else "global",
-        "ready_for_deployment": True,
-        "reason": "Fairness mitigation recommended" if recommended else "Fairness mitigation attempted but not recommended"
-    }
+            complete_summary["mitigation"]["impact"] = json.load(f)
 else:
-    combined_summary["deployment_recommendation"] = {
-        "use_group_thresholds": False,
-        "threshold_configuration": "global",
-        "ready_for_deployment": True,
-        "reason": "No fairness violations detected"
-    }
+    complete_summary["mitigation"]["status"] = "not_needed"
+    complete_summary["mitigation"]["reason"] = "No fairness violations detected"
 
-# Save combined summary
-output_dir = Path("$OUTPUT_DIR")
-output_dir.mkdir(parents=True, exist_ok=True)
 with open(output_dir / "phase5_complete_summary.json", 'w') as f:
-    json.dump(combined_summary, f, indent=2)
+    json.dump(complete_summary, f, indent=2)
 
-print("✅ Combined summary saved to: $OUTPUT_DIR/phase5_complete_summary.json")
+print("✅ Deployment configuration saved:")
+print(f"   • $OUTPUT_DIR/deployment_config.json (standardized for Phase 6)")
+print(f"   • $OUTPUT_DIR/phase5_complete_summary.json (complete results)")
+print(f"   Config: is_mitigated={is_mitigated}, use_group_thresholds={use_group_thresholds}")
 EOF
 
 echo ""
@@ -324,26 +384,49 @@ echo "==========================================================================
 echo "✅ PHASE 5 COMPLETE: FAIRNESS ASSESSMENT & MITIGATION"
 echo "================================================================================"
 echo ""
-echo "📊 Summary:"
+echo "📊 Status:"
 echo "   Method: $METHOD"
-echo "   Mitigation Applied: $([ "$MITIGATION_APPLIED" = true ] && echo "YES" || echo "NO")"
+echo "   Mitigation Applied: $([ "$MITIGATION_APPLIED" = true ] && echo "YES" || echo "NO (not needed)")"
 echo ""
-echo "📁 Outputs:"
-echo "   Evaluation results: $EVALUATION_OUTPUT"
+echo "📁 Output Structure (Consistent):"
+echo "   $OUTPUT_DIR/"
+echo "   ├── deployment_config.json         ← Standardized for Phase 6"
+echo "   ├── phase5_complete_summary.json   ← Full results"
+echo "   ├── evaluation/                    ← Always present"
 if [ "$MITIGATION_APPLIED" = true ]; then
-    echo "   Mitigation results: $MITIGATION_OUTPUT"
-fi
-echo "   Combined summary: $OUTPUT_DIR/phase5_complete_summary.json"
-echo "   HuggingFace Repository: $REPO_ID"
-echo ""
-echo "🎯 Next Steps:"
-if [ "$MITIGATION_APPLIED" = true ]; then
-    echo "   1. Review mitigation impact report"
-    echo "   2. Consult with clinical and ethics teams"
-    echo "   3. Proceed to Phase 6 (Final System Evaluation)"
+    echo "   └── mitigation/                    ← Applied (with thresholds)"
 else
-    echo "   1. Proceed to Phase 6 (Final System Evaluation) with global threshold"
-    echo "   2. Implement production monitoring for fairness metrics"
+    echo "   └── mitigation/                    ← Placeholder (not needed)"
 fi
+echo ""
+echo "🎯 For Phase 6 (Next Phase):"
+echo "   Read: $OUTPUT_DIR/deployment_config.json"
+echo "   Fields:"
+echo "      • is_mitigated: $([ "$MITIGATION_APPLIED" = true ] && echo "true" || echo "false")"
+echo "      • use_group_thresholds: (check config file)"
+echo "      • threshold_configuration.type: global | group_specific"
+echo "      • threshold_configuration.source: phase4 | phase5_mitigation"
+echo ""
+echo "📄 Output Files:"
+echo "   • deployment_config.json          (standardized, same format always)"
+echo "   • phase5_complete_summary.json    (detailed results)"
+echo "   • evaluation/fairness_report.json"
+if [ "$MITIGATION_APPLIED" = true ]; then
+    echo "   • mitigation/group_thresholds.json"
+    echo "   • mitigation/mitigation_impact.json"
+else
+    echo "   • mitigation/no_mitigation_needed.json"
+fi
+echo ""
+echo "🌐 HuggingFace: $REPO_ID"
+echo ""
+echo "📋 Next Steps:"
+echo "   Phase 6: Use deployment_config.json to load correct threshold configuration"
+if [ "$MITIGATION_APPLIED" = true ]; then
+    echo "            Review if group-specific thresholds are recommended"
+else
+    echo "            Use global threshold from Phase 4"
+fi
+echo "   Phase 7: Collect Phase 6 final system metrics"
 echo ""
 echo "================================================================================"
