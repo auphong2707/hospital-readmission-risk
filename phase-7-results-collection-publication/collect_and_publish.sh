@@ -34,6 +34,12 @@
 # Note: NOT using 'set -e' to allow collection to continue even if some files are missing
 # We'll track success/failure per file instead
 
+# Load environment variables from .env file
+if [ -f .env ]; then
+    echo "Loading environment variables from .env..."
+    export $(grep -v '^#' .env | grep HF_TOKEN | xargs)
+fi
+
 # Default configuration
 REPO_ID=""
 REPO_TYPE="model"
