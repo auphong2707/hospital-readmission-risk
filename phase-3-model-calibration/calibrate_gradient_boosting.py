@@ -142,10 +142,12 @@ def generate_uncalibrated_predictions(model, X_train, X_test, y_train, y_test):
     - Train set: Used to fit the calibrator
     - Test set: Used to evaluate calibration quality
     
+    Note: X_train and X_test are already scaled from Phase 1.
+    
     Args:
         model: Trained LightGBM model
-        X_train: Training features
-        X_test: Test features
+        X_train: Training features (already scaled from Phase 1)
+        X_test: Test features (already scaled from Phase 1)
         y_train: Training labels
         y_test: Test labels
         
@@ -153,6 +155,9 @@ def generate_uncalibrated_predictions(model, X_train, X_test, y_train, y_test):
         dict: Dictionary containing train/test predictions and labels
     """
     print_section("🔮 Generating Uncalibrated Predictions", "-")
+    
+    # X_train and X_test are already scaled from Phase 1 - use directly
+    print("ℹ️  Using pre-scaled features from Phase 1...")
     
     # Generate predictions on train set (for fitting calibrator)
     print("⏳ Generating train set predictions...")
@@ -329,8 +334,10 @@ def save_calibrated_model(model, calibrator, output_dir, method):
     """
     Save calibrated model for deployment.
     
-    This saves both the original model and the calibrator so they can be
+    This saves the original model and the calibrator so they can be
     loaded together for making calibrated predictions in production.
+    
+    Note: No scaler is saved - use Phase 1 scaler for deployment.
     
     Args:
         model: Original trained model
@@ -347,6 +354,9 @@ def save_calibrated_model(model, calibrator, output_dir, method):
     model_path = output_path / "gradient_boosting_model_original.joblib"
     joblib.dump(model, model_path)
     print(f"✅ Original model saved: {model_path}")
+    
+    # Note about scaler
+    print(f"ℹ️  Scaler: Use Phase 1 scaler (data/processed/splits/scaler.pkl) for deployment")
     
     # Calibrator is already saved by calibrate_model_pipeline
     calibrator_path = output_path / "Gradient_Boosting_(LightGBM)_calibrator.pkl"
@@ -369,6 +379,8 @@ The model has been calibrated using {method.upper()} to ensure reliable probabil
 - `reliability_diagram_comparison.png`: Calibration visualization
 - Various PNG files: Additional visualization plots
 
+**Note:** For the StandardScaler, use Phase 1 scaler: `data/processed/splits/scaler.pkl`
+
 ## Usage
 
 ### Loading the Calibrated Model
@@ -378,17 +390,26 @@ import joblib
 import pandas as pd
 from pathlib import Path
 
+# Load Phase 1 scaler
+scaler = joblib.load('data/processed/splits/scaler.pkl')
+
 # Load original model
 model = joblib.load('gradient_boosting_model_original.joblib')
 
 # Load calibrator
 calibrator = ModelCalibrator.load('Gradient_Boosting_(LightGBM)_calibrator.pkl')
 
-# Load your preprocessed features
+# Load your preprocessed features (already preprocessed with Phase 1 pipeline)
 X_new = pd.read_csv('your_features.csv')
 
+# Apply Phase 1 preprocessing and scaling (outside this script)
+# Then load the already-preprocessed, scaled features
+
+# Scale features using Phase 1 scaler
+X_new_scaled = scaler.transform(X_new)
+
 # Make predictions
-uncalibrated_proba = model.predict_proba(X_new)[:, 1]
+uncalibrated_proba = model.predict_proba(X_new_scaled)[:, 1]
 calibrated_proba = calibrator.predict_proba(uncalibrated_proba)
 
 # Create results DataFrame with calibrated probabilities

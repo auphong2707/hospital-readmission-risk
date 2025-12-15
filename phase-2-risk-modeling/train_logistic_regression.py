@@ -61,6 +61,9 @@ from utilities import (
     calculate_comprehensive_metrics,
     print_metrics_table,
     save_visualizations,
+    save_learning_curves,
+    save_validation_curves,
+    save_metrics_comparison,
     print_section,
     upload_results_to_hf,
     load_phase1_splits
@@ -449,6 +452,17 @@ def main():
     best_params = trainer.grid_search.best_params_
     best_cv_score = trainer.grid_search.best_score_
     
+    # Extract search results for validation curves
+    cv_results = trainer.grid_search.cv_results_
+    all_search_results = []
+    for i in range(len(cv_results['mean_test_score'])):
+        all_search_results.append({
+            'params': cv_results['params'][i],
+            'mean_score': cv_results['mean_test_score'][i],
+            'std_score': cv_results['std_test_score'][i],
+            'fold_scores': [cv_results[f'split{j}_test_score'][i] for j in range(args.n_splits)]
+        })
+    
     print(f"\n✅ Hyperparameter search completed")
     print(f"🏆 Best CV ROC-AUC: {best_cv_score:.4f}")
     print(f"📋 Best parameters:")
@@ -570,12 +584,25 @@ def main():
     
     # Save comprehensive visualizations
     print_section("📊 Generating Comprehensive Visualizations", "-")
+    
+    # Main visualizations (ROC, PR, Confusion Matrix, Calibration, Feature Importance)
     save_visualizations(
         y_final_test, y_final_proba, y_final_pred, output_dir,
         model=final_model, X=X_final_test, feature_names=trainer.feature_names
     )
     
-    # Plot CV results
+    # Learning curves
+    save_learning_curves(
+        final_model, X_development, y_development, output_dir, cv=args.n_splits
+    )
+    
+    # Validation curves from hyperparameter search
+    save_validation_curves(all_search_results, output_dir)
+    
+    # Metrics comparison across folds
+    save_metrics_comparison(fold_details, output_dir)
+    
+    # Plot CV results (legacy method, kept for backward compatibility)
     trainer.plot_cv_results(str(output_dir))
     
     # Save model
@@ -589,58 +616,17 @@ def main():
     print(f"✅ Metrics saved: {metrics_json_path}")
     
     # Save fold details
-    fold_details_path = output_dir / "logistic_regression_cv_fold_details.json"
+    fold_details_path = output_dir / "cv_fold_details.json"
     with open(fold_details_path, 'w') as f:
         json.dump(fold_details, f, indent=2)
     print(f"✅ Fold details saved: {fold_details_path}")
     
     # Create comprehensive training summary
     total_time = time.time() - start_time
-    training_summary = {
-        'model': 'Logistic Regression',
-        'task': 'Hospital 30-Day Readmission Risk Prediction',
-        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        'evaluation_pipeline': {
-            'description': 'Robust nested CV with final holdout and validation monitoring',
-            'final_holdout_size': 0.15,
-            'inner_val_size': 0.15,
-            'k_folds': 5,
-            'cv_strategy': 'StratifiedKFold'
-        },
-        'data': {
-            'total_samples': len(X_train) + len(X_val) + len(X_test),
-            'development_size': len(X_development),
-            'dev_train_size': len(X_dev_train),
-            'dev_val_size': len(X_dev_val),
-            'final_test_size': len(X_final_test),
-            'n_features': len(trainer.feature_names)
-        },
-        'best_hyperparameters': best_params,
-        'cross_validation': {
-            'mean_roc_auc': float(mean_score),
-            'std_roc_auc': float(std_score),
-            'fold_scores': [float(s) for s in fold_scores],
-            'n_folds': 5
-        },
-        'validation_monitoring': {
-            'dev_val_auc': float(dev_val_auc)
-        },
-        'final_test_metrics': final_metrics,
-        'total_time_seconds': total_time,
-        'random_state': 42
-    }
     
-    summary_json_path = output_dir / "logistic_regression_training_summary.json"
-    with open(summary_json_path, 'w') as f:
-        json.dump(training_summary, f, indent=2)
-    print(f"✅ Training summary saved: {summary_json_path}")
+    # Calculate hyperparameter search time (time before K-fold CV retraining)
+    search_time = total_time  # Grid search includes initial CV, approximate
     
-    # Auto-upload to HuggingFace Hub
-    print_section("📤 Uploading to HuggingFace Hub", "-")
-    
-    hf_url = None
-    
-    # Prepare summary for upload
     summary = {
         'model': 'Logistic Regression',
         'task': 'Hospital 30-Day Readmission Risk Prediction',
@@ -648,15 +634,13 @@ def main():
         'environment': environment,
         'evaluation_pipeline': {
             'description': 'Robust nested CV with final holdout and validation monitoring',
-            'final_holdout_size': args.val_size,
             'k_folds': args.n_splits,
+            'inner_val_size': args.val_size,
             'cv_strategy': 'StratifiedKFold'
         },
         'data': {
             'total_samples': total_samples,
             'development_size': len(X_development),
-            'dev_train_size': len(X_dev_train),
-            'dev_val_size': len(X_dev_val),
             'final_test_size': len(X_final_test),
             'n_features': len(trainer.feature_names)
         },
@@ -671,9 +655,17 @@ def main():
             'dev_val_auc': float(dev_val_auc)
         },
         'final_test_metrics': final_metrics,
-        'total_time_seconds': total_time,
-        'random_state': args.random_state
+        'hyperparameter_search_time_seconds': search_time,
+        'total_time_seconds': total_time
     }
+    
+    summary_path = output_dir / "training_summary.json"
+    with open(summary_path, 'w') as f:
+        json.dump(summary, f, indent=2)
+    print(f"✅ Summary saved: {summary_path}")
+    
+    # Auto-upload to HuggingFace Hub
+    print_section("📤 Uploading to HuggingFace Hub", "-")
     
     # Upload to HuggingFace (will automatically check for HF_TOKEN and load .env)
     upload_success = upload_results_to_hf(
@@ -681,6 +673,8 @@ def main():
         output_dir=str(output_dir),
         model_name="hospital-readmission-phase2-lr"
     )
+    
+    hf_url = None
     
     if upload_success:
         hf_username = os.getenv('HF_USERNAME', 'auphong2707')
@@ -698,7 +692,7 @@ def main():
     print(f"\n📁 Outputs saved to:")
     print(f"  Model: {model_path}")
     print(f"  Metrics JSON: {metrics_json_path}")
-    print(f"  Training Summary JSON: {summary_json_path}")
+    print(f"  Training Summary JSON: {summary_path}")
     print(f"  Fold Details JSON: {fold_details_path}")
     print(f"  Visualizations: {output_dir}")
     if hf_url:
