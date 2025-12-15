@@ -45,14 +45,15 @@ import pandas as pd
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utilities import (
+    load_phase5_summary,
     load_test_data_and_demographics,
+    load_model_and_calibrator,
     ThresholdOptimizer,
     MitigationEvaluator,
     TradeoffAnalyzer,
     MitigationVisualizer,
     save_results,
-    upload_results_to_hf,
-    ModelCalibrator
+    upload_results_to_hf
 )
 
 # Load environment variables
@@ -69,10 +70,10 @@ def parse_arguments():
     
     # Phase 5 inputs
     parser.add_argument(
-        '--phase5-report',
+        '--phase5-summary',
         type=str,
-        default='./phase-5-fairness-evaluation/outputs/logistic_regression/fairness_report.json',
-        help='Path to Phase 5 fairness report file'
+        default='./phase-5-fairness-evaluation/outputs_logistic_regression/phase5_summary_for_phase6.json',
+        help='Path to Phase 5 summary file'
     )
     
     # Fairness configuration
@@ -146,147 +147,42 @@ def parse_arguments():
     )
     
     parser.add_argument(
-        '--local-scaler',
-        type=str,
-        default=None,
-        help='Path to local scaler file'
-    )
-    
-    parser.add_argument(
         '--local-calibrator',
         type=str,
         default=None,
         help='Path to local calibrator file'
     )
     
-    # Output options
+    # Output
     parser.add_argument(
         '--output-dir',
         type=str,
-        default='./phase-6-fairness-mitigation-bias-correction/outputs/logistic_regression',
-        help='Directory to save mitigation outputs'
-    )
-    
-    # Cache options
-    parser.add_argument(
-        '--cache-dir',
-        type=str,
-        default='./data/downloaded',
-        help='Directory to cache downloaded files'
-    )
-    
-    parser.add_argument(
-        '--force-download',
-        action='store_true',
-        help='Force re-download from HuggingFace Hub'
+        default='./phase-6-fairness-mitigation/outputs_logistic_regression',
+        help='Output directory'
     )
     
     return parser.parse_args()
 
 
-def load_phase5_fairness_report(report_path):
-    """
-    Load Phase 5 fairness report.
-    
-    Args:
-        report_path: Path to fairness_report.json
-        
-    Returns:
-        dict: Phase 5 results
-    """
-    print(f"📂 Loading Phase 5 fairness report from: {report_path}")
-    
-    with open(report_path, 'r') as f:
-        report = json.load(f)
-    
-    print(f"✅ Loaded Phase 5 report")
-    print(f"   Optimal threshold: {report['optimal_threshold']:.4f}")
-    if 'deployment_readiness' in report:
-        print(f"   Fairness assessment: {report['deployment_readiness']['fairness_assessment']}")
-    
-    return report
+def print_section(title: str, char: str = "="):
+    """Print formatted section header."""
+    print("\n" + char*80)
+    print(f"{title:^80}")
+    print(char*80)
 
 
-def load_lr_model_for_mitigation(args):
-    """
-    Load Logistic Regression model and calibrator.
-    
-    Note: No scaler is loaded - validation data from Phase 1 is already scaled.
-    
-    Args:
-        args: Command line arguments
-        
-    Returns:
-        tuple: (model, calibrator)
-    """
-    print("📥 Loading Logistic Regression model...")
-    
-    if args.use_local:
-        # Load from local files
-        if args.local_model:
-            model_path = Path(args.local_model)
-        else:
-            model_path = Path("./calibration_outputs/logistic_regression/logistic_regression_model_original.pkl")
-            
-        if args.local_calibrator:
-            calibrator_path = Path(args.local_calibrator)
-        else:
-            calibrator_path = Path("./calibration_outputs/logistic_regression/Logistic_Regression_calibrator.pkl")
-        
-        with open(model_path, 'rb') as f:
-            model = pickle.load(f)
-        calibrator = ModelCalibrator.load(str(calibrator_path))
-        
-        print(f"✅ Loaded from local files")
-        print(f"ℹ️  No scaler needed - data already scaled from Phase 1")
-        
-    else:
-        # Download from HuggingFace Hub
-        from huggingface_hub import hf_hub_download
-        
-        model_path = hf_hub_download(
-            repo_id=args.model_repo_id,
-            filename="logistic_regression_model_original.pkl",
-            cache_dir=args.cache_dir,
-            force_download=args.force_download
-        )
-        with open(model_path, 'rb') as f:
-            model = pickle.load(f)
-        
-        calibrator_path = hf_hub_download(
-            repo_id=args.model_repo_id,
-            filename="Logistic_Regression_calibrator.pkl",
-            cache_dir=args.cache_dir,
-            force_download=args.force_download
-        )
-        calibrator = ModelCalibrator.load(calibrator_path)
-        
-        print(f"✅ Downloaded from HuggingFace Hub")
-        print(f"ℹ️  No scaler needed - data already scaled from Phase 1")
-    
-    return model, calibrator
-
-
-def generate_lr_predictions(model, calibrator, X_test):
-    """
-    Generate calibrated predictions for Logistic Regression.
-    
-    Note: X_test should already be scaled from Phase 1.
-    
-    Args:
-        model: Trained Logistic Regression model
-        calibrator: Calibrator
-        X_test: Test features (already scaled from Phase 1)
-        
-    Returns:
-        np.ndarray: Calibrated probabilities
-    """
-    # X_test is already scaled from Phase 1 - use directly
+def generate_calibrated_predictions(
+    model,
+    calibrator,
+    X_test: pd.DataFrame
+) -> np.ndarray:
+    """Generate calibrated probability predictions."""
+    print("🔮 Generating calibrated predictions...")
     
     # Get uncalibrated probabilities
     y_pred_proba_uncalibrated = model.predict_proba(X_test)[:, 1]
     
-    # Apply calibration
+    # Apply calibration (handle different calibrator types)
     try:
         pred = calibrator.predict_proba(y_pred_proba_uncalibrated.reshape(-1, 1))
     except Exception:
@@ -295,247 +191,313 @@ def generate_lr_predictions(model, calibrator, X_test):
     # Normalize to 1D
     if isinstance(pred, np.ndarray):
         if pred.ndim == 2 and pred.shape[1] >= 2:
-            y_pred_proba = pred[:, 1]
+            y_pred_proba_calibrated = pred[:, 1]
         else:
-            y_pred_proba = pred.ravel()
+            y_pred_proba_calibrated = pred.ravel()
     else:
-        y_pred_proba = pred
+        y_pred_proba_calibrated = np.asarray(pred).ravel()
     
-    return y_pred_proba
+    print(f"✅ Generated {len(y_pred_proba_calibrated)} calibrated predictions")
+    print(f"   Mean probability: {y_pred_proba_calibrated.mean():.3f}")
+    print(f"   Probability range: [{y_pred_proba_calibrated.min():.3f}, {y_pred_proba_calibrated.max():.3f}]")
+    
+    return y_pred_proba_calibrated
 
 
 def main():
-    """Main fairness mitigation workflow."""
-    
-    args = parse_arguments()
+    """Main execution pipeline."""
     
     print("\n" + "="*80)
-    print("Phase 6: Fairness Mitigation - Logistic Regression".center(80))
-    print("="*80 + "\n")
+    print("PHASE 6: FAIRNESS MITIGATION & BIAS CORRECTION")
+    print("Hospital Readmission Risk Prediction - Logistic Regression Model")
+    print("="*80)
     
-    print(f"📋 Configuration:")
-    print(f"   Phase 5 report: {args.phase5_report}")
-    print(f"   Output directory: {args.output_dir}")
-    print(f"   Fairness tolerance: {args.fairness_tolerance:.1%}")
-    print(f"   Threshold search: {args.num_thresholds} candidates [{args.threshold_min}, {args.threshold_max}]")
+    # Parse arguments
+    args = parse_arguments()
     
     # Create output directory
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    try:
-        # STEP 1: Load Phase 5 results
+    # ========================================================================
+    # STEP 1: Load Phase 5 Decision Inputs
+    # ========================================================================
+    
+    print_section("Step 1: Load Phase 5 Decision Inputs", "-")
+    
+    phase5_summary = load_phase5_summary(args.phase5_summary)
+    
+    # Check if mitigation is required
+    if not phase5_summary['requires_mitigation']:
         print("\n" + "="*80)
-        print("Step 1: Load Phase 5 Fairness Report")
+        print("✅ NO MITIGATION REQUIRED")
         print("="*80)
-        phase5_report = load_phase5_fairness_report(args.phase5_report)
-        optimal_threshold = phase5_report['optimal_threshold']
-        global_threshold = optimal_threshold  # Use as global threshold for mitigation
-        
-        # STEP 2: Load test data and demographics
+        print("\nPhase 5 detected no significant fairness violations.")
+        print("You can skip Phase 6 and proceed directly to Phase 7 with the global threshold.")
+        print(f"\nGlobal threshold: {phase5_summary['optimal_threshold']:.4f}")
+        print("\nRecommendations:")
+        print("   1. Skip Phase 6 (no bias correction needed)")
+        print("   2. Proceed to Phase 7 (Deployment Preparation)")
+        print("   3. Use global optimal threshold from Phase 4")
+        print("   4. Document 'no fairness violations' in model card")
         print("\n" + "="*80)
-        print("Step 2: Load Test Data and Demographics")
-        print("="*80)
-        X_test, y_test, demographics = load_test_data_and_demographics(
-            use_local=args.use_local,
-            local_test_path=args.local_test,
-            local_demographics_path=args.local_demographics,
-            data_repo_id=args.data_repo_id,
-            cache_dir=args.cache_dir
-        )
+        return
+    
+    # Show mitigation priority
+    priority = phase5_summary['mitigation_priority']
+    print(f"\n⚠️  MITIGATION REQUIRED")
+    print(f"   Priority: {priority.upper()}")
+    print(f"   Strategy: equalized_odds")
+    
+    if priority == 'high':
+        print("   ⚠️  HIGH PRIORITY: Significant fairness violations detected")
+    elif priority == 'medium':
+        print("   ⚠️  MEDIUM PRIORITY: Moderate fairness violations detected")
+    else:
+        print("   ℹ️  LOW PRIORITY: Minor fairness violations detected")
+    
+    # ========================================================================
+    # STEP 2: Load Data and Model
+    # ========================================================================
+    
+    print_section("Step 2: Load Test Data, Demographics, and Model", "-")
+    
+    X_test, y_test, demographics = load_test_data_and_demographics(
+        data_repo_id=args.data_repo_id,
+        use_local=args.use_local,
+        local_test_path=args.local_test,
+        local_demographics_path=args.local_demographics
+    )
+    
+    model, calibrator = load_model_and_calibrator(
+        model_repo_id=args.model_repo_id,
+        use_local=args.use_local,
+        local_model_path=args.local_model,
+        local_calibrator_path=args.local_calibrator,
+        method='logistic_regression'
+    )
+    
+    # ========================================================================
+    # STEP 3: Generate Calibrated Predictions
+    # ========================================================================
+    
+    print_section("Step 3: Generate Calibrated Predictions", "-")
+    
+    y_pred_proba = generate_calibrated_predictions(model, calibrator, X_test)
+    
+    # ========================================================================
+    # STEP 4: Evaluate Baseline (Global Threshold)
+    # ========================================================================
+    
+    print_section("Step 4: Evaluate Baseline with Global Threshold", "-")
+    
+    global_threshold = phase5_summary['optimal_threshold']
+    phase4_results = phase5_summary.get('phase4_results', None)
+    
+    evaluator = MitigationEvaluator(phase4_results=phase4_results)
+    
+    baseline = evaluator.evaluate_baseline(
+        y_true=y_test.values,
+        y_pred_proba=y_pred_proba,
+        demographics=demographics,
+        global_threshold=global_threshold
+    )
+    
+    # ========================================================================
+    # STEP 5: Calculate Group-Specific Thresholds
+    # ========================================================================
+    
+    print_section("Step 5: Calculate Group-Specific Thresholds (Equalized Odds)", "=")
         
-        # STEP 3: Load model
-        print("\n" + "="*80)
-        print("Step 3: Load Calibrated Model")
-        print("="*80)
-        model, calibrator = load_lr_model_for_mitigation(args)
+        # Calculate step size from num_thresholds
+    threshold_step = (args.threshold_max - args.threshold_min) / (args.num_thresholds - 1)
+    
+    optimizer = ThresholdOptimizer(
+        fairness_tolerance=args.fairness_tolerance,
+        threshold_range=(args.threshold_min, args.threshold_max),
+        threshold_step=threshold_step
+    )
+    
+    print(f"\n🔍 Threshold Search Configuration:")
+    print(f"   Range: [{args.threshold_min:.2f}, {args.threshold_max:.2f}]")
+    print(f"   Number of thresholds: {args.num_thresholds:,}")
+    print(f"   Step size: {threshold_step:.6f}")
+    
+    # Calculate overall metrics for target
+    y_pred_global = (y_pred_proba >= global_threshold).astype(int)
+    tn, fp, fn, tp = np.bincount(y_test.values * 2 + y_pred_global, minlength=4)
+    
+    overall_metrics = {
+        'tpr': tp / (tp + fn) if (tp + fn) > 0 else 0.0,
+        'fpr': fp / (fp + tn) if (fp + tn) > 0 else 0.0,
+        'intervention_rate': np.mean(y_pred_global)
+    }
+    
+    group_thresholds = {}
+    
+    # Optimize for each demographic attribute
+    for attribute in ['race', 'gender', 'age']:
+        if attribute not in demographics.columns:
+            print(f"\n⚠️  Skipping {attribute}: column not found in demographics")
+            continue
         
-        # STEP 4: Generate predictions
-        print("\n" + "="*80)
-        print("Step 4: Generate Calibrated Predictions")
-        print("="*80)
-        y_pred_proba = generate_lr_predictions(model, calibrator, X_test)
-        print(f"✅ Generated {len(y_pred_proba)} calibrated predictions")
-        
-        # STEP 4b: Evaluate Baseline (Global Threshold)
-        print("\n" + "="*80)
-        print("Step 4b: Evaluate Baseline with Global Threshold")
-        print("="*80)
-        
-        phase4_results = phase5_report.get('phase4_results', None)
-        evaluator = MitigationEvaluator(phase4_results=phase4_results)
-        
-        baseline = evaluator.evaluate_baseline(
+        thresholds = optimizer.calculate_group_thresholds(
             y_true=y_test.values,
             y_pred_proba=y_pred_proba,
             demographics=demographics,
+            attribute=attribute,
+            overall_metrics=overall_metrics,
             global_threshold=global_threshold
         )
         
-        # STEP 5: Calculate group-specific thresholds
-        print("\n" + "="*80)
-        print("Step 5: Calculate Group-Specific Thresholds (Equalized Odds)")
-        print("="*80)
-        
-        # Calculate step size from num_thresholds
-        threshold_step = (args.threshold_max - args.threshold_min) / (args.num_thresholds - 1)
-        
-        optimizer = ThresholdOptimizer(
-            fairness_tolerance=args.fairness_tolerance,
-            threshold_range=(args.threshold_min, args.threshold_max),
-            threshold_step=threshold_step
-        )
-        
-        print(f"\n🔍 Threshold Search Configuration:")
-        print(f"   Range: [{args.threshold_min:.2f}, {args.threshold_max:.2f}]")
-        print(f"   Number of thresholds: {args.num_thresholds:,}")
-        print(f"   Step size: {threshold_step:.6f}")
-        
-        # Calculate overall metrics for target
-        y_pred_global = (y_pred_proba >= global_threshold).astype(int)
-        tn, fp, fn, tp = np.bincount(y_test.values * 2 + y_pred_global, minlength=4)
-        
-        overall_metrics = {
-            'tpr': tp / (tp + fn) if (tp + fn) > 0 else 0.0,
-            'fpr': fp / (fp + tn) if (fp + tn) > 0 else 0.0,
-            'intervention_rate': np.mean(y_pred_global)
+        group_thresholds[attribute] = thresholds
+    
+    # Save group thresholds
+    thresholds_output = {
+        'mitigation_strategy': 'equalized_odds',
+        'fairness_tolerance': args.fairness_tolerance,
+        'global_threshold': global_threshold,
+        'group_specific_thresholds': group_thresholds,
+        'threshold_search_config': {
+            'min': args.threshold_min,
+            'max': args.threshold_max,
+            'num_thresholds': args.num_thresholds,
+            'step': threshold_step
+        },
+        'target_metrics': {
+            'tpr': overall_metrics['tpr'],
+            'fpr': overall_metrics['fpr'],
+            'intervention_rate': overall_metrics['intervention_rate']
         }
-        
-        group_thresholds = {}
-        for attribute in ['race', 'gender', 'age_group']:
-            if attribute not in demographics.columns:
-                print(f"\n⚠️  Skipping {attribute}: column not found in demographics")
-                continue
-            
-            thresholds = optimizer.calculate_group_thresholds(
-                y_true=y_test.values,
-                y_pred_proba=y_pred_proba,
-                demographics=demographics,
-                attribute=attribute,
-                overall_metrics=overall_metrics,
-                global_threshold=global_threshold
+    }
+    
+    thresholds_path = output_dir / "group_thresholds.json"
+    save_results(thresholds_output, str(thresholds_path))
+    
+    # ========================================================================
+    # STEP 6: Evaluate Mitigated (Group-Specific Thresholds)
+    # ========================================================================
+    
+    print_section("Step 6: Evaluate with Group-Specific Thresholds", "-")
+    
+    mitigated = evaluator.evaluate_mitigated(
+        y_true=y_test.values,
+        y_pred_proba=y_pred_proba,
+        demographics=demographics,
+        group_thresholds=group_thresholds
+    )
+    
+    # ========================================================================
+    # STEP 7: Analyze Trade-offs
+    # ========================================================================
+    
+    print_section("Step 7: Analyze Performance/Fairness/ROI Trade-offs", "-")
+    
+    improvements = TradeoffAnalyzer.calculate_improvements(baseline, mitigated)
+    
+    # Save mitigation impact
+    mitigation_impact = {
+        'phase': 6,
+        'mitigation_strategy': 'equalized_odds',
+        'baseline_metrics': baseline,
+        'mitigated_metrics': mitigated,
+        'improvements': improvements,
+        'summary': {
+            'fairness_targets_met': improvements['summary']['fairness_targets_met'],
+            'performance_drop_acceptable': improvements['summary']['performance_drop_acceptable'],
+            'roi_reduction_acceptable': improvements['summary']['roi_reduction_acceptable'],
+            'recommended_for_deployment': (
+                improvements['summary']['fairness_targets_met'] and
+                improvements['summary']['performance_drop_acceptable'] and
+                improvements['summary']['roi_reduction_acceptable']
             )
-            
-            group_thresholds[attribute] = thresholds
-        
-        # Save group thresholds
-        thresholds_output = {
-            'mitigation_strategy': 'equalized_odds',
-            'fairness_tolerance': args.fairness_tolerance,
-            'global_threshold': global_threshold,
-            'group_specific_thresholds': group_thresholds,
-            'threshold_search_config': {
-                'min': args.threshold_min,
-                'max': args.threshold_max,
-                'num_thresholds': args.num_thresholds,
-                'step': threshold_step
-            },
-            'target_metrics': {
-                'tpr': overall_metrics['tpr'],
-                'fpr': overall_metrics['fpr'],
-                'intervention_rate': overall_metrics['intervention_rate']
-            }
         }
+    }
+    
+    impact_path = output_dir / "mitigation_impact.json"
+    save_results(mitigation_impact, str(impact_path))
+    
+    # ========================================================================
+    # STEP 8: Generate Visualizations
+    # ========================================================================
+    
+    print_section("Step 8: Generate Visualizations", "-")
+    
+    MitigationVisualizer.generate_all_visualizations(
+        baseline=baseline,
+        mitigated=mitigated,
+        improvements=improvements,
+        output_dir=str(output_dir)
+    )
+    
+    # ========================================================================
+    # FINAL SUMMARY
+    # ========================================================================
+    
+    print_section("✅ Phase 6 Complete: Fairness Mitigation Summary", "=")
+    
+    print("\n📊 Key Findings:")
+    print(f"   Mitigation strategy: equalized_odds")
+    print(f"   Fairness targets met: {'YES ✅' if improvements['summary']['fairness_targets_met'] else 'NO ❌'}")
+    print(f"   Performance drop acceptable: {'YES ✅' if improvements['summary']['performance_drop_acceptable'] else 'NO ❌'}")
+    print(f"   ROI reduction acceptable: {'YES ✅' if improvements['summary']['roi_reduction_acceptable'] else 'NO ❌'}")
+    
+    print(f"\n📁 Outputs:")
+    print(f"   Results: {args.output_dir}")
+    print(f"   Group thresholds: {thresholds_path}")
+    print(f"   Mitigation impact: {impact_path}")
+    print(f"   Visualizations: {output_dir / 'visualizations'}/*.png")
+    
+    print(f"\n💡 Recommendations:")
+    if mitigation_impact['summary']['recommended_for_deployment']:
+        print(f"   ✅ Group-specific thresholds RECOMMENDED for deployment")
+        print(f"   1. Review mitigation impact report and visualizations")
+        print(f"   2. Present to clinical and ethics teams for approval")
+        print(f"   3. Proceed to Phase 7 with group-specific thresholds")
+        print(f"   4. Document fairness mitigation in model card")
+    else:
+        reasons = []
+        if not improvements['summary']['fairness_targets_met']:
+            reasons.append("Fairness targets not met")
+        if not improvements['summary']['performance_drop_acceptable']:
+            reasons.append("Performance drop too large")
+        if not improvements['summary']['roi_reduction_acceptable']:
+            reasons.append("ROI reduction too large")
         
-        thresholds_path = output_dir / "group_thresholds.json"
-        save_results(thresholds_output, str(thresholds_path))
-        
-        # STEP 6: Evaluate Mitigated (Group-Specific Thresholds)
-        print("\n" + "="*80)
-        print("Step 6: Evaluate with Group-Specific Thresholds")
-        print("="*80)
-        
-        mitigated = evaluator.evaluate_mitigated(
-            y_true=y_test.values,
-            y_pred_proba=y_pred_proba,
-            demographics=demographics,
-            group_thresholds=group_thresholds
-        )
-        
-        # STEP 7: Analyze Trade-offs
-        print("\n" + "="*80)
-        print("Step 7: Analyze Performance/Fairness/ROI Trade-offs")
-        print("="*80)
-        
-        improvements = TradeoffAnalyzer.calculate_improvements(baseline, mitigated)
-        
-        # Save mitigation impact
-        mitigation_impact = {
-            'phase': 6,
-            'mitigation_strategy': 'equalized_odds',
-            'baseline_metrics': baseline,
-            'mitigated_metrics': mitigated,
-            'improvements': improvements,
-            'summary': {
-                'fairness_targets_met': improvements['summary']['fairness_targets_met'],
-                'performance_drop_acceptable': improvements['summary']['performance_drop_acceptable'],
-                'roi_reduction_acceptable': improvements['summary']['roi_reduction_acceptable'],
-                'recommended_for_deployment': (
-                    improvements['summary']['fairness_targets_met'] and
-                    improvements['summary']['performance_drop_acceptable'] and
-                    improvements['summary']['roi_reduction_acceptable']
-                )
-            }
-        }
-        
-        impact_path = output_dir / "mitigation_impact.json"
-        save_results(mitigation_impact, str(impact_path))
-        
-        # STEP 8: Generate Visualizations
-        print("\n" + "="*80)
-        print("Step 8: Generate Visualizations")
-        print("="*80)
-        
-        MitigationVisualizer.generate_all_visualizations(
-            baseline=baseline,
-            mitigated=mitigated,
-            improvements=improvements,
-            output_dir=str(output_dir)
-        )
-        
-        # Note: HuggingFace Upload
-        # Upload is now handled by the orchestrator script after combining
-        # evaluation and mitigation results. This avoids duplicate uploads.
-        # See: run_fairness_assessment_and_mitigation.sh
-        print("\n" + "="*80)
-        print("📁 Mitigation Results Saved")
-        print("="*80)
-        print(f"✅ Results saved locally to: {output_dir}")
-        print(f"📤 Upload will be handled by orchestrator with combined results")
-        
-        # FINAL SUMMARY
-        print("\n" + "="*80)
-        print("✨ Fairness Mitigation Complete!")
-        print("="*80 + "\n")
-        
-        print(f"📁 All outputs saved to: {output_dir}")
-        print(f"\n📊 Key Results:")
-        print(f"   Mitigation strategy: Equalized Odds")
-        print(f"   Attributes mitigated: {', '.join(group_thresholds.keys())}")
-        print(f"   Fairness targets met: {mitigation_impact['summary']['fairness_targets_met']}")
-        print(f"   Performance drop acceptable: {mitigation_impact['summary']['performance_drop_acceptable']}")
-        print(f"   ROI reduction acceptable: {mitigation_impact['summary']['roi_reduction_acceptable']}")
-        print(f"   Recommended for deployment: {mitigation_impact['summary']['recommended_for_deployment']}")
-        
-        print(f"\n📄 Generated Files:")
-        print(f"   - group_thresholds.json")
-        print(f"   - mitigation_impact.json")
-        print(f"   - visualizations/ (before/after charts)")
-        
-        print(f"\n🚀 Next Steps:")
-        print(f"   1. Review mitigation impact: {impact_path}")
-        print(f"   2. Review visualizations in: {output_dir}/visualizations/")
-        print(f"   3. Proceed to Phase 7: Results Collection & Publication")
-        
-        print(f"\n{'='*80}")
-        print("🎉 Fairness mitigation complete!")
-        print(f"{'='*80}\n")
-        
-    except Exception as e:
-        print(f"\n❌ Error during fairness mitigation: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+        print(f"   ⚠️  Group-specific thresholds NOT RECOMMENDED")
+        print(f"   Reasons: {', '.join(reasons)}")
+        print(f"   1. Review mitigation impact and identify issues")
+        print(f"   2. Consider adjusting threshold search parameters:")
+        print(f"      - Widen search range (--threshold-min, --threshold-max)")
+        print(f"      - Increase fairness tolerance (--fairness-tolerance)")
+        print(f"   3. If no configuration works, consider Phase 1-3 retraining with:")
+        print(f"      - Fairness-aware sampling/reweighting")
+        print(f"      - Additional fairness regularization")
+        print(f"   4. Document limitations and escalate to clinical team")
+    
+    print(f"\n🎯 Next Steps:")
+    print(f"   1. Review all outputs in {args.output_dir}")
+    print(f"   2. Generate clinical approval package (run generate_approval_package.py)")
+    print(f"   3. Present to clinical and ethics stakeholders")
+    print(f"   4. Document approval decision")
+    if mitigation_impact['summary']['recommended_for_deployment']:
+        print(f"   5. Proceed to Phase 7 (Deployment Preparation)")
+    else:
+        print(f"   5. Revisit mitigation strategy or retrain model")
+    
+    # ========================================================================
+    # Note: HuggingFace Upload
+    # ========================================================================
+    # Upload is now handled by the orchestrator script after combining
+    # evaluation and mitigation results. This avoids duplicate uploads.
+    # See: run_fairness_assessment_and_mitigation.sh
+    
+    print("\n" + "="*80)
+    print("✅ Phase 5 Part B (Mitigation) Completed Successfully!")
+    print("="*80)
+    print(f"📁 Results saved to: {args.output_dir}")
+    print(f"📤 Upload will be handled by orchestrator with combined results")
+    print("="*80 + "\n")
 
 
 if __name__ == "__main__":
