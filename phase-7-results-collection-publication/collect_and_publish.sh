@@ -729,16 +729,6 @@ if [ -f "${PHASE5_OUTPUT_DIR}/mitigation/group_thresholds.json" ]; then
         "${COLLECTION_DIR}/phase5_fairness_assessment/mitigation/mitigation_impact.json" \
         "Mitigation impact analysis"
     
-    copy_file \
-        "${PHASE5_OUTPUT_DIR}/mitigation/tradeoff_analysis.json" \
-        "${COLLECTION_DIR}/phase5_fairness_assessment/mitigation/tradeoff_analysis.json" \
-        "Performance-fairness tradeoffs"
-    
-    copy_file \
-        "${PHASE5_OUTPUT_DIR}/mitigation/phase6_deployment_config.json" \
-        "${COLLECTION_DIR}/phase5_fairness_assessment/mitigation/phase6_deployment_config.json" \
-        "Phase 6 deployment config (with mitigation)"
-    
     echo -e "  ${GREEN}✓${NC} Mitigation was applied"
 else
     # Check if placeholder exists
@@ -758,11 +748,11 @@ copy_file \
     "${COLLECTION_DIR}/phase5_fairness_assessment/deployment_config.json" \
     "Final deployment configuration"
 
-# Copy visualizations from evaluation (Phase 5 creates visualizations in evaluation output dir)
-mkdir -p "${COLLECTION_DIR}/phase5_fairness_assessment/visualizations"
-if ls ${PHASE5_OUTPUT_DIR}/evaluation/*.png 1> /dev/null 2>&1; then
-    cp ${PHASE5_OUTPUT_DIR}/evaluation/*.png "${COLLECTION_DIR}/phase5_fairness_assessment/visualizations/" 2>/dev/null || true
-    eval_viz_count=$(ls -1 "${COLLECTION_DIR}/phase5_fairness_assessment/visualizations"/*.png 2>/dev/null | wc -l)
+# Copy visualizations from evaluation (Phase 5 creates visualizations in evaluation/visualizations/ subdirectory)
+mkdir -p "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation/visualizations"
+if ls ${PHASE5_OUTPUT_DIR}/evaluation/visualizations/*.png 1> /dev/null 2>&1; then
+    cp ${PHASE5_OUTPUT_DIR}/evaluation/visualizations/*.png "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation/visualizations/" 2>/dev/null || true
+    eval_viz_count=$(ls -1 "${COLLECTION_DIR}/phase5_fairness_assessment/evaluation/visualizations"/*.png 2>/dev/null | wc -l)
     if [ ${eval_viz_count} -gt 0 ]; then
         echo -e "  ${GREEN}✓${NC} Evaluation visualizations (${eval_viz_count} files)"
         echo "  [✓] Evaluation visualizations (${eval_viz_count} files)" >> "${SUMMARY_FILE}"
@@ -770,13 +760,15 @@ if ls ${PHASE5_OUTPUT_DIR}/evaluation/*.png 1> /dev/null 2>&1; then
     fi
 fi
 
-# Copy visualizations from mitigation (if they exist)
-if ls ${PHASE5_OUTPUT_DIR}/mitigation/*.png 1> /dev/null 2>&1; then
-    cp ${PHASE5_OUTPUT_DIR}/mitigation/*.png "${COLLECTION_DIR}/phase5_fairness_assessment/visualizations/" 2>/dev/null || true
-    mit_viz_count=$(ls -1 "${COLLECTION_DIR}/phase5_fairness_assessment/visualizations"/*mitigation*.png 2>/dev/null | wc -l)
+# Copy visualizations from mitigation (Phase 5 creates visualizations in mitigation/visualizations/ subdirectory)
+mkdir -p "${COLLECTION_DIR}/phase5_fairness_assessment/mitigation/visualizations"
+if ls ${PHASE5_OUTPUT_DIR}/mitigation/visualizations/*.png 1> /dev/null 2>&1; then
+    cp ${PHASE5_OUTPUT_DIR}/mitigation/visualizations/*.png "${COLLECTION_DIR}/phase5_fairness_assessment/mitigation/visualizations/" 2>/dev/null || true
+    mit_viz_count=$(ls -1 "${COLLECTION_DIR}/phase5_fairness_assessment/mitigation/visualizations"/*.png 2>/dev/null | wc -l)
     if [ ${mit_viz_count} -gt 0 ]; then
         echo -e "  ${GREEN}✓${NC} Mitigation visualizations (${mit_viz_count} files)"
         echo "  [✓] Mitigation visualizations (${mit_viz_count} files)" >> "${SUMMARY_FILE}"
+        FILE_COUNT=$((FILE_COUNT + mit_viz_count))
     fi
 fi
 
