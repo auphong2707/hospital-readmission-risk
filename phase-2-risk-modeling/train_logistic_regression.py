@@ -679,12 +679,12 @@ def main():
     upload_success = upload_results_to_hf(
         summary=summary,
         output_dir=str(output_dir),
-        model_name="hospital-readmission-logistic-regression"
+        model_name="hospital-readmission-phase2-lr"
     )
     
     if upload_success:
         hf_username = os.getenv('HF_USERNAME', 'auphong2707')
-        hf_repo_id = f"{hf_username}/hospital-readmission-logistic-regression"
+        hf_repo_id = f"{hf_username}/hospital-readmission-phase2-lr"
         hf_url = f"https://huggingface.co/{hf_repo_id}"
         print(f"\n✅ Successfully uploaded to HuggingFace Hub!")
         print(f"🌐 View at: {hf_url}")

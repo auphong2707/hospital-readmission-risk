@@ -34,7 +34,7 @@ Requirements:
     pip install scikit-learn pandas numpy matplotlib seaborn huggingface_hub joblib
 
 HuggingFace Model:
-    Repository: https://huggingface.co/auphong2707/hospital-readmission-logistic-regression
+    Repository: https://huggingface.co/auphong2707/hospital-readmission-phase2-lr
     Contains: Pre-trained Logistic Regression model, training summary, metrics, visualizations
 """
 
@@ -512,8 +512,8 @@ Examples:
     parser.add_argument(
         '--repo-id',
         type=str,
-        default='auphong2707/hospital-readmission-logistic-regression',
-        help='HuggingFace repository ID (default: auphong2707/hospital-readmission-logistic-regression)'
+        default='auphong2707/hospital-readmission-phase2-lr',
+        help='HuggingFace repository ID (default: auphong2707/hospital-readmission-phase2-lr)'
     )
     
     parser.add_argument(
@@ -590,7 +590,7 @@ Examples:
         upload_success = upload_calibrated_model_to_hf(
             report=report,
             output_dir=args.output_dir,
-            model_name='hospital-readmission-logistic-regression-calibrated',
+            model_name='hospital-readmission-phase3-lr-calibrated',
             base_model_name='Logistic Regression'
         )
         if not upload_success:

@@ -34,7 +34,7 @@ Requirements:
     pip install scikit-learn==1.2.2 pandas numpy matplotlib seaborn huggingface_hub joblib
 
 HuggingFace Model:
-    Repository: https://huggingface.co/auphong2707/hospital-readmission-rf
+    Repository: https://huggingface.co/auphong2707/hospital-readmission-phase2-rf
     Contains: Pre-trained Random Forest model, training summary, metrics, visualizations
 """
 
@@ -494,8 +494,8 @@ Examples:
     parser.add_argument(
         '--repo-id',
         type=str,
-        default='auphong2707/hospital-readmission-rf',
-        help='HuggingFace repository ID (default: auphong2707/hospital-readmission-rf)'
+        default='auphong2707/hospital-readmission-phase2-rf',
+        help='HuggingFace repository ID (default: auphong2707/hospital-readmission-phase2-rf)'
     )
     
     parser.add_argument(
@@ -571,7 +571,7 @@ Examples:
         upload_success = upload_calibrated_model_to_hf(
             report=report,
             output_dir=args.output_dir,
-            model_name='hospital-readmission-rf-calibrated',
+            model_name='hospital-readmission-phase3-rf-calibrated',
             base_model_name='Random Forest'
         )
         if not upload_success:

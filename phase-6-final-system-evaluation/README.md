@@ -40,13 +40,13 @@ While previous phases evaluated different aspects of the model:
 ### Data Sources (HuggingFace)
 - Test data from Phase 1: `auphong2707/hospital-readmission-risk-data`
 - Calibrated predictions from Phase 3:
-  - Gradient Boosting: `auphong2707/hospital-readmission-lgbm-calibrated`
-  - Random Forest: `auphong2707/hospital-readmission-rf-calibrated`
-  - Logistic Regression: `auphong2707/hospital-readmission-lr-calibrated`
+  - Gradient Boosting: `auphong2707/hospital-readmission-phase3-lgbm-calibrated`
+  - Random Forest: `auphong2707/hospital-readmission-phase3-rf-calibrated`
+  - Logistic Regression: `auphong2707/hospital-readmission-phase3-lr-calibrated`
 - Deployment configs from Phase 5:
-  - Gradient Boosting: `auphong2707/hospital-readmission-gradient-boosting-fairness-assessment-mitigation`
-  - Random Forest: `auphong2707/hospital-readmission-random-forest-fairness-assessment-mitigation`
-  - Logistic Regression: `auphong2707/hospital-readmission-logistic-regression-fairness-assessment-mitigation`
+  - Gradient Boosting: `auphong2707/hospital-readmission-phase5-lgbm-fairness`
+  - Random Forest: `auphong2707/hospital-readmission-phase5-rf-fairness`
+  - Logistic Regression: `auphong2707/hospital-readmission-phase5-lr-fairness`
 
 ## Outputs
 

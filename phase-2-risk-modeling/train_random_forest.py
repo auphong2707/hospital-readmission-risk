@@ -553,7 +553,7 @@ def train_model(args: argparse.Namespace):
     upload_success = upload_results_to_hf(
         summary=summary,
         output_dir=out_dir,
-        model_name="hospital-readmission-rf"
+        model_name="hospital-readmission-phase2-rf"
     )
     if not upload_success:
         print("⚠️  Upload to HuggingFace Hub was skipped (set HF_TOKEN in .env to enable)")

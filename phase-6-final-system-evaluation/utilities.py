@@ -155,7 +155,7 @@ def load_data_and_predictions(data_repo_id: str, model_repo_id: str):
     
     Args:
         data_repo_id: Repository ID for data (e.g., 'auphong2707/hospital-readmission-risk-data')
-        model_repo_id: Repository ID for calibrated model (e.g., 'auphong2707/hospital-readmission-lgbm-calibrated')
+        model_repo_id: Repository ID for calibrated model (e.g., 'auphong2707/hospital-readmission-phase3-lgbm-calibrated')
         
     Returns:
         Tuple of (y_true, y_proba, demographics)

@@ -567,7 +567,7 @@ python phase-6-final-system-evaluation/final_evaluation_gradient_boosting.py \
 # Phase 7: Collect & Publish Results
 ./phase-7-results-collection-publication/collect_and_publish.sh \
     --method gradient_boosting \
-    --repo-id auphong2707/hospital-readmission-gradient-boosting-final
+    --repo-id auphong2707/hospital-readmission-phase7-lgbm-final
 ```
 
 ### Random Forest (Phases 1-2 only)
@@ -584,7 +584,7 @@ python phase-2-risk-modeling/train_random_forest.py
 # Optional: Collect & Publish Phase 2 Results
 ./phase-7-results-collection-publication/collect_and_publish.sh \
     --method random_forest \
-    --repo-id auphong2707/hospital-readmission-random-forest-final
+    --repo-id auphong2707/hospital-readmission-phase7-rf-final
 ```
 
 ### Logistic Regression (Phases 1-2 only)
@@ -601,7 +601,7 @@ python phase-2-risk-modeling/train_logistic_regression.py
 # Optional: Collect & Publish Phase 2 Results
 ./phase-7-results-collection-publication/collect_and_publish.sh \
     --method logistic_regression \
-    --repo-id auphong2707/hospital-readmission-logistic-regression-final
+    --repo-id auphong2707/hospital-readmission-phase7-lr-final
 ```
 
 ### Running All Methods
@@ -681,9 +681,11 @@ python phase-6-final-system-evaluation/final_evaluation_gradient_boosting.py
 - All HuggingFace repos use **hyphens** (not underscores)
 - Pattern: `hospital-readmission-{method}-{suffix}`
 - Examples:
-  - Phase 4: `hospital-readmission-gradient-boosting-threshold-results`
-  - Phase 5: `hospital-readmission-gradient-boosting-fairness-assessment-mitigation`
-  - Phase 7: `hospital-readmission-gradient-boosting-final`
+  - Phase 2: `hospital-readmission-phase2-lgbm`
+  - Phase 3: `hospital-readmission-phase3-lgbm-calibrated`
+  - Phase 4: `hospital-readmission-phase4-lgbm-threshold`
+  - Phase 5: `hospital-readmission-phase5-lgbm-fairness`
+  - Phase 7: `hospital-readmission-phase7-lgbm-final`
 
 **Data Structure**: The script expects the following data files in the `data/` folder:
 - `data/diabetic_data.csv` - Main dataset (automatically loaded by the script)

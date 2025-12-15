@@ -41,7 +41,7 @@ Usage (from project root):
     # With custom repositories (if you forked the project)
     python ./phase-4-optimal-threshold-ROI-analysis/optimize_threshold_random_forest.py \
         --data-repo-id your-username/hospital-readmission-risk-data \
-        --model-repo-id your-username/hospital-readmission-rf-calibrated
+        --model-repo-id your-username/hospital-readmission-phase3-rf-calibrated
 
 Requirements:
     pip install pandas numpy scikit-learn matplotlib seaborn huggingface_hub joblib
@@ -144,8 +144,8 @@ def parse_arguments():
     parser.add_argument(
         '--model-repo-id',
         type=str,
-        default='auphong2707/hospital-readmission-rf-calibrated',
-        help='HuggingFace repository ID for calibrated model (default: auphong2707/hospital-readmission-rf-calibrated)'
+        default='auphong2707/hospital-readmission-phase3-rf-calibrated',
+        help='HuggingFace repository ID for calibrated model (default: auphong2707/hospital-readmission-phase3-rf-calibrated)'
     )
     parser.add_argument(
         '--cache-dir',
@@ -483,7 +483,7 @@ def main():
     print_section("Step 9: Upload Results to HuggingFace Hub", "-")
     
     # Hardcoded repository ID (consistent with Phase 2/3 naming)
-    results_repo_id = 'auphong2707/hospital-readmission-rf-threshold-optimized'
+    results_repo_id = 'auphong2707/hospital-readmission-phase4-rf-threshold'
     
     try:
         repo_url = upload_results_to_hf(

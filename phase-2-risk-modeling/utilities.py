@@ -757,7 +757,7 @@ tags:
 - diabetes
 - readmission-prediction
 - lightgbm
-- gradient-boosting
+- lgbm
 library_name: lightgbm
 pipeline_tag: tabular-classification
 ---
@@ -909,7 +909,7 @@ This model is intended to assist healthcare providers in identifying patients at
 ## Citation
 
 ```bibtex
-@misc{{hospital-readmission-lgbm,
+@misc{{hospital-readmission-phase2-lgbm,
   author = {{Your Name}},
   title = {{LightGBM Model for Hospital Readmission Prediction}},
   year = {{2025}},
@@ -949,7 +949,7 @@ For questions or issues, please open an issue in the repository.
 def upload_results_to_hf(
     summary: dict,
     output_dir: str | Path,
-    model_name: str = "hospital-readmission-lgbm",
+    model_name: str = "hospital-readmission-phase2-lgbm",
     hf_repo_name: str | None = None,
     hf_token: str | None = None
 ) -> bool:
@@ -961,7 +961,7 @@ def upload_results_to_hf(
     Args:
         summary: Training summary dictionary (from training_summary.json)
         output_dir: Directory containing model files and visualizations
-        model_name: Name/identifier for the model (default: "hospital-readmission-lgbm")
+        model_name: Name/identifier for the model (default: "hospital-readmission-phase2-lgbm")
         hf_repo_name: Optional HuggingFace repo name (auto-generated if None)
         hf_token: Optional HuggingFace API token (loads from .env if None)
     
@@ -1006,7 +1006,7 @@ def upload_results_to_hf(
                 print("   Add HF_USERNAME=your_username to .env file")
                 return False
             
-            # Generate repo name: username/hospital-readmission-lgbm
+            # Generate repo name: username/hospital-readmission-phase2-lgbm
             hf_repo_name = f"{username}/{model_name}"
         
         print(f"\n{'='*70}")

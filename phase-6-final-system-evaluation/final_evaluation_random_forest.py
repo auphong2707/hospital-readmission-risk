@@ -55,13 +55,13 @@ def parse_arguments():
     parser.add_argument(
         '--model-repo-id',
         type=str,
-        default='auphong2707/hospital-readmission-rf-calibrated',
+        default='auphong2707/hospital-readmission-phase3-rf-calibrated',
         help='HuggingFace repository ID for calibrated model'
     )
     parser.add_argument(
         '--fairness-repo-id',
         type=str,
-        default='auphong2707/hospital-readmission-random-forest-fairness-assessment-mitigation',
+        default='auphong2707/hospital-readmission-phase5-rf-fairness',
         help='HuggingFace repository ID for fairness assessment & mitigation results'
     )
     

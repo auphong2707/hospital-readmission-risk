@@ -35,7 +35,7 @@ import joblib
 # ============================================================================
 
 def download_model_from_hf(
-    repo_id: str = "auphong2707/hospital-readmission-lgbm",
+    repo_id: str = "auphong2707/hospital-readmission-phase2-lgbm",
     model_filename: str = "gradient_boosting_model.joblib",
     cache_dir: str = "./models/downloaded",
     force_download: bool = False
@@ -51,7 +51,7 @@ def download_model_from_hf(
     -----------
     repo_id : str
         HuggingFace repository ID (format: "username/repo-name")
-        Default: "auphong2707/hospital-readmission-lgbm"
+        Default: "auphong2707/hospital-readmission-phase2-lgbm"
     model_filename : str
         Name of the model file to download
         Default: "gradient_boosting_model.joblib"
@@ -1812,7 +1812,7 @@ def upload_calibrated_model_to_hf(
     >>> upload_calibrated_model_to_hf(
     ...     report=report,
     ...     output_dir='./calibration_outputs/gradient_boosting',
-    ...     model_name='hospital-readmission-lgbm-calibrated',
+    ...     model_name='hospital-readmission-phase3-lgbm-calibrated',
     ...     base_model_name='Gradient Boosting (LightGBM)'
     ... )
     """
@@ -1960,7 +1960,7 @@ calibrated_proba, report = calibrate_model_pipeline(
 upload_calibrated_model_to_hf(
     report=report,
     output_dir='./outputs/calibration/logistic_regression',
-    model_name='hospital-readmission-lr-calibrated',
+    model_name='hospital-readmission-phase3-lr-calibrated',
     base_model_name='Logistic Regression'
 )
 

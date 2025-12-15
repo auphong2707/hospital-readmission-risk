@@ -290,7 +290,7 @@ def load_calibrated_model(
         
     Example:
         >>> model, calibrator = load_calibrated_model(
-        ...     repo_id='your-username/hospital-readmission-lgbm-calibrated',
+        ...     repo_id='your-username/hospital-readmission-phase3-lgbm-calibrated',
         ...     method='gradient_boosting'
         ... )
         >>> # Use for predictions
@@ -400,7 +400,7 @@ def load_calibrated_random_forest_model(
     - Calibration metrics and visualizations
     
     Args:
-        repo_id: HuggingFace repository ID for calibrated model (e.g., 'username/hospital-readmission-rf-calibrated')
+        repo_id: HuggingFace repository ID for calibrated model (e.g., 'username/hospital-readmission-phase3-rf-calibrated')
         cache_dir: Directory to cache downloaded files
         force_download: If True, re-download even if files exist locally
         
@@ -413,7 +413,7 @@ def load_calibrated_random_forest_model(
         
     Example:
         >>> model, calibrator = load_calibrated_random_forest_model(
-        ...     repo_id='your-username/hospital-readmission-rf-calibrated'
+        ...     repo_id='your-username/hospital-readmission-phase3-rf-calibrated'
         ... )
         >>> # Use for predictions
         >>> y_pred = model.predict_proba(X_test)[:, 1]
@@ -1236,7 +1236,7 @@ def upload_results_to_hf(
     Args:
         output_dir: Directory containing output files (JSON, CSV, TXT)
         viz_dir: Directory containing visualization files
-        repo_id: HuggingFace repository ID (e.g., 'username/hospital-readmission-gradient-boosting-threshold-results')
+        repo_id: HuggingFace repository ID (e.g., 'username/hospital-readmission-phase4-lgbm-threshold')
         commit_message: Commit message for the upload
         token: HuggingFace API token (if None, will use HF_TOKEN environment variable)
         
@@ -1251,7 +1251,7 @@ def upload_results_to_hf(
         >>> upload_results_to_hf(
         ...     output_dir='./phase-4-optimal-threshold-ROI-analysis/outputs',
         ...     viz_dir='./phase-4-optimal-threshold-ROI-analysis/visualizations',
-        ...     repo_id='username/hospital-readmission-gradient-boosting-threshold-results'
+        ...     repo_id='username/hospital-readmission-phase4-lgbm-threshold'
         ... )
     """
     try:

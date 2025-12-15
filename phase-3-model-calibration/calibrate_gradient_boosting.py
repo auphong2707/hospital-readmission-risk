@@ -34,7 +34,7 @@ Requirements:
     pip install lightgbm scikit-learn pandas numpy matplotlib seaborn huggingface_hub joblib
 
 HuggingFace Model:
-    Repository: https://huggingface.co/auphong2707/hospital-readmission-lgbm
+    Repository: https://huggingface.co/auphong2707/hospital-readmission-phase2-lgbm
     Contains: Pre-trained LightGBM model, training summary, metrics, visualizations
 """
 
@@ -487,8 +487,8 @@ Examples:
     parser.add_argument(
         '--repo-id',
         type=str,
-        default='auphong2707/hospital-readmission-lgbm',
-        help='HuggingFace repository ID (default: auphong2707/hospital-readmission-lgbm)'
+        default='auphong2707/hospital-readmission-phase2-lgbm',
+        help='HuggingFace repository ID (default: auphong2707/hospital-readmission-phase2-lgbm)'
     )
     
     parser.add_argument(
@@ -564,7 +564,7 @@ Examples:
         upload_success = upload_calibrated_model_to_hf(
             report=report,
             output_dir=args.output_dir,
-            model_name='hospital-readmission-lgbm-calibrated',
+            model_name='hospital-readmission-phase3-lgbm-calibrated',
             base_model_name='Gradient Boosting (LightGBM)'
         )
         if not upload_success:

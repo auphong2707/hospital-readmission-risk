@@ -313,25 +313,25 @@ case "${METHOD}" in
     gradient_boosting)
         MODEL_PREFIX="gradient_boosting"
         DISPLAY_NAME="Gradient Boosting"
-        PHASE2_HF_REPO="auphong2707/hospital-readmission-lgbm"
-        PHASE3_HF_REPO="auphong2707/hospital-readmission-lgbm-calibrated"
-        PHASE4_HF_REPO="auphong2707/hospital-readmission-lgbm-threshold-optimized"
+        PHASE2_HF_REPO="auphong2707/hospital-readmission-phase2-lgbm"
+        PHASE3_HF_REPO="auphong2707/hospital-readmission-phase3-lgbm-calibrated"
+        PHASE4_HF_REPO="auphong2707/hospital-readmission-phase4-lgbm-threshold"
         CALIBRATOR_PREFIX="Gradient_Boosting_(LightGBM)"
         ;;
     random_forest)
         MODEL_PREFIX="random_forest"
         DISPLAY_NAME="Random Forest"
-        PHASE2_HF_REPO="auphong2707/hospital-readmission-rf"
-        PHASE3_HF_REPO="auphong2707/hospital-readmission-rf-calibrated"
-        PHASE4_HF_REPO="auphong2707/hospital-readmission-rf-threshold-optimized"
+        PHASE2_HF_REPO="auphong2707/hospital-readmission-phase2-rf"
+        PHASE3_HF_REPO="auphong2707/hospital-readmission-phase3-rf-calibrated"
+        PHASE4_HF_REPO="auphong2707/hospital-readmission-phase4-rf-threshold"
         CALIBRATOR_PREFIX="Random_Forest"
         ;;
     logistic_regression)
         MODEL_PREFIX="logistic_regression"
         DISPLAY_NAME="Logistic Regression"
-        PHASE2_HF_REPO="auphong2707/hospital-readmission-lr"
-        PHASE3_HF_REPO="auphong2707/hospital-readmission-lr-calibrated"
-        PHASE4_HF_REPO="auphong2707/hospital-readmission-lr-threshold-optimized"
+        PHASE2_HF_REPO="auphong2707/hospital-readmission-phase2-lr"
+        PHASE3_HF_REPO="auphong2707/hospital-readmission-phase3-lr-calibrated"
+        PHASE4_HF_REPO="auphong2707/hospital-readmission-phase4-lr-threshold"
         CALIBRATOR_PREFIX="Logistic_Regression"
         ;;
 esac

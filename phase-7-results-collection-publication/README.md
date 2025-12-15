@@ -82,16 +82,18 @@ The script requires you to specify which method to collect and publish.
 
 All HuggingFace repositories follow a **consistent naming pattern** using **hyphens** (not underscores):
 
-| Phase | Pattern | Example (Gradient Boosting) |
+| Phase | Pattern | Example (LGBM) |
 |-------|---------|----------------------------|
-| Phase 4 | `hospital-readmission-{method}-threshold-results` | `hospital-readmission-gradient-boosting-threshold-results` |
-| Phase 5 | `hospital-readmission-{method}-fairness-assessment-mitigation` | `hospital-readmission-gradient-boosting-fairness-assessment-mitigation` |
-| Phase 7 | `hospital-readmission-{method}-final` | `hospital-readmission-gradient-boosting-final` |
+| Phase 2 | `hospital-readmission-phase2-{method}` | `hospital-readmission-phase2-lgbm` |
+| Phase 3 | `hospital-readmission-phase3-{method}-calibrated` | `hospital-readmission-phase3-lgbm-calibrated` |
+| Phase 4 | `hospital-readmission-phase4-{method}-threshold` | `hospital-readmission-phase4-lgbm-threshold` |
+| Phase 5 | `hospital-readmission-phase5-{method}-fairness` | `hospital-readmission-phase5-lgbm-fairness` |
+| Phase 7 | `hospital-readmission-phase7-{method}-final` | `hospital-readmission-phase7-lgbm-final` |
 
 **Method names** (always use hyphens):
-- `gradient-boosting` (NOT gradient_boosting)
-- `random-forest` (NOT random_forest)
-- `logistic-regression` (NOT logistic_regression)
+- `lgbm` (NOT gradient-boosting or gradient_boosting)
+- `rf` (NOT random-forest or random_forest)
+- `lr` (NOT logistic-regression or logistic_regression)
 
 ### Examples
 
@@ -99,7 +101,7 @@ All HuggingFace repositories follow a **consistent naming pattern** using **hyph
 ```bash
 # From project root
 ./phase-7-results-collection-publication/collect_and_publish.sh --method gradient_boosting
-# Creates repository: auphong2707/hospital-readmission-gradient-boosting-final
+# Creates repository: auphong2707/hospital-readmission-phase7-lgbm-final
 ```
 
 **With Custom Repository**:
@@ -107,7 +109,7 @@ All HuggingFace repositories follow a **consistent naming pattern** using **hyph
 # From project root
 ./phase-7-results-collection-publication/collect_and_publish.sh \
     --method random_forest \
-    --repo-id myusername/hospital-readmission-rf-final
+    --repo-id myusername/hospital-readmission-phase7-rf-final
 ```
 
 **Dry Run** (preview without uploading):
@@ -227,7 +229,7 @@ auphong2707/hospital-readmission-gb/
 
 **For Random Forest or Logistic Regression** (Phase 2 only):
 ```
-auphong2707/hospital-readmission-rf/
+auphong2707/hospital-readmission-phase2-rf/
 |-- README.md
 |-- model_card.md
 |-- aggregated_results.json

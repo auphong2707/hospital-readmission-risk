@@ -114,7 +114,7 @@ def parse_arguments():
     parser.add_argument(
         '--model-repo-id',
         type=str,
-        default='auphong2707/hospital-readmission-rf-calibrated',
+        default='auphong2707/hospital-readmission-phase3-rf-calibrated',
         help='HuggingFace model repository ID'
     )
     

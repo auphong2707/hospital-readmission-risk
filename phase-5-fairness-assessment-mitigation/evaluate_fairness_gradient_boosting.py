@@ -40,7 +40,7 @@ Usage (from project root):
         --output-dir ./phase-5-fairness-evaluation/outputs
     
     Note: Results are automatically uploaded to HuggingFace Hub
-          Repository: auphong2707/hospital-readmission-gradient-boosting-fairness-results
+          Repository: auphong2707/hospital-readmission-phase5-lgbm-fairness
           Requires: HF_TOKEN environment variable
 
 Requirements:
@@ -140,7 +140,7 @@ def parse_arguments():
     parser.add_argument(
         '--model-repo-id',
         type=str,
-        default='auphong2707/hospital-readmission-lgbm-calibrated',
+        default='auphong2707/hospital-readmission-phase3-lgbm-calibrated',
         help='HuggingFace model repository ID'
     )
     

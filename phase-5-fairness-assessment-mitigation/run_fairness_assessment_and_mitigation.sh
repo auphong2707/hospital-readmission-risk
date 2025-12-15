@@ -342,11 +342,11 @@ echo ""
 
 # Determine repo name based on method
 if [[ "$METHOD" == "gradient_boosting" ]]; then
-    REPO_ID="auphong2707/hospital-readmission-gradient-boosting-fairness-assessment-mitigation"
+    REPO_ID="auphong2707/hospital-readmission-phase5-lgbm-fairness"
 elif [[ "$METHOD" == "random_forest" ]]; then
-    REPO_ID="auphong2707/hospital-readmission-random-forest-fairness-assessment-mitigation"
+    REPO_ID="auphong2707/hospital-readmission-phase5-rf-fairness"
 else
-    REPO_ID="auphong2707/hospital-readmission-logistic-regression-fairness-assessment-mitigation"
+    REPO_ID="auphong2707/hospital-readmission-phase5-lr-fairness"
 fi
 
 echo -e "${BLUE}📤 Uploading combined results to HuggingFace Hub...${NC}"

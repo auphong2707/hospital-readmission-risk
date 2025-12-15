@@ -140,7 +140,7 @@ def parse_arguments():
     parser.add_argument(
         '--model-repo-id',
         type=str,
-        default='auphong2707/hospital-readmission-logistic-regression-calibrated',
+        default='auphong2707/hospital-readmission-phase3-lr-calibrated',
         help='HuggingFace repository ID for calibrated model'
     )
     parser.add_argument(
@@ -572,7 +572,7 @@ def main():
     print_section("Step 9: Upload Results to HuggingFace Hub", "-")
     
     # Hardcoded repository ID (consistent with Phase 2/3 naming)
-    results_repo_id = 'auphong2707/hospital-readmission-lr-threshold-optimized'
+    results_repo_id = 'auphong2707/hospital-readmission-phase4-lr-threshold'
     
     try:
         repo_url = upload_results_to_hf(

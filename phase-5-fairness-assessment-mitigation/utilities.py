@@ -305,21 +305,21 @@ def load_model_and_calibrator(
     # Define method-specific configurations
     method_configs = {
         'gradient_boosting': {
-            'default_repo': 'auphong2707/hospital-readmission-lgbm-calibrated',
+            'default_repo': 'auphong2707/hospital-readmission-phase3-lgbm-calibrated',
             'model_filename': 'gradient_boosting_model_original.joblib',
             'calibrator_filename': 'Gradient_Boosting_(LightGBM)_calibrator.pkl',
             'display_name': 'Gradient Boosting (LightGBM)',
             'needs_scaler': False
         },
         'random_forest': {
-            'default_repo': 'auphong2707/hospital-readmission-rf-calibrated',
+            'default_repo': 'auphong2707/hospital-readmission-phase3-rf-calibrated',
             'model_filename': 'random_forest_model_original.joblib',
             'calibrator_filename': 'Random_Forest_calibrator.pkl',
             'display_name': 'Random Forest',
             'needs_scaler': False
         },
         'logistic_regression': {
-            'default_repo': 'auphong2707/hospital-readmission-lr-calibrated',
+            'default_repo': 'auphong2707/hospital-readmission-phase3-lr-calibrated',
             'model_filename': 'logistic_regression_model_original.pkl',
             # NOTE: No scaler needed in Phase 5 - test data already scaled from Phase 1
             'calibrator_filename': 'Logistic_Regression_calibrator.pkl',
@@ -1413,7 +1413,7 @@ def upload_results_to_hf(
     
     Args:
         output_dir: Directory containing output files (JSON, CSV, TXT)
-        repo_id: HuggingFace repository ID (e.g., 'username/hospital-readmission-gradient-boosting-fairness-results')
+        repo_id: HuggingFace repository ID (e.g., 'username/hospital-readmission-phase5-lgbm-fairness')
         commit_message: Commit message for the upload
         token: HuggingFace API token (if None, will use HF_TOKEN environment variable)
         include_visualizations: If True, upload visualization files
@@ -1428,7 +1428,7 @@ def upload_results_to_hf(
     Example:
         >>> upload_results_to_hf(
         ...     output_dir='./phase-5-fairness-evaluation-deployment-readiness/outputs',
-        ...     repo_id='username/hospital-readmission-gradient-boosting-fairness-results'
+        ...     repo_id='username/hospital-readmission-phase5-lgbm-fairness'
         ... )
     """
     try:
