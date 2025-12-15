@@ -566,7 +566,7 @@ if ! copy_file \
     "Threshold search results"; then
     download_from_hf \
         "${PHASE4_HF_REPO}" \
-        "threshold_results.csv" \
+        "outputs/threshold_results.csv" \
         "${COLLECTION_DIR}/phase4_threshold_optimization/threshold_results.csv" \
         "Threshold search results" \
         "model"
@@ -579,7 +579,7 @@ if ! copy_file \
     "Optimal thresholds"; then
     download_from_hf \
         "${PHASE4_HF_REPO}" \
-        "optimal_thresholds.json" \
+        "outputs/optimal_thresholds.json" \
         "${COLLECTION_DIR}/phase4_threshold_optimization/optimal_thresholds.json" \
         "Optimal thresholds" \
         "model"
@@ -592,7 +592,7 @@ if ! copy_file \
     "ROI metrics"; then
     download_from_hf \
         "${PHASE4_HF_REPO}" \
-        "roi_metrics.json" \
+        "outputs/roi_metrics.json" \
         "${COLLECTION_DIR}/phase4_threshold_optimization/roi_metrics.json" \
         "ROI metrics" \
         "model"
@@ -605,7 +605,7 @@ if ! copy_file \
     "ROI detailed report"; then
     download_from_hf \
         "${PHASE4_HF_REPO}" \
-        "roi_report.txt" \
+        "outputs/roi_report.txt" \
         "${COLLECTION_DIR}/phase4_threshold_optimization/roi_report.txt" \
         "ROI detailed report" \
         "model"
@@ -618,7 +618,7 @@ if ! copy_file \
     "Phase 5 input summary"; then
     download_from_hf \
         "${PHASE4_HF_REPO}" \
-        "phase4_summary_for_phase5.json" \
+        "outputs/phase4_summary_for_phase5.json" \
         "${COLLECTION_DIR}/phase4_threshold_optimization/phase5_input_summary.json" \
         "Phase 5 input summary" \
         "model"
@@ -650,8 +650,8 @@ for viz_file in "${viz_files[@]}"; do
         cp "${local_viz}" "${dest_viz}"
         ((viz_count++))
     else
-        # Try downloading from HuggingFace using PHASE4_HF_REPO
-        if download_from_hf "${PHASE4_HF_REPO}" "${viz_file}" "${dest_viz}" "Phase 4 ${viz_file}" "model"; then
+        # Try downloading from HuggingFace using PHASE4_HF_REPO (files are in visualizations/ subdirectory)
+        if download_from_hf "${PHASE4_HF_REPO}" "visualizations/${viz_file}" "${dest_viz}" "Phase 4 ${viz_file}" "model"; then
             ((viz_count++))
         fi
     fi
