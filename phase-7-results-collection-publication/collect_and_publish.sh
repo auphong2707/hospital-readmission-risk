@@ -294,16 +294,22 @@ case "${METHOD}" in
         MODEL_PREFIX="gradient_boosting"
         DISPLAY_NAME="Gradient Boosting"
         PHASE2_HF_REPO="auphong2707/hospital-readmission-lgbm"
+        PHASE3_HF_REPO="auphong2707/hospital-readmission-lgbm-calibrated"
+        CALIBRATOR_PREFIX="Gradient_Boosting_(LightGBM)"
         ;;
     random_forest)
         MODEL_PREFIX="random_forest"
         DISPLAY_NAME="Random Forest"
         PHASE2_HF_REPO="auphong2707/hospital-readmission-rf"
+        PHASE3_HF_REPO="auphong2707/hospital-readmission-rf-calibrated"
+        CALIBRATOR_PREFIX="Random_Forest"
         ;;
     logistic_regression)
         MODEL_PREFIX="logistic_regression"
         DISPLAY_NAME="Logistic Regression"
         PHASE2_HF_REPO="auphong2707/hospital-readmission-lr"
+        PHASE3_HF_REPO="auphong2707/hospital-readmission-lr-calibrated"
+        CALIBRATOR_PREFIX="Logistic_Regression"
         ;;
 esac
 
@@ -430,94 +436,116 @@ fi
 
 echo "" | tee -a "${SUMMARY_FILE}"
 echo -e "${BLUE}Phase 3 - Model Calibration:${NC}" | tee -a "${SUMMARY_FILE}"
+echo -e "  ${YELLOW}ℹ${NC}  HuggingFace Repo: ${PHASE3_HF_REPO}"
 
 # Phase 3 saves different files based on method
 # Gradient Boosting: gradient_boosting_model_original.joblib + Gradient_Boosting_(LightGBM)_calibrator.pkl
 # Random Forest: random_forest_model_original.joblib + Random_Forest_calibrator.pkl  
 # Logistic Regression: logistic_regression_model_original.joblib + Logistic_Regression_calibrator.pkl
 
-# Copy original model
-if [ "${METHOD}" = "gradient_boosting" ]; then
-    copy_file \
-        "./outputs/${METHOD}/calibration/gradient_boosting_model_original.joblib" \
+# Copy original model (try local, then HF)
+if ! copy_file \
+    "./outputs/${METHOD}/calibration/${MODEL_PREFIX}_model_original.joblib" \
+    "${COLLECTION_DIR}/phase3_calibration/model_original.joblib" \
+    "Original uncalibrated model"; then
+    download_from_hf \
+        "${PHASE3_HF_REPO}" \
+        "${MODEL_PREFIX}_model_original.joblib" \
         "${COLLECTION_DIR}/phase3_calibration/model_original.joblib" \
-        "Original uncalibrated model"
-    
-    copy_file \
-        "./outputs/${METHOD}/calibration/Gradient_Boosting_(LightGBM)_calibrator.pkl" \
-        "${COLLECTION_DIR}/phase3_calibration/calibrator.pkl" \
-        "Calibrator (Platt Scaling)"
-    
-    copy_file \
-        "./outputs/${METHOD}/calibration/Gradient_Boosting_(LightGBM)_metrics.json" \
-        "${COLLECTION_DIR}/phase3_calibration/calibration_metrics.json" \
-        "Calibration metrics"
-    
-    copy_file \
-        "./outputs/${METHOD}/calibration/Gradient_Boosting_(LightGBM)_report.txt" \
-        "${COLLECTION_DIR}/phase3_calibration/calibration_report.txt" \
-        "Calibration report"
-        
-elif [ "${METHOD}" = "random_forest" ]; then
-    copy_file \
-        "./outputs/${METHOD}/calibration/random_forest_model_original.joblib" \
-        "${COLLECTION_DIR}/phase3_calibration/model_original.joblib" \
-        "Original uncalibrated model"
-    
-    copy_file \
-        "./outputs/${METHOD}/calibration/Random_Forest_calibrator.pkl" \
-        "${COLLECTION_DIR}/phase3_calibration/calibrator.pkl" \
-        "Calibrator (Platt Scaling)"
-    
-    copy_file \
-        "./outputs/${METHOD}/calibration/Random_Forest_metrics.json" \
-        "${COLLECTION_DIR}/phase3_calibration/calibration_metrics.json" \
-        "Calibration metrics"
-    
-    copy_file \
-        "./outputs/${METHOD}/calibration/Random_Forest_report.txt" \
-        "${COLLECTION_DIR}/phase3_calibration/calibration_report.txt" \
-        "Calibration report"
-        
-elif [ "${METHOD}" = "logistic_regression" ]; then
-    copy_file \
-        "./outputs/${METHOD}/calibration/logistic_regression_model_original.joblib" \
-        "${COLLECTION_DIR}/phase3_calibration/model_original.joblib" \
-        "Original uncalibrated model"
-    
-    copy_file \
-        "./outputs/${METHOD}/calibration/Logistic_Regression_calibrator.pkl" \
-        "${COLLECTION_DIR}/phase3_calibration/calibrator.pkl" \
-        "Calibrator (Platt Scaling)"
-    
-    copy_file \
-        "./outputs/${METHOD}/calibration/Logistic_Regression_metrics.json" \
-        "${COLLECTION_DIR}/phase3_calibration/calibration_metrics.json" \
-        "Calibration metrics"
-    
-    copy_file \
-        "./outputs/${METHOD}/calibration/Logistic_Regression_report.txt" \
-        "${COLLECTION_DIR}/phase3_calibration/calibration_report.txt" \
-        "Calibration report"
+        "Original uncalibrated model" \
+        "model"
 fi
 
-# Copy comparison metrics (common across all methods)
-copy_file \
+# Copy calibrator (try local, then HF)
+if ! copy_file \
+    "./outputs/${METHOD}/calibration/${CALIBRATOR_PREFIX}_calibrator.pkl" \
+    "${COLLECTION_DIR}/phase3_calibration/calibrator.pkl" \
+    "Calibrator (Platt Scaling)"; then
+    download_from_hf \
+        "${PHASE3_HF_REPO}" \
+        "${CALIBRATOR_PREFIX}_calibrator.pkl" \
+        "${COLLECTION_DIR}/phase3_calibration/calibrator.pkl" \
+        "Calibrator (Platt Scaling)" \
+        "model"
+fi
+
+# Copy calibration metrics (try local, then HF)
+if ! copy_file \
+    "./outputs/${METHOD}/calibration/${CALIBRATOR_PREFIX}_metrics.json" \
+    "${COLLECTION_DIR}/phase3_calibration/calibration_metrics.json" \
+    "Calibration metrics"; then
+    download_from_hf \
+        "${PHASE3_HF_REPO}" \
+        "${CALIBRATOR_PREFIX}_metrics.json" \
+        "${COLLECTION_DIR}/phase3_calibration/calibration_metrics.json" \
+        "Calibration metrics" \
+        "model"
+fi
+
+# Copy calibration report (try local, then HF)
+if ! copy_file \
+    "./outputs/${METHOD}/calibration/${CALIBRATOR_PREFIX}_report.txt" \
+    "${COLLECTION_DIR}/phase3_calibration/calibration_report.txt" \
+    "Calibration report"; then
+    download_from_hf \
+        "${PHASE3_HF_REPO}" \
+        "${CALIBRATOR_PREFIX}_report.txt" \
+        "${COLLECTION_DIR}/phase3_calibration/calibration_report.txt" \
+        "Calibration report" \
+        "model"
+fi
+
+# Copy comparison metrics (common across all methods, try local then HF)
+if ! copy_file \
     "./outputs/${METHOD}/calibration/calibration_comparison_metrics.json" \
     "${COLLECTION_DIR}/phase3_calibration/calibration_comparison.json" \
-    "Before/after comparison"
+    "Before/after comparison"; then
+    download_from_hf \
+        "${PHASE3_HF_REPO}" \
+        "calibration_comparison_metrics.json" \
+        "${COLLECTION_DIR}/phase3_calibration/calibration_comparison.json" \
+        "Before/after comparison" \
+        "model"
+fi
 
-# Copy visualizations (Phase 3 saves directly in calibration/, not calibration/visualizations/)
-# Create visualizations subdirectory and copy PNG files
+# Copy visualizations - try local first, then download from HuggingFace
+echo "" | tee -a "${SUMMARY_FILE}"
+echo "  Collecting Phase 3 visualizations..." | tee -a "${SUMMARY_FILE}"
 mkdir -p "${COLLECTION_DIR}/phase3_calibration/visualizations"
-if ls ./outputs/${METHOD}/calibration/*.png 1> /dev/null 2>&1; then
-    cp ./outputs/${METHOD}/calibration/*.png "${COLLECTION_DIR}/phase3_calibration/visualizations/" 2>/dev/null || true
-    viz_count=$(ls -1 "${COLLECTION_DIR}/phase3_calibration/visualizations" 2>/dev/null | wc -l)
-    if [ ${viz_count} -gt 0 ]; then
-        echo -e "  ${GREEN}✓${NC} Phase 3 visualizations (${viz_count} files)"
-        echo "  [✓] Phase 3 visualizations (${viz_count} files)" >> "${SUMMARY_FILE}"
-        FILE_COUNT=$((FILE_COUNT + viz_count))
+
+# List of visualization files in Phase 3 HF repo
+viz_files=(
+    "${CALIBRATOR_PREFIX}_reliability_diagram.png"
+    "${CALIBRATOR_PREFIX}_risk_distribution.png"
+    "${CALIBRATOR_PREFIX}_risk_validation.csv"
+    "01_reliability_diagram_before_after.png"
+    "02_calibration_improvement_metrics.png"
+    "03_probability_distribution_changes.png"
+    "reliability_diagram_comparison.png"
+    "risk_distribution_detailed.png"
+    "risk_validation_detailed.csv"
+)
+
+viz_count=0
+for viz_file in "${viz_files[@]}"; do
+    local_viz="./outputs/${METHOD}/calibration/${viz_file}"
+    dest_viz="${COLLECTION_DIR}/phase3_calibration/visualizations/${viz_file}"
+    
+    if [ -f "${local_viz}" ]; then
+        cp "${local_viz}" "${dest_viz}"
+        ((viz_count++))
+    else
+        # Try downloading from HuggingFace using PHASE3_HF_REPO
+        if download_from_hf "${PHASE3_HF_REPO}" "${viz_file}" "${dest_viz}" "Phase 3 ${viz_file}" "model"; then
+            ((viz_count++))
+        fi
     fi
+done
+
+if [ ${viz_count} -gt 0 ]; then
+    echo -e "  ${GREEN}✓${NC} Phase 3 visualizations (${viz_count} files)" | tee -a "${SUMMARY_FILE}"
+else
+    echo -e "  ${YELLOW}⚠${NC} Phase 3 visualizations (empty or not found)" | tee -a "${SUMMARY_FILE}"
 fi
 
 ################################################################################
