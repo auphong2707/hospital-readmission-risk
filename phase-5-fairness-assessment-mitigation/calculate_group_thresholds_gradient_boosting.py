@@ -38,7 +38,6 @@ from dotenv import load_dotenv
 
 import numpy as np
 import pandas as pd
-import joblib
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -494,7 +493,7 @@ def main():
     print("✅ Phase 5 Part B (Mitigation) Completed Successfully!")
     print("="*80)
     print(f"📁 Results saved to: {args.output_dir}")
-    print(f"� Upload will be handled by orchestrator with combined results")
+    print(f"📤 Upload will be handled by orchestrator with combined results")
     print("="*80 + "\n")
 
 

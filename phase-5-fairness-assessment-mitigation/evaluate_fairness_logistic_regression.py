@@ -489,65 +489,67 @@ def main():
     
     # STEP 6: Overall performance metrics
     print_section("Step 6: Compute Overall Performance Metrics", "-")
-    from sklearn.metrics import (
-        accuracy_score, precision_score, recall_score, f1_score,
-        roc_auc_score, confusion_matrix
-    )
     
-    overall_metrics = {
-        'accuracy': accuracy_score(y_test, y_pred),
-        'precision': precision_score(y_test, y_pred, zero_division=0),
-        'recall': recall_score(y_test, y_pred, zero_division=0),
-        'f1': f1_score(y_test, y_pred, zero_division=0),
-        'roc_auc': roc_auc_score(y_test, y_pred_proba),
-        'threshold': optimal_threshold,
-        'intervention_rate': y_pred.mean()
-    }
-    
-    cm = confusion_matrix(y_test, y_pred)
-    tn, fp, fn, tp = cm.ravel()
-    overall_metrics['confusion_matrix'] = {
-        'tn': int(tn), 'fp': int(fp), 'fn': int(fn), 'tp': int(tp)
-    }
-    
-    print("📊 Overall Performance:")
-    print(f"   Accuracy: {overall_metrics['accuracy']:.4f}")
-    print(f"   Precision: {overall_metrics['precision']:.4f}")
-    print(f"   Recall (TPR): {overall_metrics['recall']:.4f}")
-    print(f"   F1-Score: {overall_metrics['f1']:.4f}")
-    print(f"   ROC-AUC: {overall_metrics['roc_auc']:.4f}")
-    print(f"   Intervention Rate: {overall_metrics['intervention_rate']:.2%}")
-    
-    # STEP 7: Group-specific analysis
-    print_section("Step 7: Compute Group-Specific Metrics", "-")
     analyzer = GroupPerformanceAnalyzer(
-        y_true=y_test,
+        y_true=y_test.values,
         y_pred=y_pred,
         y_pred_proba=y_pred_proba,
         demographics=demographics
     )
     
-    group_metrics = {}
-    for attribute in ['race', 'gender', 'age_group']:
-        if attribute in demographics.columns:
-            print(f"\n🔍 Analyzing {attribute.upper()}...")
-            metrics = analyzer.compute_group_metrics(attribute)
-            group_metrics[attribute] = metrics
-            
-            # Save to CSV
-            metrics_df = pd.DataFrame(metrics).T
-            csv_path = output_dir / f"group_metrics_{attribute}.csv"
-            metrics_df.to_csv(csv_path)
-            print(f"   ✅ Saved: {csv_path}")
+    overall_metrics = analyzer.compute_overall_metrics()
+    
+    print("📊 Overall Performance:")
+    print(f"   Accuracy: {overall_metrics['accuracy']:.3f}")
+    print(f"   Precision: {overall_metrics['precision']:.3f}")
+    print(f"   Recall (TPR): {overall_metrics['recall']:.3f}")
+    print(f"   F1-Score: {overall_metrics['f1_score']:.3f}")
+    print(f"   FPR: {overall_metrics['fpr']:.3f}")
+    print(f"   ROC-AUC: {overall_metrics['roc_auc']:.3f}")
+    print(f"   Intervention Rate: {overall_metrics['intervention_rate']:.1%}")
+    
+    print_section("Step 7: Compute Group-Specific Metrics", "-")
+    
+    all_group_metrics = analyzer.compute_all_group_metrics()
+    
+    for attribute, group_metrics_df in all_group_metrics.items():
+        print(f"\n� {attribute.upper()} Group Metrics:")
+        print(group_metrics_df[['group', 'n_samples', 'tpr', 'fpr', 'precision', 'intervention_rate']].to_string(index=False))
+        
+        # Save to CSV
+        output_file = output_dir / f"group_metrics_{attribute}.csv"
+        group_metrics_df.to_csv(output_file, index=False)
+        print(f"   ✅ Saved: {output_file}")
     
     # STEP 8: Fairness metrics
     print_section("Step 8: Calculate Fairness Metrics", "-")
-    fairness_results = FairnessMetrics.compute_all_fairness_metrics(group_metrics)
+    
+    fairness_results = FairnessMetrics.compute_all_fairness_metrics(all_group_metrics)
+    
+    for attribute, metrics in fairness_results.items():
+        print(f"\n🎯 {attribute.upper()} Fairness:")
+        
+        # Demographic Parity
+        dp = metrics['demographic_parity']
+        print(f"   Demographic Parity: {'✅ PASSED' if dp['passed'] else '❌ FAILED'}")
+        print(f"      Intervention rate gap: {dp['gap']:.3f} (max-min)")
+        
+        # Equalized Odds
+        eo = metrics['equalized_odds']
+        print(f"   Equalized Odds: {'✅ PASSED' if eo['passed'] else '❌ FAILED'}")
+        print(f"      TPR gap: {eo['tpr_gap']:.3f}, FPR gap: {eo['fpr_gap']:.3f}")
+        
+        # Equal Opportunity
+        eop = metrics['equal_opportunity']
+        print(f"   Equal Opportunity: {'✅ PASSED' if eop['passed'] else '❌ FAILED'}")
+        print(f"      TPR gap: {eop['gap']:.3f}")
     
     # STEP 9: Statistical significance testing
     print_section("Step 9: Perform Statistical Significance Testing", "-")
+    
     statistical_tests = {}
-    for attribute in group_metrics.keys():
+    
+    for attribute in all_group_metrics.keys():
         print(f"\n🔬 {attribute.upper()} Statistical Tests:")
         
         # Chi-square test for intervention rate
@@ -586,7 +588,7 @@ def main():
     
     risk_category_analysis = {}
     
-    for attribute in group_metrics.keys():
+    for attribute in all_group_metrics.keys():
         risk_df = analyze_risk_categories_by_group(
             risk_categories, y_test.values, demographics, attribute
         )
@@ -607,7 +609,7 @@ def main():
     
     fairness_summary = generate_fairness_summary(
         overall_metrics,
-        group_metrics,
+        all_group_metrics,
         fairness_results,
         statistical_tests,
         risk_category_analysis,
@@ -636,7 +638,7 @@ def main():
         'input_files': {
             'fairness_report': str(report_path),
             'statistical_tests': str(tests_path),
-            'group_metrics_csvs': [str(output_dir / f"group_metrics_{attr}.csv") for attr in group_metrics.keys()],
+            'group_metrics_csvs': [str(output_dir / f"group_metrics_{attr}.csv") for attr in all_group_metrics.keys()],
             'risk_categories_csvs': [str(output_dir / f"risk_categories_{attr}.csv") for attr in risk_category_analysis.keys()]
         }
     }
@@ -653,7 +655,7 @@ def main():
         y_pred_proba=y_pred_proba,
         risk_categories=risk_categories,
         demographics=demographics,
-        all_group_metrics=group_metrics,
+        all_group_metrics=all_group_metrics,
         fairness_results=fairness_results,
         output_dir=str(output_dir)
     )

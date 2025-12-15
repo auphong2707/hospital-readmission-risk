@@ -35,8 +35,6 @@ import argparse
 import warnings
 from pathlib import Path
 from dotenv import load_dotenv
-import json
-import pickle
 
 import numpy as np
 import pandas as pd
@@ -308,8 +306,8 @@ def main():
     # ========================================================================
     
     print_section("Step 5: Calculate Group-Specific Thresholds (Equalized Odds)", "=")
-        
-        # Calculate step size from num_thresholds
+    
+    # Calculate step size from num_thresholds
     threshold_step = (args.threshold_max - args.threshold_min) / (args.num_thresholds - 1)
     
     optimizer = ThresholdOptimizer(
@@ -323,6 +321,8 @@ def main():
     print(f"   Number of thresholds: {args.num_thresholds:,}")
     print(f"   Step size: {threshold_step:.6f}")
     
+    group_thresholds = {}
+    
     # Calculate overall metrics for target
     y_pred_global = (y_pred_proba >= global_threshold).astype(int)
     tn, fp, fn, tp = np.bincount(y_test.values * 2 + y_pred_global, minlength=4)
@@ -332,8 +332,6 @@ def main():
         'fpr': fp / (fp + tn) if (fp + tn) > 0 else 0.0,
         'intervention_rate': np.mean(y_pred_global)
     }
-    
-    group_thresholds = {}
     
     # Optimize for each demographic attribute
     for attribute in ['race', 'gender', 'age']:
