@@ -134,72 +134,6 @@ def load_and_preprocess_data(repo_id: str = "auphong2707/hospital-readmission-ri
         raise
 
 
-def load_logistic_regression_model(repo_id: str, cache_dir: str = "./models/downloaded", force_download: bool = False):
-    """
-    Load the trained Logistic Regression model from HuggingFace Hub or local directory.
-    
-    Note: No scaler is loaded - training data from Phase 1 is already scaled.
-    
-    Args:
-        repo_id: HuggingFace repository ID
-        cache_dir: Directory to cache downloaded files
-        force_download: Force re-download even if cached
-        
-    Returns:
-        tuple: (model, training_summary)
-    """
-    print_section("📥 Loading Pre-trained Logistic Regression Model", "-")
-    
-    output_dir = Path("./models")
-    
-    # Try loading from local directory first
-    local_model_path = output_dir / "logistic_regression.pkl"
-    local_summary_path = output_dir / "logistic_regression_training_summary.json"
-    
-    if local_model_path.exists() and not force_download:
-        print(f"✅ Loading model from local directory: {output_dir}")
-        
-        # Load model
-        with open(local_model_path, 'rb') as f:
-            model = pickle.load(f)
-        print(f"   ✅ Model loaded: {local_model_path}")
-        print(f"   ℹ️  No scaler needed - data already scaled from Phase 1")
-        
-        # Load training summary
-        training_summary = None
-        if local_summary_path.exists():
-            with open(local_summary_path, 'r') as f:
-                training_summary = json.load(f)
-            print(f"   ✅ Training summary loaded: {local_summary_path}")
-        else:
-            print(f"   ⚠️  Training summary not found")
-        
-        return model, training_summary
-    
-    else:
-        print(f"⏳ Model not found locally or force download requested")
-        print(f"   Attempting to download from HuggingFace Hub: {repo_id}")
-        
-        try:
-            # Download model
-            model, training_summary = download_model_from_hf(
-                repo_id=repo_id,
-                model_filename="logistic_regression.pkl",
-                cache_dir=cache_dir,
-                force_download=force_download
-            )
-            
-            print(f"   ℹ️  No scaler needed - data already scaled from Phase 1")
-            
-            return model, training_summary
-            
-        except Exception as e:
-            print(f"\n❌ Error downloading from HuggingFace: {e}")
-            print(f"\n💡 Please ensure Phase 2 training has been completed and model is saved")
-            print(f"   Run: python ./phase-2-risk-modeling/train_logistic_regression.py")
-            raise
-
-
 def generate_uncalibrated_predictions(model, X_train, X_test, y_train, y_test):
     """
     Generate uncalibrated predictions from the trained model.
@@ -601,10 +535,11 @@ Examples:
     print(f"   Force Download: {args.force_download}")
     
     try:
-        # STEP 1: Load model from HuggingFace Hub or local directory
-        print_section("📥 Step 1: Load Pre-trained Model", "=")
-        model, training_summary = load_logistic_regression_model(
+        # STEP 1: Download model from HuggingFace Hub
+        print_section("📥 Step 1: Download Pre-trained Model", "=")
+        model, training_summary = download_model_from_hf(
             repo_id=args.repo_id,
+            model_filename="logistic_regression.pkl",
             cache_dir="./models/downloaded",
             force_download=args.force_download
         )

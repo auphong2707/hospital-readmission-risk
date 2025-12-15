@@ -5,44 +5,12 @@ This script performs comprehensive final evaluation of the deployed hospital rea
 prediction system using the threshold configuration determined in Phase 5 (either global
 from Phase 4 or group-specific from Phase 5 mitigation).
 
-Pipeline:
-1. Load deployment configuration from Phase 5 (deployment_config.json)
-2. Load test data and model predictions
-3. Apply deployed thresholds (global or group-specific)
-4. Calculate comprehensive metrics:
-   - Performance: accuracy, precision, recall, F1, ROC-AUC, etc.
-   - Calibration: Brier score, ECE, reliability diagrams
-   - Group performance: metrics by race, gender, age
-   - Fairness: TPR/FPR disparities, demographic parity
-   - ROI: cost savings, financial impact
-   - Risk stratification: performance by risk category
-5. Generate 12 comprehensive visualizations
-6. Create final_system_metrics.json (single source of truth for Phase 7)
-7. Create deployment_report.json (for clinical stakeholders)
-
-This is the FINAL evaluation - the metrics produced here are what will be published
-and used for deployment decisions.
-
 Usage (from project root):
-    # Basic usage with auphong2707 repositories
     python ./phase-6-final-system-evaluation/final_evaluation_gradient_boosting.py
-    
-    # With custom repositories (if you forked the project)
-    python ./phase-6-final-system-evaluation/final_evaluation_gradient_boosting.py \
-        --data-repo-id your-username/hospital-readmission-risk-data \
-        --model-repo-id your-username/hospital-readmission-lgbm-calibrated \
-        --fairness-repo-id your-username/hospital-readmission-gradient-boosting-fairness-assessment-mitigation
-
-Requirements:
-    pip install pandas numpy scikit-learn matplotlib seaborn huggingface_hub joblib
-
-Phase 5 Output Required:
-    - deployment_config.json from Phase 5 fairness assessment & mitigation
 """
 
 import os
 import sys
-import json
 import argparse
 from pathlib import Path
 import warnings
@@ -50,7 +18,6 @@ warnings.filterwarnings('ignore')
 
 import numpy as np
 import pandas as pd
-import joblib
 from huggingface_hub import hf_hub_download
 
 # Add parent directory to path for utilities import
@@ -177,7 +144,7 @@ def main():
         
         # Step 6: Generate reports
         generate_reports(
-            "Gradient Boosting (LightGBM)",
+            "Gradient Boosting",
             config,
             metrics,
             threshold_summary,
