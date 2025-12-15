@@ -295,6 +295,7 @@ case "${METHOD}" in
         DISPLAY_NAME="Gradient Boosting"
         PHASE2_HF_REPO="auphong2707/hospital-readmission-lgbm"
         PHASE3_HF_REPO="auphong2707/hospital-readmission-lgbm-calibrated"
+        PHASE4_HF_REPO="auphong2707/hospital-readmission-lgbm-threshold-optimized"
         CALIBRATOR_PREFIX="Gradient_Boosting_(LightGBM)"
         ;;
     random_forest)
@@ -302,6 +303,7 @@ case "${METHOD}" in
         DISPLAY_NAME="Random Forest"
         PHASE2_HF_REPO="auphong2707/hospital-readmission-rf"
         PHASE3_HF_REPO="auphong2707/hospital-readmission-rf-calibrated"
+        PHASE4_HF_REPO="auphong2707/hospital-readmission-rf-threshold-optimized"
         CALIBRATOR_PREFIX="Random_Forest"
         ;;
     logistic_regression)
@@ -309,6 +311,7 @@ case "${METHOD}" in
         DISPLAY_NAME="Logistic Regression"
         PHASE2_HF_REPO="auphong2707/hospital-readmission-lr"
         PHASE3_HF_REPO="auphong2707/hospital-readmission-lr-calibrated"
+        PHASE4_HF_REPO="auphong2707/hospital-readmission-lr-threshold-optimized"
         CALIBRATOR_PREFIX="Logistic_Regression"
         ;;
 esac
@@ -554,48 +557,111 @@ fi
 
 echo "" | tee -a "${SUMMARY_FILE}"
 echo -e "${BLUE}Phase 4 - Threshold Optimization & ROI:${NC}" | tee -a "${SUMMARY_FILE}"
+echo -e "  ${YELLOW}ℹ${NC}  HuggingFace Repo: ${PHASE4_HF_REPO}"
 
-# Copy threshold results (actual filename is threshold_results.csv, not threshold_search_results.csv)
-copy_file \
+# Copy threshold results (try local, then HF)
+if ! copy_file \
     "./outputs/${METHOD}/threshold_optimization/threshold_results.csv" \
     "${COLLECTION_DIR}/phase4_threshold_optimization/threshold_results.csv" \
-    "Threshold search results"
+    "Threshold search results"; then
+    download_from_hf \
+        "${PHASE4_HF_REPO}" \
+        "threshold_results.csv" \
+        "${COLLECTION_DIR}/phase4_threshold_optimization/threshold_results.csv" \
+        "Threshold search results" \
+        "model"
+fi
 
-copy_file \
+# Copy optimal thresholds (try local, then HF)
+if ! copy_file \
     "./outputs/${METHOD}/threshold_optimization/optimal_thresholds.json" \
     "${COLLECTION_DIR}/phase4_threshold_optimization/optimal_thresholds.json" \
-    "Optimal thresholds"
+    "Optimal thresholds"; then
+    download_from_hf \
+        "${PHASE4_HF_REPO}" \
+        "optimal_thresholds.json" \
+        "${COLLECTION_DIR}/phase4_threshold_optimization/optimal_thresholds.json" \
+        "Optimal thresholds" \
+        "model"
+fi
 
-# Copy ROI metrics
-copy_file \
+# Copy ROI metrics (try local, then HF)
+if ! copy_file \
     "./outputs/${METHOD}/threshold_optimization/roi_metrics.json" \
     "${COLLECTION_DIR}/phase4_threshold_optimization/roi_metrics.json" \
-    "ROI metrics"
+    "ROI metrics"; then
+    download_from_hf \
+        "${PHASE4_HF_REPO}" \
+        "roi_metrics.json" \
+        "${COLLECTION_DIR}/phase4_threshold_optimization/roi_metrics.json" \
+        "ROI metrics" \
+        "model"
+fi
 
-copy_file \
+# Copy ROI report (try local, then HF)
+if ! copy_file \
     "./outputs/${METHOD}/threshold_optimization/roi_report.txt" \
     "${COLLECTION_DIR}/phase4_threshold_optimization/roi_report.txt" \
-    "ROI detailed report"
+    "ROI detailed report"; then
+    download_from_hf \
+        "${PHASE4_HF_REPO}" \
+        "roi_report.txt" \
+        "${COLLECTION_DIR}/phase4_threshold_optimization/roi_report.txt" \
+        "ROI detailed report" \
+        "model"
+fi
 
-# Copy Phase 5 input summary (actual filename is phase4_summary_for_phase5.json)
-copy_file \
+# Copy Phase 5 input summary (try local, then HF)
+if ! copy_file \
     "./outputs/${METHOD}/threshold_optimization/phase4_summary_for_phase5.json" \
     "${COLLECTION_DIR}/phase4_threshold_optimization/phase5_input_summary.json" \
-    "Phase 5 input summary"
+    "Phase 5 input summary"; then
+    download_from_hf \
+        "${PHASE4_HF_REPO}" \
+        "phase4_summary_for_phase5.json" \
+        "${COLLECTION_DIR}/phase4_threshold_optimization/phase5_input_summary.json" \
+        "Phase 5 input summary" \
+        "model"
+fi
 
-# Copy visualizations (Phase 4 may save directly or in visualizations subdirectory)
-copy_dir \
-    "./outputs/${METHOD}/threshold_optimization/visualizations" \
-    "${COLLECTION_DIR}/phase4_threshold_optimization/visualizations" \
-    "Phase 4 visualizations (from visualizations/)" || \
-# Try copying PNG files directly from threshold_optimization directory
-(mkdir -p "${COLLECTION_DIR}/phase4_threshold_optimization/visualizations" && \
- cp ./outputs/${METHOD}/threshold_optimization/*.png "${COLLECTION_DIR}/phase4_threshold_optimization/visualizations/" 2>/dev/null && \
- local viz_count=$(ls -1 "${COLLECTION_DIR}/phase4_threshold_optimization/visualizations" 2>/dev/null | wc -l) && \
- [ ${viz_count} -gt 0 ] && \
- echo -e "  ${GREEN}✓${NC} Phase 4 visualizations (${viz_count} files from root)" && \
- echo "  [✓] Phase 4 visualizations (${viz_count} files from root)" >> "${SUMMARY_FILE}" && \
- FILE_COUNT=$((FILE_COUNT + viz_count)))
+# Copy visualizations - try local first, then download from HuggingFace
+echo "" | tee -a "${SUMMARY_FILE}"
+echo "  Collecting Phase 4 visualizations..." | tee -a "${SUMMARY_FILE}"
+mkdir -p "${COLLECTION_DIR}/phase4_threshold_optimization/visualizations"
+
+# List of visualization files created by Phase 4
+viz_files=(
+    "1_expected_value_curve.png"
+    "2_cost_benefit_analysis.png"
+    "3_metrics_vs_threshold.png"
+    "4_confusion_matrix.png"
+    "5_risk_category_distribution.png"
+    "6_roi_sensitivity_analysis.png"
+    "7_intervention_volume_forecast.png"
+    "8_cost_savings_projection.png"
+)
+
+viz_count=0
+for viz_file in "${viz_files[@]}"; do
+    local_viz="./outputs/${METHOD}/threshold_optimization/visualizations/${viz_file}"
+    dest_viz="${COLLECTION_DIR}/phase4_threshold_optimization/visualizations/${viz_file}"
+    
+    if [ -f "${local_viz}" ]; then
+        cp "${local_viz}" "${dest_viz}"
+        ((viz_count++))
+    else
+        # Try downloading from HuggingFace using PHASE4_HF_REPO
+        if download_from_hf "${PHASE4_HF_REPO}" "${viz_file}" "${dest_viz}" "Phase 4 ${viz_file}" "model"; then
+            ((viz_count++))
+        fi
+    fi
+done
+
+if [ ${viz_count} -gt 0 ]; then
+    echo -e "  ${GREEN}✓${NC} Phase 4 visualizations (${viz_count} files)" | tee -a "${SUMMARY_FILE}"
+else
+    echo -e "  ${YELLOW}⚠${NC} Phase 4 visualizations (empty or not found)" | tee -a "${SUMMARY_FILE}"
+fi
 
 ################################################################################
 # Phase 5: Fairness Assessment & Mitigation
