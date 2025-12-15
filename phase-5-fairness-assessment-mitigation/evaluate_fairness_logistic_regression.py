@@ -180,375 +180,541 @@ def parse_arguments():
     return parser.parse_args()
 
 
-
-
-
-def generate_lr_calibrated_predictions(model, calibrator, X_test):
+def apply_threshold_and_categorize(
+    y_pred_proba: np.ndarray,
+    optimal_threshold: float,
+    low_threshold: float,
+    high_threshold: float
+) -> tuple:
     """
-    Generate calibrated predictions for Logistic Regression model.
-    
-    Note: X_test should already be scaled from Phase 1 preprocessing.
+    Apply optimal threshold and assign risk categories.
     
     Args:
-        model: Trained Logistic Regression model
-        calibrator: Calibrator for probabilities
-        X_test: Test features (already scaled from Phase 1)
+        y_pred_proba: Calibrated probabilities
+        optimal_threshold: Optimal decision threshold
+        low_threshold: Low risk boundary
+        high_threshold: High risk boundary
         
     Returns:
-        np.ndarray: Calibrated probabilities
+        tuple: (y_pred, risk_categories)
     """
-    print("🔮 Generating calibrated predictions...")
+    # Binary predictions at optimal threshold
+    y_pred = (y_pred_proba >= optimal_threshold).astype(int)
     
-    # X_test is already scaled from Phase 1 - no need to scale again!
-    # Get uncalibrated probabilities
-    y_pred_proba_uncalibrated = model.predict_proba(X_test)[:, 1]
+    # Risk categories
+    risk_categories = np.full(len(y_pred_proba), 'Medium')
+    risk_categories[y_pred_proba < low_threshold] = 'Low'
+    risk_categories[y_pred_proba >= high_threshold] = 'High'
     
-    # Apply calibration
-    try:
-        pred = calibrator.predict_proba(y_pred_proba_uncalibrated.reshape(-1, 1))
-    except Exception:
-        pred = calibrator.predict_proba(y_pred_proba_uncalibrated)
+    return y_pred, risk_categories
+
+
+def analyze_risk_categories_by_group(
+    risk_categories: np.ndarray,
+    y_true: np.ndarray,
+    demographics: pd.DataFrame,
+    attribute: str
+) -> pd.DataFrame:
+    """
+    Analyze risk category distribution by demographic group.
     
-    # Normalize to 1D
-    if isinstance(pred, np.ndarray):
-        if pred.ndim == 2 and pred.shape[1] >= 2:
-            y_pred_proba_calibrated = pred[:, 1]
+    Args:
+        risk_categories: Assigned risk categories
+        y_true: True labels
+        demographics: Demographics DataFrame
+        attribute: Demographic attribute
+        
+    Returns:
+        DataFrame with risk category analysis per group
+    """
+    if attribute not in demographics.columns:
+        return pd.DataFrame()
+    
+    groups = demographics[attribute].unique()
+    results = []
+    
+    for group in groups:
+        mask = (demographics[attribute] == group).values
+        
+        if mask.sum() == 0:
+            continue
+        
+        group_risk = risk_categories[mask]
+        group_true = y_true[mask]
+        
+        # Risk category distribution
+        risk_dist = pd.Series(group_risk).value_counts(normalize=True)
+        
+        # Actual readmission rate per risk category
+        readmit_by_risk = {}
+        for risk_cat in ['Low', 'Medium', 'High']:
+            risk_mask = group_risk == risk_cat
+            if risk_mask.sum() > 0:
+                readmit_by_risk[risk_cat] = float(group_true[risk_mask].mean())
+            else:
+                readmit_by_risk[risk_cat] = 0.0
+        
+        group_result = {
+            'attribute': attribute,
+            'group': group,
+            'n_samples': int(mask.sum()),
+            'pct_low_risk': float(risk_dist.get('Low', 0)),
+            'pct_medium_risk': float(risk_dist.get('Medium', 0)),
+            'pct_high_risk': float(risk_dist.get('High', 0)),
+            'readmit_rate_low': readmit_by_risk.get('Low', 0.0),
+            'readmit_rate_medium': readmit_by_risk.get('Medium', 0.0),
+            'readmit_rate_high': readmit_by_risk.get('High', 0.0)
+        }
+        
+        results.append(group_result)
+    
+    return pd.DataFrame(results)
+
+
+def generate_fairness_summary(
+    overall_metrics: Dict,
+    all_group_metrics: Dict,
+    fairness_results: Dict,
+    statistical_tests: Dict,
+    risk_category_analysis: Dict,
+    phase4_results: Dict
+) -> Dict:
+    """
+    Generate comprehensive fairness summary report.
+    
+    Args:
+        overall_metrics: Overall performance metrics
+        all_group_metrics: Group-specific metrics
+        fairness_results: Fairness metric results
+        statistical_tests: Statistical test results
+        risk_category_analysis: Risk category fairness analysis
+        phase4_results: Phase 4 results
+        
+    Returns:
+        dict: Comprehensive fairness report with Phase 6 inputs
+    """
+    summary = {
+        'phase': 5,
+        'evaluation_name': 'Fairness Evaluation & Deployment Readiness',
+        'model': 'Logistic Regression with Platt Calibration',
+        'optimal_threshold': phase4_results['optimal_threshold'],
+        'overall_performance': overall_metrics,
+        'fairness_evaluation': {},
+        'bias_detected': False,
+        'recommendations': [],
+        # Phase 6 decision inputs
+        'phase6_inputs': {
+            'requires_mitigation': False,
+            'group_metrics_summary': {},
+            'worst_violations': [],
+            'mitigation_priority': 'none'  # none, low, medium, high
+        }
+    }
+    
+    # Track worst violations for Phase 6 prioritization
+    worst_violations = []
+    
+    # Evaluate fairness for each attribute
+    for attribute, fairness_metrics in fairness_results.items():
+        attr_summary = {
+            'demographic_parity': fairness_metrics['demographic_parity'],
+            'equalized_odds': fairness_metrics['equalized_odds'],
+            'equal_opportunity': fairness_metrics['equal_opportunity'],
+            'all_passed': (
+                fairness_metrics['demographic_parity']['passed'] and
+                fairness_metrics['equalized_odds']['passed'] and
+                fairness_metrics['equal_opportunity']['passed']
+            )
+        }
+        
+        summary['fairness_evaluation'][attribute] = attr_summary
+        
+        # Check for bias
+        if not attr_summary['all_passed']:
+            summary['bias_detected'] = True
+            
+            # Record violations for Phase 6
+            violations = []
+            if not fairness_metrics['demographic_parity']['passed']:
+                violations.append({
+                    'metric': 'demographic_parity',
+                    'gap': fairness_metrics['demographic_parity']['gap'],
+                    'threshold': 0.05
+                })
+            if not fairness_metrics['equalized_odds']['passed']:
+                violations.append({
+                    'metric': 'equalized_odds',
+                    'tpr_gap': fairness_metrics['equalized_odds']['tpr_gap'],
+                    'fpr_gap': fairness_metrics['equalized_odds']['fpr_gap'],
+                    'threshold': 0.05
+                })
+            if not fairness_metrics['equal_opportunity']['passed']:
+                violations.append({
+                    'metric': 'equal_opportunity',
+                    'gap': fairness_metrics['equal_opportunity']['gap'],
+                    'threshold': 0.05
+                })
+            
+            worst_violations.append({
+                'attribute': attribute,
+                'violations': violations
+            })
+        
+        # Collect group-level data for Phase 6
+        if attribute in all_group_metrics:
+            group_data = all_group_metrics[attribute].to_dict('records')
+            summary['phase6_inputs']['group_metrics_summary'][attribute] = group_data
+    
+    # Determine mitigation priority
+    summary['phase6_inputs']['requires_mitigation'] = summary['bias_detected']
+    summary['phase6_inputs']['worst_violations'] = worst_violations
+    
+    if summary['bias_detected']:
+        # Calculate severity based on number of violations and gap sizes
+        max_gap = 0.0
+        violation_count = sum(len(v['violations']) for v in worst_violations)
+        
+        for v in worst_violations:
+            for violation in v['violations']:
+                if 'gap' in violation:
+                    max_gap = max(max_gap, abs(violation['gap']))
+                if 'tpr_gap' in violation:
+                    max_gap = max(max_gap, abs(violation['tpr_gap']))
+                if 'fpr_gap' in violation:
+                    max_gap = max(max_gap, abs(violation['fpr_gap']))
+        
+        # Priority logic: high if many violations or large gaps
+        if max_gap > 0.10 or violation_count >= 6:
+            summary['phase6_inputs']['mitigation_priority'] = 'high'
+        elif max_gap > 0.07 or violation_count >= 3:
+            summary['phase6_inputs']['mitigation_priority'] = 'medium'
         else:
-            y_pred_proba_calibrated = pred.ravel()
+            summary['phase6_inputs']['mitigation_priority'] = 'low'
+    
+    # Add recommendations
+    if summary['bias_detected']:
+        summary['recommendations'].append(
+            "⚠️ Fairness violations detected. Consider group-specific thresholds or recalibration."
+        )
+        summary['recommendations'].append(
+            "Review group-specific metrics and statistical tests for detailed analysis."
+        )
+        summary['recommendations'].append(
+            "Consult with clinical and ethics teams before deployment."
+        )
+        summary['recommendations'].append(
+            f"Phase 6 mitigation priority: {summary['phase6_inputs']['mitigation_priority'].upper()}"
+        )
     else:
-        y_pred_proba_calibrated = pred
+        summary['recommendations'].append(
+            "✅ No significant fairness violations detected at ±5% tolerance."
+        )
+        summary['recommendations'].append(
+            "Proceed with deployment using global optimal threshold."
+        )
+        summary['recommendations'].append(
+            "Implement monitoring plan to track fairness metrics in production."
+        )
     
-    print(f"✅ Generated {len(y_pred_proba_calibrated)} calibrated predictions")
-    print(f"   Probability range: [{y_pred_proba_calibrated.min():.4f}, {y_pred_proba_calibrated.max():.4f}]")
-    print(f"   Mean probability: {y_pred_proba_calibrated.mean():.4f}")
-    
-    return y_pred_proba_calibrated
+    return summary
 
 
 def main():
-    """Main fairness evaluation workflow."""
+    """Main execution pipeline."""
     
+    print("\n" + "="*80)
+    print("PHASE 5: FAIRNESS EVALUATION & DEPLOYMENT READINESS")
+    print("Hospital Readmission Risk Prediction - Logistic Regression Model")
+    print("="*80)
+    
+    # Parse arguments
     args = parse_arguments()
-    
-    print_section("🎯 Phase 5: Fairness Evaluation - Logistic Regression", "=")
-    print(f"📋 Configuration:")
-    print(f"   Data source: {'Local files' if args.use_local else 'HuggingFace Hub'}")
-    print(f"   Model repo: {args.model_repo_id}")
-    print(f"   Output directory: {args.output_dir}")
-    print(f"   Phase 4 summary: {args.phase4_summary}")
     
     # Create output directory
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    viz_dir = output_dir / "visualizations"
-    viz_dir.mkdir(exist_ok=True)
     
-    try:
-        # STEP 1: Load test data and demographics
-        print_section("📂 Step 1: Load Test Data and Demographics", "=")
-        X_test, y_test, demographics = load_test_data_and_demographics(
-            use_local=args.use_local,
-            local_test_path=args.local_test,
-            local_demographics_path=args.local_demographics,
-            data_repo_id=args.data_repo_id,
-            cache_dir=args.cache_dir
+    # ========================================================================
+    # STEP 1: Load All Inputs
+    # ========================================================================
+    
+    print_section("Step 1: Load Test Data and Demographics", "-")
+    
+    X_test, y_test, demographics = load_test_data_and_demographics(
+        data_repo_id=args.data_repo_id,
+        use_local=args.use_local,
+        local_test_path=args.local_test,
+        local_demographics_path=args.local_demographics
+    )
+    
+    # STEP 2: Load calibrated model
+    print_section("Step 2: Load Calibrated Model", "-")
+    # Note: No scaler needed - test data already scaled from Phase 1
+    model, calibrator = load_model_and_calibrator(
+        model_repo_id=args.model_repo_id,
+        cache_dir=args.cache_dir,
+        use_local=args.use_local,
+        local_model_path=args.local_model,
+        local_calibrator_path=args.local_calibrator,
+        method='logistic_regression'
+    )
+    
+    # STEP 3: Load Phase 4 results
+    print_section("Step 3: Load Phase 4 Results", "-")
+    phase4_results = load_phase4_results(args.phase4_summary)
+    optimal_threshold = phase4_results['optimal_threshold']
+    risk_thresholds = phase4_results['risk_thresholds']
+    
+    print(f"✅ Loaded Phase 4 results:")
+    print(f"   Optimal threshold: {optimal_threshold:.4f}")
+    print(f"   Risk thresholds: {risk_thresholds}")
+    
+    # STEP 4: Generate calibrated predictions
+    print_section("Step 4: Generate Calibrated Predictions", "-")
+    # X_test is already scaled from Phase 1, no need to scale again
+    y_pred_proba = generate_calibrated_predictions(model, calibrator, X_test)
+    
+    print_section("Step 5: Apply Optimal Threshold and Categorize Risk", "-")
+    
+    y_pred, risk_categories = apply_threshold_and_categorize(
+        y_pred_proba,
+        optimal_threshold,
+        risk_thresholds['low'],
+        risk_thresholds['high']
+    )
+    
+    print(f"✅ Applied optimal threshold: {optimal_threshold:.4f}")
+    print(f"   Predictions: {dict(pd.Series(y_pred).value_counts())}")
+    print(f"   Risk categories: {dict(pd.Series(risk_categories).value_counts())}")
+    
+    # STEP 6: Overall performance metrics
+    print_section("Step 6: Compute Overall Performance Metrics", "-")
+    from sklearn.metrics import (
+        accuracy_score, precision_score, recall_score, f1_score,
+        roc_auc_score, confusion_matrix
+    )
+    
+    overall_metrics = {
+        'accuracy': accuracy_score(y_test, y_pred),
+        'precision': precision_score(y_test, y_pred, zero_division=0),
+        'recall': recall_score(y_test, y_pred, zero_division=0),
+        'f1': f1_score(y_test, y_pred, zero_division=0),
+        'roc_auc': roc_auc_score(y_test, y_pred_proba),
+        'threshold': optimal_threshold,
+        'intervention_rate': y_pred.mean()
+    }
+    
+    cm = confusion_matrix(y_test, y_pred)
+    tn, fp, fn, tp = cm.ravel()
+    overall_metrics['confusion_matrix'] = {
+        'tn': int(tn), 'fp': int(fp), 'fn': int(fn), 'tp': int(tp)
+    }
+    
+    print("📊 Overall Performance:")
+    print(f"   Accuracy: {overall_metrics['accuracy']:.4f}")
+    print(f"   Precision: {overall_metrics['precision']:.4f}")
+    print(f"   Recall (TPR): {overall_metrics['recall']:.4f}")
+    print(f"   F1-Score: {overall_metrics['f1']:.4f}")
+    print(f"   ROC-AUC: {overall_metrics['roc_auc']:.4f}")
+    print(f"   Intervention Rate: {overall_metrics['intervention_rate']:.2%}")
+    
+    # STEP 7: Group-specific analysis
+    print_section("Step 7: Compute Group-Specific Metrics", "-")
+    analyzer = GroupPerformanceAnalyzer(
+        y_true=y_test,
+        y_pred=y_pred,
+        y_pred_proba=y_pred_proba,
+        demographics=demographics
+    )
+    
+    group_metrics = {}
+    for attribute in ['race', 'gender', 'age_group']:
+        if attribute in demographics.columns:
+            print(f"\n🔍 Analyzing {attribute.upper()}...")
+            metrics = analyzer.compute_group_metrics(attribute)
+            group_metrics[attribute] = metrics
+            
+            # Save to CSV
+            metrics_df = pd.DataFrame(metrics).T
+            csv_path = output_dir / f"group_metrics_{attribute}.csv"
+            metrics_df.to_csv(csv_path)
+            print(f"   ✅ Saved: {csv_path}")
+    
+    # STEP 8: Fairness metrics
+    print_section("Step 8: Calculate Fairness Metrics", "-")
+    fairness_results = FairnessMetrics.compute_all_fairness_metrics(group_metrics)
+    
+    # STEP 9: Statistical significance testing
+    print_section("Step 9: Perform Statistical Significance Testing", "-")
+    statistical_tests = {}
+    for attribute in group_metrics.keys():
+        print(f"\n🔬 {attribute.upper()} Statistical Tests:")
+        
+        # Chi-square test for intervention rate
+        chi2_result = StatisticalTester.chi_square_test_intervention_rate(
+            y_pred, demographics, attribute
+        )
+        statistical_tests[f'{attribute}_chi2'] = chi2_result
+        
+        print(f"   Chi-square test (intervention rate):")
+        print(f"      χ² = {chi2_result['chi2_statistic']:.2f}, p-value = {chi2_result['p_value']:.4f}")
+        print(f"      Result: {chi2_result['interpretation']}")
+    
+    # Save statistical tests
+    tests_path = output_dir / "statistical_tests.json"
+    
+    # Convert numpy types to native Python types for JSON serialization
+    def convert_to_serializable(obj):
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        elif isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, dict):
+            return {k: convert_to_serializable(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_to_serializable(item) for item in obj]
+        return obj
+    
+    statistical_tests_serializable = convert_to_serializable(statistical_tests)
+    
+    # STEP 10: Risk category fairness
+    print_section("Step 10: Analyze Risk Category Distribution by Group", "-")
+    
+    risk_category_analysis = {}
+    
+    for attribute in group_metrics.keys():
+        risk_df = analyze_risk_categories_by_group(
+            risk_categories, y_test.values, demographics, attribute
         )
         
-        # STEP 2: Load calibrated model
-        print_section("📥 Step 2: Load Calibrated Model", "=")
-        # Note: No scaler needed - test data already scaled from Phase 1
-        model, calibrator = load_model_and_calibrator(
-            model_repo_id=args.model_repo_id,
-            cache_dir=args.cache_dir,
-            use_local=args.use_local,
-            local_model_path=args.local_model,
-            local_calibrator_path=args.local_calibrator,
-            method='logistic_regression'
-        )
-        
-        # STEP 3: Load Phase 4 results
-        print_section("📊 Step 3: Load Phase 4 Results", "=")
-        phase4_results = load_phase4_results(args.phase4_summary)
-        optimal_threshold = phase4_results['optimal_threshold']
-        risk_thresholds = phase4_results['risk_thresholds']
-        
-        print(f"✅ Loaded Phase 4 results:")
-        print(f"   Optimal threshold: {optimal_threshold:.4f}")
-        print(f"   Risk thresholds: {risk_thresholds}")
-        
-        # STEP 4: Generate calibrated predictions
-        print_section("🔮 Step 4: Generate Calibrated Predictions", "=")
-        # X_test is already scaled from Phase 1, no need to scale again
-        y_pred_proba = generate_lr_calibrated_predictions(model, calibrator, X_test)
-        y_pred = (y_pred_proba >= optimal_threshold).astype(int)
-        
-        # STEP 5: Overall performance metrics
-        print_section("📈 Step 5: Compute Overall Performance", "=")
-        from sklearn.metrics import (
-            accuracy_score, precision_score, recall_score, f1_score,
-            roc_auc_score, confusion_matrix
-        )
-        
-        overall_metrics = {
-            'accuracy': accuracy_score(y_test, y_pred),
-            'precision': precision_score(y_test, y_pred, zero_division=0),
-            'recall': recall_score(y_test, y_pred, zero_division=0),
-            'f1': f1_score(y_test, y_pred, zero_division=0),
-            'roc_auc': roc_auc_score(y_test, y_pred_proba),
-            'threshold': optimal_threshold,
-            'intervention_rate': y_pred.mean()
+        if not risk_df.empty:
+            risk_category_analysis[attribute] = risk_df
+            
+            print(f"\n📊 {attribute.upper()} Risk Categories:")
+            print(risk_df[['group', 'pct_low_risk', 'pct_medium_risk', 'pct_high_risk']].to_string(index=False))
+            
+            # Save to CSV
+            output_file = output_dir / f"risk_categories_{attribute}.csv"
+            risk_df.to_csv(output_file, index=False)
+            print(f"   ✅ Saved: {output_file}")
+    
+    # STEP 11: Generate fairness summary report
+    print_section("Step 11: Generate Fairness Summary Report", "-")
+    
+    fairness_summary = generate_fairness_summary(
+        overall_metrics,
+        group_metrics,
+        fairness_results,
+        statistical_tests,
+        risk_category_analysis,
+        phase4_results
+    )
+    
+    # Save fairness report
+    report_path = output_dir / "fairness_report.json"
+    save_results(fairness_summary, str(report_path))
+    
+    # Save statistical tests
+    tests_path = output_dir / "statistical_tests.json"
+    save_results(statistical_tests, str(tests_path))
+    
+    # Save Phase 6 decision inputs (compact summary for mitigation decisions)
+    phase6_summary_path = output_dir / "phase5_summary_for_phase6.json"
+    phase6_summary = {
+        'requires_mitigation': fairness_summary['phase6_inputs']['requires_mitigation'],
+        'mitigation_priority': fairness_summary['phase6_inputs']['mitigation_priority'],
+        'bias_detected': fairness_summary['bias_detected'],
+        'optimal_threshold': fairness_summary['optimal_threshold'],
+        'overall_performance': fairness_summary['overall_performance'],
+        'worst_violations': fairness_summary['phase6_inputs']['worst_violations'],
+        'group_metrics_summary': fairness_summary['phase6_inputs']['group_metrics_summary'],
+        'phase4_results': phase4_results,
+        'input_files': {
+            'fairness_report': str(report_path),
+            'statistical_tests': str(tests_path),
+            'group_metrics_csvs': [str(output_dir / f"group_metrics_{attr}.csv") for attr in group_metrics.keys()],
+            'risk_categories_csvs': [str(output_dir / f"risk_categories_{attr}.csv") for attr in risk_category_analysis.keys()]
         }
-        
-        cm = confusion_matrix(y_test, y_pred)
-        tn, fp, fn, tp = cm.ravel()
-        overall_metrics['confusion_matrix'] = {
-            'tn': int(tn), 'fp': int(fp), 'fn': int(fn), 'tp': int(tp)
-        }
-        
-        print("📊 Overall Performance:")
-        print(f"   Accuracy: {overall_metrics['accuracy']:.4f}")
-        print(f"   Precision: {overall_metrics['precision']:.4f}")
-        print(f"   Recall (TPR): {overall_metrics['recall']:.4f}")
-        print(f"   F1-Score: {overall_metrics['f1']:.4f}")
-        print(f"   ROC-AUC: {overall_metrics['roc_auc']:.4f}")
-        print(f"   Intervention Rate: {overall_metrics['intervention_rate']:.2%}")
-        
-        # STEP 6: Group-specific analysis
-        print_section("👥 Step 6: Group-Specific Performance Analysis", "=")
-        analyzer = GroupPerformanceAnalyzer(
-            y_true=y_test,
-            y_pred=y_pred,
-            y_pred_proba=y_pred_proba,
-            demographics=demographics
-        )
-        
-        group_metrics = {}
-        for attribute in ['race', 'gender', 'age_group']:
-            if attribute in demographics.columns:
-                print(f"\n🔍 Analyzing {attribute.upper()}...")
-                metrics = analyzer.compute_group_metrics(attribute)
-                group_metrics[attribute] = metrics
-                
-                # Save to CSV
-                metrics_df = pd.DataFrame(metrics).T
-                csv_path = output_dir / f"group_metrics_{attribute}.csv"
-                metrics_df.to_csv(csv_path)
-                print(f"   ✅ Saved: {csv_path}")
-        
-        # STEP 7: Fairness metrics
-        print_section("⚖️  Step 7: Compute Fairness Metrics", "=")
-        fairness_results = FairnessMetrics.compute_all_fairness_metrics(group_metrics)
-        
-        # STEP 8: Statistical significance testing
-        print_section("📊 Step 8: Statistical Significance Testing", "=")
-        statistical_tests = {}
-        for attribute in group_metrics.keys():
-            print(f"\n🔬 {attribute.upper()} Statistical Tests:")
-            
-            # Chi-square test for intervention rate
-            chi2_result = StatisticalTester.chi_square_test_intervention_rate(
-                y_pred, demographics, attribute
-            )
-            statistical_tests[f'{attribute}_chi2'] = chi2_result
-            
-            print(f"   Chi-square test (intervention rate):")
-            print(f"      χ² = {chi2_result['chi2_statistic']:.2f}, p-value = {chi2_result['p_value']:.4f}")
-            print(f"      Result: {chi2_result['interpretation']}")
-        
-        # Save statistical tests
-        tests_path = output_dir / "statistical_tests.json"
-        
-        # Convert numpy types to native Python types for JSON serialization
-        def convert_to_serializable(obj):
-            if isinstance(obj, np.bool_):
-                return bool(obj)
-            elif isinstance(obj, np.integer):
-                return int(obj)
-            elif isinstance(obj, np.floating):
-                return float(obj)
-            elif isinstance(obj, np.ndarray):
-                return obj.tolist()
-            elif isinstance(obj, dict):
-                return {k: convert_to_serializable(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [convert_to_serializable(item) for item in obj]
-            return obj
-        
-        statistical_tests_serializable = convert_to_serializable(statistical_tests)
-        
-        with open(tests_path, 'w') as f:
-            json.dump(statistical_tests_serializable, f, indent=2)
-        print(f"\n✅ Statistical tests saved: {tests_path}")
-        
-        # STEP 9: Risk category analysis
-        print_section("🎯 Step 9: Risk Category Distribution Analysis", "=")
-        
-        # Create risk categories based on Phase 4 thresholds
-        low_threshold = risk_thresholds['low']
-        high_threshold = risk_thresholds['high']
-        
-        risk_categories = np.full(len(y_pred_proba), 'Medium')
-        risk_categories[y_pred_proba < low_threshold] = 'Low'
-        risk_categories[y_pred_proba >= high_threshold] = 'High'
-        
-        # Analyze risk categories by demographic group
-        def analyze_risk_categories_by_group(risk_cats, y_true_data, demo_data, attr):
-            """Analyze risk category distribution by demographic group."""
-            if attr not in demo_data.columns:
-                return pd.DataFrame()
-            
-            groups = demo_data[attr].unique()
-            results = []
-            
-            for group in groups:
-                mask = (demo_data[attr] == group).values
-                if mask.sum() == 0:
-                    continue
-                
-                group_risk = risk_cats[mask]
-                group_true = y_true_data[mask]
-                
-                # Risk category distribution
-                risk_dist = pd.Series(group_risk).value_counts(normalize=True)
-                
-                # Actual readmission rate per risk category
-                readmit_by_risk = {}
-                for risk_cat in ['Low', 'Medium', 'High']:
-                    risk_mask = group_risk == risk_cat
-                    if risk_mask.sum() > 0:
-                        readmit_by_risk[risk_cat] = float(group_true[risk_mask].mean())
-                    else:
-                        readmit_by_risk[risk_cat] = 0.0
-                
-                group_result = {
-                    'attribute': attr,
-                    'group': group,
-                    'n_samples': int(mask.sum()),
-                    'pct_low_risk': float(risk_dist.get('Low', 0)),
-                    'pct_medium_risk': float(risk_dist.get('Medium', 0)),
-                    'pct_high_risk': float(risk_dist.get('High', 0)),
-                    'readmit_rate_low': readmit_by_risk.get('Low', 0.0),
-                    'readmit_rate_medium': readmit_by_risk.get('Medium', 0.0),
-                    'readmit_rate_high': readmit_by_risk.get('High', 0.0)
-                }
-                results.append(group_result)
-            
-            return pd.DataFrame(results)
-        
-        # Analyze for each demographic attribute
-        for attribute in ['race', 'gender', 'age_group']:
-            if attribute in demographics.columns:
-                risk_analysis = analyze_risk_categories_by_group(
-                    risk_categories, y_test.values, demographics, attribute
-                )
-                
-                if not risk_analysis.empty:
-                    risk_path = output_dir / f"risk_categories_{attribute}.csv"
-                    risk_analysis.to_csv(risk_path, index=False)
-                    print(f"✅ Risk analysis saved: {risk_path}")
-        
-        # STEP 10: Generate visualizations
-        print_section("📊 Step 10: Generate Fairness Visualizations", "=")
-        
-        # Group comparison plots for different metrics
-        print("📊 Generating group comparison plots...")
-        for metric in ['tpr', 'fpr', 'precision', 'intervention_rate']:
-            FairnessVisualizer.plot_group_metrics_comparison(
-                group_metrics, str(viz_dir), metric=metric
-            )
-            print(f"   ✅ {metric.upper()} comparison saved")
-        
-        # Note: Additional visualizations would need to be implemented as static methods
-        # or the FairnessVisualizer class would need to be refactored
-        
-        print(f"\n✅ Visualizations saved to: {viz_dir}")
-        
-        # Note: Calibration and risk distribution visualizations would require
-        # additional static methods in FairnessVisualizer class
-        
-        # STEP 11: Create comprehensive fairness report
-        print_section("📄 Step 11: Generate Fairness Report", "=")
-        
-        # Assess overall fairness based on individual fairness metrics
-        fairness_passed = True
-        for attribute, metrics in fairness_results.items():
-            for metric_name, metric_data in metrics.items():
-                if isinstance(metric_data, dict) and 'passed' in metric_data:
-                    if not metric_data['passed']:
-                        fairness_passed = False
-                        break
-            if not fairness_passed:
-                break
-        
-        fairness_report = {
-            'model_type': 'Logistic Regression',
-            'evaluation_date': pd.Timestamp.now().isoformat(),
-            'test_set_size': len(y_test),
-            'optimal_threshold': optimal_threshold,
-            'risk_thresholds': risk_thresholds,
-            'overall_metrics': overall_metrics,
-            'group_metrics': {k: v.to_dict(orient='records') if isinstance(v, pd.DataFrame) else v 
-                             for k, v in group_metrics.items()},
-            'fairness_metrics': fairness_results,
-            'statistical_tests': statistical_tests,
-            'deployment_readiness': {
-                'overall_performance': 'PASS' if overall_metrics['roc_auc'] > 0.7 else 'FAIL',
-                'fairness_assessment': 'PASS' if fairness_passed else 'NEEDS REVIEW',
-                'recommendation': 'APPROVED' if (overall_metrics['roc_auc'] > 0.7 and fairness_passed) else 'NEEDS REVIEW'
-            }
-        }
-        
-        # Convert to JSON-serializable format
-        fairness_report_serializable = convert_to_serializable(fairness_report)
-        
-        report_path = output_dir / "fairness_report.json"
-        with open(report_path, 'w') as f:
-            json.dump(fairness_report_serializable, f, indent=2)
-        print(f"✅ Fairness report saved: {report_path}")
-        
-        # Note: HuggingFace Upload
-        # Upload is now handled by the orchestrator script after combining
-        # evaluation and mitigation results. This avoids duplicate uploads.
-        # See: run_fairness_assessment_and_mitigation.sh
-        print_section("📁 Evaluation Results Saved", "=")
-        print(f"✅ Results saved locally to: {output_dir}")
-        print(f"📤 Upload will be handled by orchestrator after mitigation check")
-        
-        # FINAL SUMMARY
-        print_section("✨ Fairness Evaluation Complete!", "=")
-        print(f"📁 All outputs saved to: {output_dir}")
-        print(f"\n📊 Key Results:")
-        print(f"   Overall ROC-AUC: {overall_metrics['roc_auc']:.4f}")
-        print(f"   Intervention Rate: {overall_metrics['intervention_rate']:.2%}")
-        print(f"   Fairness Assessment: {fairness_report['deployment_readiness']['fairness_assessment']}")
-        print(f"   Deployment Recommendation: {fairness_report['deployment_readiness']['recommendation']}")
-        
-        print(f"\n📄 Generated Files:")
-        print(f"   - fairness_report.json")
-        print(f"   - group_metrics_*.csv (race, gender, age)")
-        print(f"   - statistical_tests.json")
-        print(f"   - risk_categories_*.csv")
-        print(f"   - visualizations/ (4 comparison plots)")
-        
-        print(f"\n🚀 Next Steps:")
-        print(f"   1. Review fairness report: {report_path}")
-        print(f"   2. Examine group-specific metrics")
-        print(f"   3. Review visualizations in: {viz_dir}")
-        if fairness_report['deployment_readiness']['fairness_assessment'] != 'PASS':
-            print(f"   4. Proceed to Phase 6: Fairness Mitigation")
-            print(f"      python ./phase-6-fairness-mitigation-bias-correction/calculate_group_thresholds_logistic_regression.py")
-        else:
-            print(f"   4. Model approved for deployment!")
-        
-        print(f"\n{'='*80}")
-        print("🎉 Fairness evaluation complete!")
-        print(f"{'='*80}\n")
-        
-    except Exception as e:
-        print(f"\n❌ Error during fairness evaluation: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    }
+    save_results(phase6_summary, str(phase6_summary_path))
+    print(f"✅ Saved Phase 6 summary: {phase6_summary_path}")
+    
+    # STEP 12: Generate visualizations
+    print_section("Step 12: Generate Fairness Visualizations", "-")
+    
+    # Use comprehensive visualization generation (same as Gradient Boosting)
+    FairnessVisualizer.generate_all_visualizations(
+        y_true=y_test.values,
+        y_pred=y_pred,
+        y_pred_proba=y_pred_proba,
+        risk_categories=risk_categories,
+        demographics=demographics,
+        all_group_metrics=group_metrics,
+        fairness_results=fairness_results,
+        output_dir=str(output_dir)
+    )
+    
+    
+    # ========================================================================
+    # FINAL SUMMARY
+    # ========================================================================
+    
+    print_section("✅ Phase 5 Complete: Fairness Evaluation Summary", "=")
+    
+    print("📊 Key Findings:")
+    print(f"   Model: Logistic Regression")
+    print(f"   Bias Detected: {'YES ⚠️' if fairness_summary['bias_detected'] else 'NO ✅'}")
+    print(f"   Overall ROC-AUC: {overall_metrics['roc_auc']:.3f}")
+    print(f"   Overall TPR: {overall_metrics['tpr']:.3f}")
+    print(f"   Overall FPR: {overall_metrics['fpr']:.3f}")
+    
+    print(f"\n📁 Outputs:")
+    print(f"   Results: {args.output_dir}")
+    print(f"   Fairness report: {report_path}")
+    print(f"   Statistical tests: {tests_path}")
+    print(f"   Phase 6 summary: {phase6_summary_path}")
+    print(f"   Group metrics: group_metrics_*.csv")
+    print(f"   Risk categories: risk_categories_*.csv")
+    print(f"   Visualizations: {output_dir / 'visualizations'}/*.png")
+    
+    print(f"\n💡 Recommendations:")
+    for i, rec in enumerate(fairness_summary['recommendations'], 1):
+        print(f"   {i}. {rec}")
+    
+    print(f"\n🎯 Next Steps:")
+    if fairness_summary['bias_detected']:
+        priority = fairness_summary['phase6_inputs']['mitigation_priority'].upper()
+        print(f"   ⚠️  MITIGATION REQUIRED - Priority: {priority}")
+        print(f"   1. Proceed to Phase 6 (Fairness Mitigation)")
+        print(f"   2. Use phase5_summary_for_phase6.json as input")
+        print(f"   3. Calculate group-specific thresholds")
+        print(f"   4. Consult with clinical and ethics teams")
+        print(f"   5. Document fairness-ROI trade-offs")
+    else:
+        print(f"   ✅ NO MITIGATION NEEDED")
+        print(f"   1. Skip Phase 6 (no fairness violations)")
+        print(f"   2. Proceed to Phase 7 (Deployment Preparation)")
+        print(f"   3. Use global optimal threshold from Phase 4")
+        print(f"   4. Implement production monitoring for fairness metrics")
+    
+    # ========================================================================
+    # Note: HuggingFace Upload
+    # ========================================================================
+    # Upload is now handled by the orchestrator script after combining
+    # evaluation and mitigation results. This avoids duplicate uploads.
+    # See: run_fairness_assessment_and_mitigation.sh
+    
+    print("\n" + "="*80)
+    print("✅ Phase 5 Part A (Evaluation) Completed Successfully!")
+    print("="*80)
+    print(f"📁 Results saved to: {args.output_dir}")
+    print(f"� Upload will be handled by orchestrator after mitigation check")
+    print("="*80 + "\n")
+    
 
 
 if __name__ == "__main__":
