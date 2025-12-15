@@ -34,10 +34,24 @@
 # Note: NOT using 'set -e' to allow collection to continue even if some files are missing
 # We'll track success/failure per file instead
 
-# Load environment variables from .env file
+# Load environment variables from .env file (check both current dir and parent dir)
 if [ -f .env ]; then
     echo "Loading environment variables from .env..."
-    export $(grep -v '^#' .env | grep HF_TOKEN | xargs)
+    set -a
+    source .env
+    set +a
+elif [ -f ../.env ]; then
+    echo "Loading environment variables from ../.env..."
+    set -a
+    source ../.env
+    set +a
+fi
+
+# Check if HF_TOKEN is set
+if [ -z "${HF_TOKEN}" ]; then
+    echo -e "${YELLOW}⚠️  Warning: HF_TOKEN not found in environment${NC}"
+    echo -e "${YELLOW}    Upload to HuggingFace may fail without authentication${NC}"
+    echo -e "${YELLOW}    Set HF_TOKEN in .env or run: huggingface-cli login${NC}"
 fi
 
 # Default configuration
@@ -1106,8 +1120,14 @@ else
     echo ""
     echo -e "${YELLOW}[Step 4/4] Uploading to HuggingFace...${NC}"
     
+    # Prepare token flag if HF_TOKEN is set
+    TOKEN_FLAG=""
+    if [ -n "${HF_TOKEN}" ]; then
+        TOKEN_FLAG="--token ${HF_TOKEN}"
+    fi
+    
     # Check if repo exists, create if not
-    if huggingface-cli repo info "${REPO_ID}" > /dev/null 2>&1; then
+    if huggingface-cli repo info "${REPO_ID}" ${TOKEN_FLAG} > /dev/null 2>&1; then
         echo -e "${YELLOW}Repository exists, will upload to existing repo${NC}"
     else
         echo -e "${YELLOW}Creating new repository: ${REPO_ID}${NC}"
@@ -1115,12 +1135,12 @@ else
         if [ "${PRIVATE}" = true ]; then
             PRIVATE_FLAG="--private"
         fi
-        huggingface-cli repo create "${REPO_ID}" --type model ${PRIVATE_FLAG}
+        huggingface-cli repo create "${REPO_ID}" --type model ${PRIVATE_FLAG} ${TOKEN_FLAG}
     fi
     
     # Upload all files
     echo -e "${YELLOW}Uploading files...${NC}"
-    huggingface-cli upload "${REPO_ID}" "${COLLECTION_DIR}" / --repo-type model
+    huggingface-cli upload "${REPO_ID}" "${COLLECTION_DIR}" / --repo-type model ${TOKEN_FLAG}
     
     echo -e "${GREEN}✓ Upload complete!${NC}"
     echo ""
