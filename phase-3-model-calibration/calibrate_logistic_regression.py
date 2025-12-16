@@ -351,11 +351,16 @@ def save_calibrated_model(model, calibrator, output_dir, method):
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     
-    # Save original model (if not already saved)
-    model_path = output_path / "logistic_regression_model_original.pkl"
-    with open(model_path, 'wb') as f:
+    # Save original model (if not already saved) in both pickle and joblib formats
+    model_path_pkl = output_path / "logistic_regression_model_original.pkl"
+    with open(model_path_pkl, 'wb') as f:
         pickle.dump(model, f)
-    print(f"✅ Original model saved: {model_path}")
+    print(f"✅ Original model saved (pkl): {model_path_pkl}")
+    
+    # Also save as joblib for consistency with other models (GB/RF)
+    model_path_joblib = output_path / "model_original.joblib"
+    joblib.dump(model, model_path_joblib)
+    print(f"✅ Original model saved (joblib): {model_path_joblib}")
     
     # Note about scaler
     print(f"ℹ️  Scaler: Use Phase 1 scaler (data/processed/splits/scaler.pkl) for deployment")

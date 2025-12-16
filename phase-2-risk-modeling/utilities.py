@@ -470,9 +470,22 @@ def save_visualizations(
         print(f"   ⚠️  Could not generate calibration curve: {e}")
     
     # 5. Feature Importance (if model and features provided)
-    if model is not None and hasattr(model, 'feature_importances_'):
+    # Support both tree-based models (feature_importances_) and linear models (coef_)
+    if model is not None and (hasattr(model, 'feature_importances_') or hasattr(model, 'coef_')):
         try:
-            importances = model.feature_importances_
+            # Get importance values based on model type
+            if hasattr(model, 'feature_importances_'):
+                # Tree-based models (Random Forest, Gradient Boosting, etc.)
+                importances = model.feature_importances_
+                importance_label = 'Feature Importance'
+                title = 'Top 20 Feature Importances'
+            elif hasattr(model, 'coef_'):
+                # Linear models (Logistic Regression, etc.)
+                # Use absolute values of coefficients as importance
+                importances = np.abs(model.coef_[0] if model.coef_.ndim > 1 else model.coef_)
+                importance_label = 'Coefficient Magnitude (|coef|)'
+                title = 'Top 20 Feature Coefficients (Absolute Value)'
+            
             if feature_names is None and X is not None:
                 feature_names = X.columns.tolist() if hasattr(X, 'columns') else [f'Feature {i}' for i in range(len(importances))]
             elif feature_names is None:
@@ -487,9 +500,9 @@ def save_visualizations(
             colors = plt.cm.viridis(np.linspace(0.3, 0.9, len(top_features)))
             plt.barh(range(len(top_features)), top_importances, color=colors)
             plt.yticks(range(len(top_features)), top_features)
-            plt.xlabel('Feature Importance', fontsize=12)
+            plt.xlabel(importance_label, fontsize=12)
             plt.ylabel('Features', fontsize=12)
-            plt.title('Top 20 Feature Importances', fontsize=14, fontweight='bold')
+            plt.title(title, fontsize=14, fontweight='bold')
             plt.gca().invert_yaxis()
             plt.tight_layout()
             fi_path = output_dir / "feature_importance.png"
