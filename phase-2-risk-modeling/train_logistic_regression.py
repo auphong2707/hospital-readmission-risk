@@ -38,6 +38,7 @@ import os
 import time
 import json
 import pickle
+import joblib
 import warnings
 from datetime import datetime
 from pathlib import Path
@@ -275,12 +276,12 @@ class LogisticRegressionTrainer:
         os.makedirs(output_dir, exist_ok=True)
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        model_filename = f"logistic_regression.pkl"
+        # Save as .joblib to match collection script expectations (Phase 7)
+        model_filename = f"logistic_regression_model.joblib"
         model_path = os.path.join(output_dir, model_filename)
         
-        # Save model
-        with open(model_path, 'wb') as f:
-            pickle.dump(self.best_model, f)
+        # Save model using joblib (consistent with GB/RF)
+        joblib.dump(self.best_model, model_path)
         
         print(f"\n✅ Model saved to: {model_path}")
         
@@ -615,8 +616,8 @@ def main():
         json.dump(final_metrics, f, indent=2)
     print(f"✅ Metrics saved: {metrics_json_path}")
     
-    # Save fold details
-    fold_details_path = output_dir / "cv_fold_details.json"
+    # Save fold details (named to match collection script expectations)
+    fold_details_path = output_dir / "logistic_regression_cv_fold_details.json"
     with open(fold_details_path, 'w') as f:
         json.dump(fold_details, f, indent=2)
     print(f"✅ Fold details saved: {fold_details_path}")
