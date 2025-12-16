@@ -351,16 +351,16 @@ def save_calibrated_model(model, calibrator, output_dir, method):
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     
-    # Save original model (if not already saved) in both pickle and joblib formats
-    model_path_pkl = output_path / "logistic_regression_model_original.pkl"
-    with open(model_path_pkl, 'wb') as f:
-        pickle.dump(model, f)
-    print(f"✅ Original model saved (pkl): {model_path_pkl}")
-    
-    # Also save as joblib for consistency with other models (GB/RF)
-    model_path_joblib = output_path / "model_original.joblib"
+    # Save original model (if not already saved)
+    # Save as .joblib to match collection script expectations (Phase 7)
+    model_path_joblib = output_path / "logistic_regression_model_original.joblib"
     joblib.dump(model, model_path_joblib)
-    print(f"✅ Original model saved (joblib): {model_path_joblib}")
+    print(f"✅ Original model saved: {model_path_joblib}")
+    
+    # Also save generic name for backward compatibility
+    model_path_generic = output_path / "model_original.joblib"
+    joblib.dump(model, model_path_generic)
+    print(f"✅ Original model saved (generic): {model_path_generic}")
     
     # Note about scaler
     print(f"ℹ️  Scaler: Use Phase 1 scaler (data/processed/splits/scaler.pkl) for deployment")
@@ -378,7 +378,7 @@ This directory contains a calibrated Logistic Regression model for hospital read
 The model has been calibrated using {method.upper()} to ensure reliable probability estimates.
 
 ## Files
-- `logistic_regression_model_original.pkl`: Original trained Logistic Regression model
+- `logistic_regression_model_original.joblib`: Original trained Logistic Regression model
 - `Logistic_Regression_calibrator.pkl`: Calibration transformer ({method})
 - `Logistic_Regression_report.txt`: Detailed calibration report
 - `Logistic_Regression_metrics.json`: Calibration metrics (JSON)
@@ -393,17 +393,15 @@ The model has been calibrated using {method.upper()} to ensure reliable probabil
 ### Loading the Calibrated Model
 
 ```python
-import pickle
-import pandas as pd
 import joblib
+import pandas as pd
 from pathlib import Path
 
 # Load Phase 1 scaler
 scaler = joblib.load('data/processed/splits/scaler.pkl')
 
 # Load original model
-with open('logistic_regression_model_original.pkl', 'rb') as f:
-    model = pickle.load(f)
+model = joblib.load('logistic_regression_model_original.joblib')
 
 # Load calibrator
 calibrator = ModelCalibrator.load('Logistic_Regression_calibrator.pkl')
@@ -544,7 +542,7 @@ Examples:
         print_section("📥 Step 1: Download Pre-trained Model", "=")
         model, training_summary = download_model_from_hf(
             repo_id=args.repo_id,
-            model_filename="logistic_regression.pkl",
+            model_filename="logistic_regression_model.joblib",
             cache_dir="./models/downloaded",
             force_download=args.force_download
         )

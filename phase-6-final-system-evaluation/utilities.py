@@ -181,7 +181,7 @@ def load_data_and_predictions(data_repo_id: str, model_repo_id: str):
         calibrator_filename = "Random_Forest_calibrator.pkl"
         model_type = "Random Forest"
     elif 'lr' in model_repo_id.lower() or 'logistic' in model_repo_id.lower():
-        model_filename = "logistic_regression_model_original.pkl"
+        model_filename = "logistic_regression_model_original.joblib"
         calibrator_filename = "Logistic_Regression_calibrator.pkl"
         model_type = "Logistic Regression"
     else:

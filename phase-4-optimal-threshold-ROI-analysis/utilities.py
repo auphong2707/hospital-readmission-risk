@@ -272,7 +272,7 @@ def load_calibrated_model(
     - Gradient_Boosting_(LightGBM)_calibrator.pkl: The Platt calibrator
     
     Phase 3 uploads (Logistic Regression):
-    - logistic_regression_model_original.pkl: The base Logistic Regression model
+    - logistic_regression_model_original.joblib: The base Logistic Regression model
     - Logistic_Regression_calibrator.pkl: The Platt calibrator
     
     Args:
@@ -311,9 +311,9 @@ def load_calibrated_model(
         calibrator_filename = "Gradient_Boosting_(LightGBM)_calibrator.pkl"
         loader_func = joblib.load
     elif method == "logistic_regression":
-        model_filename = "logistic_regression_model_original.pkl"
+        model_filename = "logistic_regression_model_original.joblib"
         calibrator_filename = "Logistic_Regression_calibrator.pkl"
-        loader_func = lambda path: pickle.load(open(path, 'rb'))
+        loader_func = joblib.load
     else:
         raise ValueError(f"Unknown method: {method}. Must be 'gradient_boosting' or 'logistic_regression'")
     

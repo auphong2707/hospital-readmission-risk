@@ -320,7 +320,7 @@ def load_model_and_calibrator(
         },
         'logistic_regression': {
             'default_repo': 'auphong2707/hospital-readmission-phase3-lr-calibrated',
-            'model_filename': 'logistic_regression_model_original.pkl',
+            'model_filename': 'logistic_regression_model_original.joblib',
             # NOTE: No scaler needed in Phase 5 - test data already scaled from Phase 1
             'calibrator_filename': 'Logistic_Regression_calibrator.pkl',
             'display_name': 'Logistic Regression',
