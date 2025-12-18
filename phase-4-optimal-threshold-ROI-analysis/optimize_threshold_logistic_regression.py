@@ -44,7 +44,7 @@ Requirements:
 Phase 3 Output Required:
     - Calibrated model uploaded to HuggingFace Hub or saved locally
     - Phase 1 data splits uploaded to HuggingFace Hub
-    - Files: logistic_regression_model_original.pkl, logistic_regression_scaler.pkl, Logistic_Regression_calibrator.pkl
+    - Files: logistic_regression_model_original.joblib, Logistic_Regression_calibrator.pkl
 
 Output:
     - Optimal threshold and risk category thresholds
@@ -61,6 +61,7 @@ import json
 import numpy as np
 import pandas as pd
 import pickle
+import joblib
 
 # Add parent directory to path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -194,10 +195,9 @@ def load_logistic_regression_calibrated(model_repo_id, cache_dir, force_download
     if local_calib_dir.exists() and not force_download:
         print(f"✅ Loading from local calibration directory: {local_calib_dir}")
         
-        # Load model
-        model_path = local_calib_dir / "logistic_regression_model_original.pkl"
-        with open(model_path, 'rb') as f:
-            model = pickle.load(f)
+        # Load model (using joblib to match Phase 3 output)
+        model_path = local_calib_dir / "logistic_regression_model_original.joblib"
+        model = joblib.load(model_path)
         print(f"   ✅ Model loaded")
         print(f"   ℹ️  No scaler needed - data already scaled from Phase 1")
         
