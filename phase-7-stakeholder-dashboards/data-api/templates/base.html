@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Hospital Readmission Risk Dashboard{% endblock %}</title>
+    
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <i class="fas fa-hospital-alt"></i>
+                <h1 class="nav-title">Hospital Readmission Risk Dashboard</h1>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/dashboards/data-analyst" class="nav-link {% if active_page == 'data-analyst' %}active{% endif %}">
+                    <i class="fas fa-chart-line"></i> Data Analyst
+                </a></li>
+                <li><a href="/dashboards/doctor" class="nav-link {% if active_page == 'doctor' %}active{% endif %}">
+                    <i class="fas fa-user-md"></i> Doctor
+                </a></li>
+                <li><a href="/docs" class="nav-link" target="_blank">
+                    <i class="fas fa-book"></i> API Docs
+                </a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <p>&copy; 2025 Hospital Readmission Risk Assessment System</p>
+            <p class="footer-tagline">Powered by Machine Learning for Better Patient Outcomes</p>
+        </div>
+    </footer>
+
+    <!-- Custom JavaScript -->
+    <script src="/static/js/plotly_utils.js"></script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "optimal_threshold": 0.01,
+  "optimal_expected_value": 11236500.0,
+  "low_risk_threshold": 0.0067,
+  "high_risk_threshold": 0.015,
+  "cost_parameters": {
+    "readmission_cost": 15000,
+    "intervention_cost": 500,
+    "tp_benefit": 14500,
+    "fp_cost": -500,
+    "fn_cost": -15000,
+    "tn_cost": 0
+  }
+}

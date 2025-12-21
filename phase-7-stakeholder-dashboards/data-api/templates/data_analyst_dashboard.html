@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+
+{% block title %}Data Analyst Dashboard - Hospital Readmission Risk{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <div class="header-content">
+            <h2><i class="fas fa-chart-line"></i> Data Analyst Dashboard</h2>
+            <p class="subtitle">Complete ML Pipeline Analysis: 7 Phase Overview</p>
+        </div>
+    </div>
+
+    <!-- Section Navigation -->
+    <div class="section-nav">
+        <a href="#quick-start" class="section-nav-item">
+            <i class="fas fa-rocket"></i>
+            <span>Quick Start</span>
+        </a>
+        <a href="#phase-1" class="section-nav-item">
+            <i class="fas fa-database"></i>
+            <span>Phase 1: Data Preprocessing</span>
+        </a>
+        <a href="#phase-2" class="section-nav-item">
+            <i class="fas fa-brain"></i>
+            <span>Phase 2: Risk Modeling</span>
+        </a>
+        <a href="#phase-3" class="section-nav-item">
+            <i class="fas fa-sliders-h"></i>
+            <span>Phase 3: Model Calibration</span>
+        </a>
+        <a href="#phase-4" class="section-nav-item">
+            <i class="fas fa-dollar-sign"></i>
+            <span>Phase 4: Optimal Threshold & ROI</span>
+        </a>
+        <a href="#phase-5" class="section-nav-item">
+            <i class="fas fa-balance-scale"></i>
+            <span>Phase 5: Fairness Assessment</span>
+        </a>
+        <a href="#phase-6" class="section-nav-item">
+            <i class="fas fa-check-circle"></i>
+            <span>Phase 6: Final Evaluation</span>
+        </a>
+    </div>
+
+    <!-- Quick Start Section -->
+    <section id="quick-start" class="phase-section">
+        <div class="section-content">
+            <div class="section-header">
+                <div class="section-icon">
+                    <i class="fas fa-rocket"></i>
+                </div>
+                <div class="section-title">
+                    <h2>Quick Start: Recommended Model</h2>
+                    <p>AI-powered recommendation based on comprehensive evaluation</p>
+                </div>
+            </div>
+            <div class="panel panel-full panel-highlight" id="panel-recommended-model">
+                <div class="panel-header">
+                    <h3><i class="fas fa-trophy"></i> Best Performing Model</h3>
+                    <span class="panel-badge">Recommended</span>
+                </div>
+                <div id="recommended-model-stats" class="stats-grid"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Phase 1: Data Preprocessing -->
+    <section id="phase-1" class="phase-section">
+        <div class="section-content">
+            <div class="section-header">
+                <div class="section-icon">
+                    <i class="fas fa-database"></i>
+                </div>
+                <div class="section-title">
+                    <h2>Phase 1: Data Preprocessing</h2>
+                    <p>Dataset overview and data preparation pipeline</p>
+                </div>
+            </div>
+            <div class="panel-container">
+                <div class="panel panel-half" id="panel-class-distribution">
+                    <div class="panel-header">
+                        <h3><i class="fas fa-chart-pie"></i> Class Distribution</h3>
+                    </div>
+                    <div id="plot-class-distribution"></div>
+                </div>
+                <div class="panel panel-half" id="panel-dataset-split">
+                    <div class="panel-header">
+                        <h3><i class="fas fa-chart-pie"></i> Dataset Split</h3>
+                    </div>
+                    <div id="plot-dataset-split"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Phase 2: Risk Modeling -->
+    <section id="phase-2" class="phase-section">
+        <div class="section-content">
+            <div class="section-header">
+                <div class="section-icon">
+                    <i class="fas fa-brain"></i>
+                </div>
+                <div class="section-title">
+                    <h2>Phase 2: Risk Modeling</h2>
+                    <p>Model training and performance evaluation across three algorithms</p>
+                </div>
+            </div>
+            <div class="panel-container">
+                <div class="panel panel-half" id="panel-roc-curves">
+                    <div class="panel-header">
+                        <h3><i class="fas fa-chart-area"></i> ROC Curves</h3>
+                    </div>
+                    <div id="plot-roc-curves"></div>
+                </div>
+                <div class="panel panel-half" id="panel-pr-curves">
+                    <div class="panel-header">
+                        <h3><i class="fas fa-chart-area"></i> Precision-Recall Curves</h3>
+                    </div>
+                    <div id="plot-pr-curves"></div>
+                </div>
+            </div>
+            <div class="panel-container">
+                <div class="panel panel-full" id="panel-model-comparison">
+                    <div class="panel-header">
+                        <h3><i class="fas fa-chart-bar"></i> Model Performance Comparison</h3>
+                    </div>
+                    <div id="plot-model-comparison"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Phase 3: Model Calibration -->
+    <section id="phase-3" class="phase-section">
+        <div class="section-content">
+            <div class="section-header">
+                <div class="section-icon">
+                    <i class="fas fa-sliders-h"></i>
+                </div>
+                <div class="section-title">
+                    <h2>Phase 3: Model Calibration</h2>
+                    <p>Probability calibration for reliable risk predictions</p>
+                </div>
+            </div>
+            <div class="panel-container">
+                <div class="panel panel-third" id="panel-calibration-gb">
+                    <div class="panel-header">
+                        <h3><i class="fas fa-adjust"></i> Gradient Boosting</h3>
+                    </div>
+                    <div id="plot-calibration-gb"></div>
+                </div>
+                <div class="panel panel-third" id="panel-calibration-rf">
+                    <div class="panel-header">
+                        <h3><i class="fas fa-adjust"></i> Random Forest</h3>
+                    </div>
+                    <div id="plot-calibration-rf"></div>
+                </div>
+                <div class="panel panel-third" id="panel-calibration-lr">
+                    <div class="panel-header">
+                        <h3><i class="fas fa-adjust"></i> Logistic Regression</h3>
+                    </div>
+                    <div id="plot-calibration-lr"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Phase 4: Optimal Threshold & ROI Analysis -->
+    <section id="phase-4" class="phase-section">
+        <div class="section-content">
+            <div class="section-header">
+                <div class="section-icon">
+                    <i class="fas fa-dollar-sign"></i>
+                </div>
+                <div class="section-title">
+                    <h2>Phase 4: Optimal Threshold & ROI Analysis</h2>
+                    <p>Cost-benefit optimization and financial impact assessment</p>
+                </div>
+            </div>
+            <div class="panel-container">
+                <div class="panel panel-half" id="panel-costs">
+                    <div class="panel-header">
+                        <h3><i class="fas fa-money-bill-wave"></i> Costs vs Threshold</h3>
+                    </div>
+                    <div id="plot-costs-threshold"></div>
+                </div>
+                <div class="panel panel-half" id="panel-benefits">
+                    <div class="panel-header">
+                        <h3><i class="fas fa-coins"></i> Benefits vs Threshold</h3>
+                    </div>
+                    <div id="plot-benefits-threshold"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Phase 5: Fairness Assessment & Mitigation -->
+    <section id="phase-5" class="phase-section">
+        <div class="section-content">
+            <div class="section-header">
+                <div class="section-icon">
+                    <i class="fas fa-balance-scale"></i>
+                </div>
+                <div class="section-title">
+                    <h2>Phase 5: Fairness Assessment & Mitigation</h2>
+                    <p>Equity analysis across demographic groups</p>
+                </div>
+            </div>
+            <div class="panel panel-full" id="panel-fairness">
+                <div class="panel-header">
+                    <h3><i class="fas fa-users"></i> Fairness Metrics by Model</h3>
+                </div>
+                <div id="table-fairness"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Phase 6: Final System Evaluation -->
+    <section id="phase-6" class="phase-section">
+        <div class="section-content">
+            <div class="section-header">
+                <div class="section-icon">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <div class="section-title">
+                    <h2>Phase 6: Final System Evaluation</h2>
+                    <p>Comprehensive assessment and deployment readiness</p>
+                </div>
+            </div>
+            <div class="panel panel-full" id="panel-final-evaluation">
+                <div class="panel-header">
+                    <h3><i class="fas fa-clipboard-check"></i> Deployment Readiness Assessment</h3>
+                </div>
+                <div id="table-final-evaluation"></div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/data_analyst.js"></script>
+{% endblock %}

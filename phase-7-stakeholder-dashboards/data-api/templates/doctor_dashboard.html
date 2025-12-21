@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Doctor Dashboard - Hospital Readmission Risk{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <h2>Doctor Dashboard - Hospital Readmission Risk</h2>
+        <p class="subtitle">Clinical Decision Support: Risk Factors, Performance & Fairness</p>
+    </div>
+
+    <!-- Model Selector -->
+    <div class="panel panel-full" id="panel-model-selector">
+        <label for="model-select" class="model-selector-label">Select Model:</label>
+        <select id="model-select" class="model-selector">
+            <option value="gradient_boosting">Gradient Boosting (Recommended)</option>
+            <option value="random_forest">Random Forest</option>
+            <option value="logistic_regression">Logistic Regression</option>
+        </select>
+    </div>
+
+    <!-- Panel 2: Top 20 Risk Factors Table (Full Width) -->
+    <div class="panel panel-full panel-xlarge" id="panel-risk-factors">
+        <h3>Top 20 Risk Factors for Readmission</h3>
+        <p class="panel-description">Features ranked by importance with clinical interpretations</p>
+        <div id="table-risk-factors"></div>
+    </div>
+
+    <!-- Panel 3: Model Performance (Clinical Terms) Table (Full Width) -->
+    <div class="panel panel-full" id="panel-performance-clinical">
+        <h3>Model Performance (Clinical Terms)</h3>
+        <p class="panel-description">Key metrics explained in clinical language</p>
+        <div id="table-performance-clinical"></div>
+    </div>
+
+    <!-- Panel 5: Fairness Metrics by Demographics Table (Full Width) -->
+    <div class="panel panel-full" id="panel-fairness-demographics">
+        <h3>Fairness Metrics by Demographics</h3>
+        <p class="panel-description">Performance across different patient groups</p>
+        <div id="table-fairness-demographics"></div>
+    </div>
+
+    <!-- Panel 6: Overall Fairness Assessment Table (Full Width) -->
+    <div class="panel panel-full panel-small" id="panel-fairness-overall">
+        <h3>Overall Fairness Assessment</h3>
+        <div id="table-fairness-overall"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/doctor.js"></script>
+{% endblock %}
