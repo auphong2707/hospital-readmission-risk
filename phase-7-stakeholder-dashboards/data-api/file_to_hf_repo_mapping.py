@@ -75,6 +75,44 @@ REPO_MAPPING = {
                 "7_intervention_volume_forecast.png": "visualizations/7_intervention_volume_forecast.png",
                 "8_cost_savings_projection.png": "visualizations/8_cost_savings_projection.png",
             }
+        },
+        "phase5": {
+            "repo": "auphong2707/hospital-readmission-gradient-boosting-final",
+            "repo_type": "model",
+            "files": {
+                "deployment_config.json": "phase5_fairness_assessment/deployment_config.json",
+                # Evaluation subfolder
+                "fairness_report.json": "phase5_fairness_assessment/evaluation/fairness_report.json",
+                "group_metrics_age.csv": "phase5_fairness_assessment/evaluation/group_metrics_age.csv",
+                "group_metrics_gender.csv": "phase5_fairness_assessment/evaluation/group_metrics_gender.csv",
+                "group_metrics_race.csv": "phase5_fairness_assessment/evaluation/group_metrics_race.csv",
+                "statistical_tests.json": "phase5_fairness_assessment/evaluation/statistical_tests.json",
+                "risk_categories_age.csv": "phase5_fairness_assessment/evaluation/risk_categories_age.csv",
+                "risk_categories_gender.csv": "phase5_fairness_assessment/evaluation/risk_categories_gender.csv",
+                "risk_categories_race.csv": "phase5_fairness_assessment/evaluation/risk_categories_race.csv",
+                "phase5_summary_for_phase6.json": "phase5_fairness_assessment/evaluation/phase5_summary_for_phase6.json",
+                # Mitigation subfolder
+                "group_thresholds.json": "phase5_fairness_assessment/mitigation/group_thresholds.json",
+                "mitigation_impact.json": "phase5_fairness_assessment/mitigation/mitigation_impact.json",
+            }
+        },
+        "phase6": {
+            "repo": "auphong2707/hospital-readmission-gradient-boosting-final",
+            "repo_type": "model",
+            "files": {
+                "final_system_metrics.json": "phase6_final_evaluation/final_system_metrics.json",
+                "deployment_report.json": "phase6_final_evaluation/deployment_report.json",
+                # Visualizations
+                "calibration_curve.png": "phase6_final_evaluation/visualizations/calibration_curve.png",
+                "confusion_matrix.png": "phase6_final_evaluation/visualizations/confusion_matrix.png",
+                "fairness_disparities.png": "phase6_final_evaluation/visualizations/fairness_disparities.png",
+                "group_fpr_comparison.png": "phase6_final_evaluation/visualizations/group_fpr_comparison.png",
+                "group_precision_comparison.png": "phase6_final_evaluation/visualizations/group_precision_comparison.png",
+                "group_tpr_comparison.png": "phase6_final_evaluation/visualizations/group_tpr_comparison.png",
+                "risk_distribution.png": "phase6_final_evaluation/visualizations/risk_distribution.png",
+                "roi_breakdown.png": "phase6_final_evaluation/visualizations/roi_breakdown.png",
+                "threshold_configuration.png": "phase6_final_evaluation/visualizations/threshold_configuration.png",
+            }
         }
     },
     "random_forest": {
@@ -144,6 +182,44 @@ REPO_MAPPING = {
                 "6_roi_sensitivity_analysis.png": "visualizations/6_roi_sensitivity_analysis.png",
                 "7_intervention_volume_forecast.png": "visualizations/7_intervention_volume_forecast.png",
                 "8_cost_savings_projection.png": "visualizations/8_cost_savings_projection.png",
+            }
+        },
+        "phase5": {
+            "repo": "auphong2707/hospital-readmission-rf-final",
+            "repo_type": "model",
+            "files": {
+                "deployment_config.json": "phase5_fairness_assessment/deployment_config.json",
+                # Evaluation files
+                "fairness_report.json": "phase5_fairness_assessment/evaluation/fairness_report.json",
+                "group_metrics_age.csv": "phase5_fairness_assessment/evaluation/group_metrics_age.csv",
+                "group_metrics_gender.csv": "phase5_fairness_assessment/evaluation/group_metrics_gender.csv",
+                "group_metrics_race.csv": "phase5_fairness_assessment/evaluation/group_metrics_race.csv",
+                "statistical_tests.json": "phase5_fairness_assessment/evaluation/statistical_tests.json",
+                "risk_categories_age.csv": "phase5_fairness_assessment/evaluation/risk_categories_age.csv",
+                "risk_categories_gender.csv": "phase5_fairness_assessment/evaluation/risk_categories_gender.csv",
+                "risk_categories_race.csv": "phase5_fairness_assessment/evaluation/risk_categories_race.csv",
+                "phase5_summary_for_phase6.json": "phase5_fairness_assessment/evaluation/phase5_summary_for_phase6.json",
+                # Mitigation files
+                "group_thresholds.json": "phase5_fairness_assessment/mitigation/group_thresholds.json",
+                "mitigation_impact.json": "phase5_fairness_assessment/mitigation/mitigation_impact.json",
+            }
+        },
+        "phase6": {
+            "repo": "auphong2707/hospital-readmission-rf-final",
+            "repo_type": "model",
+            "files": {
+                "final_system_metrics.json": "phase6_final_evaluation/final_system_metrics.json",
+                "deployment_report.json": "phase6_final_evaluation/deployment_report.json",
+                # Visualizations
+                "calibration_curve.png": "phase6_final_evaluation/visualizations/calibration_curve.png",
+                "confusion_matrix.png": "phase6_final_evaluation/visualizations/confusion_matrix.png",
+                "fairness_disparities.png": "phase6_final_evaluation/visualizations/fairness_disparities.png",
+                "group_fpr_comparison.png": "phase6_final_evaluation/visualizations/group_fpr_comparison.png",
+                "group_precision_comparison.png": "phase6_final_evaluation/visualizations/group_precision_comparison.png",
+                "group_tpr_comparison.png": "phase6_final_evaluation/visualizations/group_tpr_comparison.png",
+                "risk_distribution.png": "phase6_final_evaluation/visualizations/risk_distribution.png",
+                "roi_breakdown.png": "phase6_final_evaluation/visualizations/roi_breakdown.png",
+                "threshold_configuration.png": "phase6_final_evaluation/visualizations/threshold_configuration.png",
             }
         }
     },
@@ -215,6 +291,44 @@ REPO_MAPPING = {
                 "6_roi_sensitivity_analysis.png": "visualizations/6_roi_sensitivity_analysis.png",
                 "7_intervention_volume_forecast.png": "visualizations/7_intervention_volume_forecast.png",
                 "8_cost_savings_projection.png": "visualizations/8_cost_savings_projection.png",
+            }
+        },
+        "phase5": {
+            "repo": "auphong2707/hospital-readmission-lr-final",
+            "repo_type": "model",
+            "files": {
+                "deployment_config.json": "phase5_fairness_assessment/deployment_config.json",
+                # Evaluation files
+                "fairness_report.json": "phase5_fairness_assessment/evaluation/fairness_report.json",
+                "group_metrics_age.csv": "phase5_fairness_assessment/evaluation/group_metrics_age.csv",
+                "group_metrics_gender.csv": "phase5_fairness_assessment/evaluation/group_metrics_gender.csv",
+                "group_metrics_race.csv": "phase5_fairness_assessment/evaluation/group_metrics_race.csv",
+                "statistical_tests.json": "phase5_fairness_assessment/evaluation/statistical_tests.json",
+                "risk_categories_age.csv": "phase5_fairness_assessment/evaluation/risk_categories_age.csv",
+                "risk_categories_gender.csv": "phase5_fairness_assessment/evaluation/risk_categories_gender.csv",
+                "risk_categories_race.csv": "phase5_fairness_assessment/evaluation/risk_categories_race.csv",
+                "phase5_summary_for_phase6.json": "phase5_fairness_assessment/evaluation/phase5_summary_for_phase6.json",
+                # Mitigation files
+                "group_thresholds.json": "phase5_fairness_assessment/mitigation/group_thresholds.json",
+                "mitigation_impact.json": "phase5_fairness_assessment/mitigation/mitigation_impact.json",
+            }
+        },
+        "phase6": {
+            "repo": "auphong2707/hospital-readmission-lr-final",
+            "repo_type": "model",
+            "files": {
+                "final_system_metrics.json": "phase6_final_evaluation/final_system_metrics.json",
+                "deployment_report.json": "phase6_final_evaluation/deployment_report.json",
+                # Visualizations
+                "calibration_curve.png": "phase6_final_evaluation/visualizations/calibration_curve.png",
+                "confusion_matrix.png": "phase6_final_evaluation/visualizations/confusion_matrix.png",
+                "fairness_disparities.png": "phase6_final_evaluation/visualizations/fairness_disparities.png",
+                "group_fpr_comparison.png": "phase6_final_evaluation/visualizations/group_fpr_comparison.png",
+                "group_precision_comparison.png": "phase6_final_evaluation/visualizations/group_precision_comparison.png",
+                "group_tpr_comparison.png": "phase6_final_evaluation/visualizations/group_tpr_comparison.png",
+                "risk_distribution.png": "phase6_final_evaluation/visualizations/risk_distribution.png",
+                "roi_breakdown.png": "phase6_final_evaluation/visualizations/roi_breakdown.png",
+                "threshold_configuration.png": "phase6_final_evaluation/visualizations/threshold_configuration.png",
             }
         }
     }
