@@ -212,13 +212,14 @@ The dataset represents 10 years (1999-2008) of clinical care at 130 US hospitals
   * Replace `'?'` placeholders with `NaN`
   * Assess missingness patterns (MCAR/MAR/MNAR)
   * Apply median/mode or group-wise imputation based on feature type
-  * Add binary `is_missing` indicators for clinically relevant variables
+  * Add binary `is_missing` indicators for features with >10% missing rate
   * Validate value ranges, data types, and domain constraints
 * [x] **Feature engineering and selection**
   * Create binary 30-day readmission target
-  * Bucket age into clinically meaningful ordered categories
-  * Aggregate diagnosis codes into higher-level groups
-  * Build utilization features through counts and group-by statistics
+  * Aggregate diagnosis codes into 9 clinical categories (27 binary indicators)
+  * Age stratification: ordinal bucket (0-9) + 5 binary indicators (6 age features)
+  * Preserve 23 raw features (individual medications, utilization counts, demographics)
+  * **Total: 56 base features → ~80-100 after one-hot encoding categorical raw features**
   * Perform feature relevance checks using statistical and model-based methods
 * [x] **Data encoding and normalization**
   * One-hot encode low-cardinality categorical variables
