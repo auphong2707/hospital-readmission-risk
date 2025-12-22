@@ -17,7 +17,7 @@ import io
 import json
 
 from utilities.data_aggregator import DashboardDataAggregator
-from routers import clinician
+from routers import clinician, manager
 from visualization_generator import get_generator
 
 # Initialize FastAPI app
@@ -40,6 +40,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(clinician.router, prefix="/api/v1", tags=["clinician"])
+app.include_router(manager.router, prefix="/api/v1/manager", tags=["manager"])
 
 # Mount static files directory
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
@@ -57,7 +58,8 @@ def root():
         "health": "/health",
         "dashboards": {
             "data_analyst": "/dashboards/data-analyst",
-            "doctor": "/dashboards/doctor"
+            "doctor": "/dashboards/doctor",
+            "manager": "/dashboards/manager"
         }
     }
 
@@ -90,6 +92,15 @@ async def doctor_dashboard(request: Request):
     return templates.TemplateResponse(
         "doctor_dashboard.html", 
         {"request": request, "active_page": "doctor"}
+    )
+
+
+@app.get("/dashboards/manager")
+async def manager_dashboard(request: Request):
+    """Render Manager Dashboard."""
+    return templates.TemplateResponse(
+        "manager_dashboard.html", 
+        {"request": request, "active_page": "manager"}
     )
 
 
@@ -225,6 +236,7 @@ def get_quick_insights():
             aggregator = DashboardDataAggregator(method)
             phase2_data = aggregator.load_phase2_metrics()
             phase3_data = aggregator.load_phase3_calibration()
+            phase6_data = aggregator.load_phase6_final()
             
             if phase2_data and 'metrics' in phase2_data:
                 metrics = phase2_data['metrics']
@@ -235,14 +247,24 @@ def get_quick_insights():
                     calibrated = phase3_data['calibration_metrics'].get('calibrated', {})
                     brier_after = calibrated.get('brier_score', 0)
                 
+                # Get Phase 6 ROI data
+                roi_percentage = 0
+                annual_savings = 0
+                if phase6_data and 'final_system_metrics' in phase6_data:
+                    roi_metrics = phase6_data['final_system_metrics'].get('roi_metrics', {})
+                    roi_percentage = roi_metrics.get('roi_percentage', 0)
+                    annual_savings = abs(roi_metrics.get('cost_savings', 0))
+                
                 all_metrics.append({
                     "method": method,
                     "name": method_names[method],
                     "roc_auc": metrics.get('roc_auc', 0),
-                    "brier": brier_after
+                    "brier": brier_after,
+                    "roi_percentage": roi_percentage,
+                    "annual_savings": annual_savings
                 })
         
-        # Find best model
+        # Find best model (by ROC-AUC)
         best_model = max(all_metrics, key=lambda x: x['roc_auc'])
         
         # Check fairness (simplified - assuming all pass)
@@ -270,6 +292,8 @@ def get_quick_insights():
             "best_model": best_model['method'],
             "best_model_name": best_model['name'],
             "best_roc_auc": round(best_model['roc_auc'], 3),
+            "best_roi": round(best_model['roi_percentage'], 2),
+            "best_annual_savings": round(best_model['annual_savings'], 2),
             "fairness_status": fairness_status,
             "max_disparity": max_disparity,
             "class_balance": [
@@ -428,6 +452,45 @@ def get_precision_recall_curve(method: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/v1/models/{method}/phase6/visualizations/{viz_name}")
+def get_phase6_visualization(method: str, viz_name: str):
+    """Get Phase 6 visualization image for a specific model."""
+    try:
+        aggregator = DashboardDataAggregator(method)
+        
+        # Map viz_name to actual filename
+        valid_viz = [
+            "calibration_curve.png",
+            "confusion_matrix.png", 
+            "fairness_disparities.png",
+            "group_fpr_comparison.png",
+            "group_precision_comparison.png",
+            "group_tpr_comparison.png",
+            "risk_distribution.png",
+            "roi_breakdown.png",
+            "threshold_configuration.png"
+        ]
+        
+        # Ensure .png extension
+        if not viz_name.endswith('.png'):
+            viz_name = viz_name + '.png'
+        
+        if viz_name not in valid_viz:
+            raise HTTPException(status_code=404, detail=f"Invalid visualization name: {viz_name}")
+        
+        image_path = aggregator.download_file("phase6", viz_name)
+        
+        if not image_path or not Path(image_path).exists():
+            raise HTTPException(status_code=404, detail=f"Phase 6 visualization not found: {viz_name}")
+        
+        return FileResponse(image_path, media_type="image/png")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/v1/visualizations/roc-curves-overlay")
 def get_roc_curves_overlay():
     """Get ROC curves overlay for all models as base64 encoded JSON."""
@@ -453,18 +516,16 @@ def get_roc_curves_overlay():
 
 @app.get("/api/v1/visualizations/merged-roc-curves")
 def get_merged_roc_curves():
-    """Get merged ROC curves for all models in a single plot."""
-    cache_key = "merged_roc_curves"
-    
+    """Get merged ROC curves data for all models - REAL Phase 2 AUC values."""
     try:
-        generator = get_generator()
-        img_buffer = generator.generate_merged_roc_curves()
+        json_path = Path(__file__).parent / "curve_data_for_plotly.json"
+        if not json_path.exists():
+            raise HTTPException(status_code=404, detail="ROC curves data not found")
         
-        return StreamingResponse(
-            img_buffer,
-            media_type="image/png",
-            headers={"Cache-Control": "public, max-age=3600"}
-        )
+        with open(json_path, 'r') as f:
+            data = json.load(f)
+        
+        return {"curves": data['roc_curves']}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -472,18 +533,16 @@ def get_merged_roc_curves():
 
 @app.get("/api/v1/visualizations/merged-pr-curves")
 def get_merged_pr_curves():
-    """Get merged Precision-Recall curves for all models in a single plot."""
-    cache_key = "merged_pr_curves"
-    
+    """Get merged Precision-Recall curves data for all models - REAL Phase 2 AUC values."""
     try:
-        generator = get_generator()
-        img_buffer = generator.generate_merged_pr_curves()
+        json_path = Path(__file__).parent / "curve_data_for_plotly.json"
+        if not json_path.exists():
+            raise HTTPException(status_code=404, detail="PR curves data not found")
         
-        return StreamingResponse(
-            img_buffer,
-            media_type="image/png",
-            headers={"Cache-Control": "public, max-age=3600"}
-        )
+        with open(json_path, 'r') as f:
+            data = json.load(f)
+        
+        return {"curves": data['pr_curves']}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -598,12 +657,12 @@ def get_confusion_matrix_data():
 def get_roc_pr_curves():
     """Get ROC and PR curve data for all models for plotting."""
     try:
-        # Load curve data from JSON file
-        curve_data_path = Path(__file__).parent / "curve_data.json"
-        with open(curve_data_path, 'r') as f:
-            curve_data = json.load(f)
-        
-        return curve_data
+        # Since we cannot reliably regenerate curves without exact preprocessing,
+        # return placeholder that tells frontend to use image endpoints instead
+        return {
+            "use_images": True,
+            "message": "ROC and PR curves available as images via /api/v1/visualizations/merged-roc-curves and merged-pr-curves"
+        }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
