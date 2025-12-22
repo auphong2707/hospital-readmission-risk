@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Manager Dashboard - Hospital Readmission Risk{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <div class="header-content">
+            <h2><i class="fas fa-chart-bar"></i> Manager Dashboard</h2>
+            <p class="subtitle">Savings Analysis & Cost Breakdown</p>
+        </div>
+    </div>
+
+    <!-- Section Navigation -->
+    <div class="section-nav">
+        <a href="#savings-summary" class="section-nav-item">
+            <i class="fas fa-dollar-sign"></i>
+            <span>Savings Summary</span>
+        </a>
+        <a href="#cost-breakdown" class="section-nav-item">
+            <i class="fas fa-chart-pie"></i>
+            <span>Cost Breakdown</span>
+        </a>
+        <a href="#model-comparison" class="section-nav-item">
+            <i class="fas fa-balance-scale-right"></i>
+            <span>Model Comparison</span>
+        </a>
+    </div>
+
+    <!-- Savings Summary Section -->
+    <section id="savings-summary" class="phase-section">
+        <div class="section-content">
+            <div class="section-header">
+                <div class="section-icon">
+                    <i class="fas fa-dollar-sign"></i>
+                </div>
+                <div class="section-title">
+                    <h2>Savings Summary</h2>
+                    <p>Cost avoidance and savings analysis</p>
+                </div>
+            </div>
+
+            <!-- Savings Metrics Grid -->
+            <div class="panel-container">
+                <div class="panel panel-half" id="panel-savings-metrics">
+                    <div class="panel-header">
+                        <h3><i class="fas fa-chart-line"></i> Key Savings Metrics</h3>
+                    </div>
+                    <div id="savings-metrics-stats"></div>
+                </div>
+                <div class="panel panel-half" id="panel-impact-metrics">
+                    <div class="panel-header">
+                        <h3><i class="fas fa-hospital"></i> Clinical Impact Metrics</h3>
+                    </div>
+                    <div id="impact-metrics-stats"></div>
+                </div>
+            </div>
+
+            <!-- Executive Summary Card -->
+            <div class="panel panel-full" id="panel-executive-summary">
+                <div class="panel-header">
+                    <h3><i class="fas fa-briefcase"></i> Executive Summary</h3>
+                </div>
+                <div id="executive-summary-card"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Cost Breakdown Section -->
+    <section id="cost-breakdown" class="phase-section">
+        <div class="section-content">
+            <div class="section-header">
+                <div class="section-icon">
+                    <i class="fas fa-chart-pie"></i>
+                </div>
+                <div class="section-title">
+                    <h2>Cost Breakdown</h2>
+                    <p>Detailed analysis of costs, benefits, and net savings</p>
+                </div>
+            </div>
+
+            <!-- Waterfall Chart -->
+            <div class="panel panel-full" id="panel-waterfall">
+                <div class="panel-header">
+                    <h3><i class="fas fa-stream"></i> Financial Waterfall: From Costs to Net Savings</h3>
+                </div>
+                <div id="plot-waterfall"></div>
+            </div>
+
+            <!-- Cost Components -->
+            <div class="panel-container">
+                <div class="panel panel-half" id="panel-cost-components">
+                    <div class="panel-header">
+                        <h3><i class="fas fa-receipt"></i> Cost Components</h3>
+                    </div>
+                    <div id="cost-components-table"></div>
+                </div>
+                <div class="panel panel-half" id="panel-benefit-components">
+                    <div class="panel-header">
+                        <h3><i class="fas fa-hand-holding-usd"></i> Benefit Components</h3>
+                    </div>
+                    <div id="benefit-components-table"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Model Comparison Section -->
+    <section id="model-comparison" class="phase-section">
+        <div class="section-content">
+            <div class="section-header">
+                <div class="section-icon">
+                    <i class="fas fa-balance-scale-right"></i>
+                </div>
+                <div class="section-title">
+                    <h2>Model Comparison</h2>
+                    <p>Compare business metrics across all three models</p>
+                </div>
+            </div>
+
+            <!-- Comparison Table -->
+            <div class="panel panel-full" id="panel-model-comparison">
+                <div class="panel-header">
+                    <h3><i class="fas fa-table"></i> Model Performance & Financial Comparison</h3>
+                </div>
+                <p class="panel-description">Comprehensive comparison of all models to support deployment decision</p>
+                <div id="model-comparison-table"></div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/manager.js"></script>
+{% endblock %}

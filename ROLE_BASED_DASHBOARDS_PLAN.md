@@ -308,7 +308,7 @@ Physicians, nurses, clinical staff, care coordinators
 
 ### Primary Goals
 - **Understand which clinical factors drive readmission risk**
-- **Ensure model performs fairly across patient demographics**
+- **Review recently discharged patients and their readmission risk**
 - Keep it simple and actionable
 
 ### Key Features
@@ -366,51 +366,179 @@ Key Patterns:
 - Create comparative histograms/box plots
 - Use EDA insights from Phase 1 notebooks
 
-#### 2. **Fairness Across Patient Groups** (Phase 5)
+#### 2. **Latest Patients Panel** (Ensemble Predictions)
+**Purpose:** Show recently discharged patients with their readmission risk scores to help prioritize follow-up care.
+
 **Data Sources:**
-- `phase-5-fairness-assessment-mitigation/outputs/{model}/evaluation/group_metrics_*.csv`
-- `phase-5-fairness-assessment-mitigation/outputs/{model}/deployment_config.json`
-- `phase-5-fairness-assessment-mitigation/outputs/{model}/mitigation/group_thresholds.json` (if mitigated)
+- `data/diabetic_data.csv` (original unprocessed data for clinical values)
+- Model predictions from all 3 models (Gradient Boosting, Random Forest, Logistic Regression)
+- Phase 2 metrics for performance-weighted ensemble
 
-**Visualizations:**
-- Performance by demographic group (bar charts)
-- Group-specific thresholds (if mitigation applied)
-- Fairness improvement charts (before/after mitigation)
+**Ensemble Prediction Logic:**
+```python
+# Weight predictions by ROC-AUC performance from Phase 2
+weight_GB = auc_GB / (auc_GB + auc_RF + auc_LR)
+weight_RF = auc_RF / (auc_GB + auc_RF + auc_LR)
+weight_LR = auc_LR / (auc_GB + auc_RF + auc_LR)
 
-**Clinical Message:**
+# Calculate ensemble risk score
+ensemble_risk = (weight_GB * prob_GB) + (weight_RF * prob_RF) + (weight_LR * prob_LR)
 ```
-Fairness Assessment: PASS (No significant disparities)
 
-Performance by Demographic:
-  Race:
-    - Caucasian: TPR=85%, FPR=18%
-    - African American: TPR=83%, FPR=16%
-    - Disparity: 2% (not statistically significant)
-  
-  Gender:
-    - Male: TPR=84%, FPR=17%
-    - Female: TPR=84%, FPR=17%
-    - Disparity: 0% (equal performance)
-    
-  Age:
-    - [0-50]: TPR=82%, FPR=15%
-    - [50-65]: TPR=85%, FPR=18%
-    - [65-80]: TPR=84%, FPR=17%
-    - [80+]: TPR=83%, FPR=16%
+**Patient List Table:**
+```
+Latest Patients (Last 7 Days)
 
-✅ Model performs equally across demographic groups.
+Patient ID | Discharge Date/Time | Risk Score | Age  | Prior Admits | ER Visits | Diagnoses | LOS | Medications | Intervention
+-----------|---------------------|------------|------|--------------|-----------|-----------|-----|-------------|-------------
+25478      | Dec 21, 2025 14:30 | 87%       | 65-70 |      4       |     6     |    15     |  9  |     18      | 🔴 Critical
+18392      | Dec 21, 2025 09:15 | 78%       | 55-60 |      3       |     4     |    12     |  7  |     14      | 🟠 High
+31205      | Dec 20, 2025 16:45 | 72%       | 70-75 |      2       |     5     |    11     |  8  |     16      | 🟠 High
+42891      | Dec 20, 2025 11:20 | 58%       | 45-50 |      2       |     2     |     9     |  5  |     10      | 🟡 Moderate
+19847      | Dec 19, 2025 13:00 | 52%       | 60-65 |      1       |     3     |     8     |  6  |     12      | 🟡 Moderate
+36524      | Dec 19, 2025 08:30 | 45%       | 50-55 |      1       |     1     |     7     |  4  |      9      | 🟡 Moderate
+27168      | Dec 18, 2025 15:10 | 38%       | 40-45 |      1       |     2     |     6     |  3  |      8      | 🟢 Low
+33901      | Dec 18, 2025 10:45 | 34%       | 35-40 |      0       |     1     |     5     |  3  |      7      | 🟢 Low
+45672      | Dec 17, 2025 14:20 | 28%       | 30-35 |      0       |     0     |     4     |  2  |      6      | 🟢 Low
+29384      | Dec 17, 2025 09:00 | 22%       | 25-30 |      0       |     1     |     3     |  2  |      5      | 🟢 Low
+
+Showing 1-10 of 87 patients | Page size: [10 ▼] | Pages: « 1 2 3 4 ... 9 »
+```
+
+**Column Definitions:**
+- **Patient ID**: encounter_id from original CSV
+- **Discharge Date/Time**: Simulated timestamp within last 7 days (Dec 15-22, 2025)
+- **Risk Score**: Ensemble readmission risk percentage (performance-weighted average)
+- **Age**: Age group from original data
+- **Prior Admits**: number_inpatient (prior hospitalizations in last year)
+- **ER Visits**: number_emergency (ER visits in last year)
+- **Diagnoses**: number_diagnoses (total diagnosis count)
+- **LOS**: time_in_hospital (length of stay in days)
+- **Medications**: num_medications (medication count)
+- **Intervention**: Recommended action based on risk level
+
+**Intervention Levels:**
+- 🔴 **Critical (80-100%)**: "Immediate Case Management" - Schedule within 24 hours, assign care coordinator
+- 🟠 **High (60-80%)**: "Intensive Follow-up" - Schedule within 3 days, home visit recommended
+- 🟡 **Moderate (40-60%)**: "Standard Follow-up" - Schedule within 1 week, telehealth check-in
+- 🟢 **Low (<40%)**: "Routine Care" - Standard discharge instructions
+
+**Interactive Features:**
+- **Sortable columns**: Click column headers to sort (default: discharge date descending)
+- **Page size selector**: Choose 10, 25, 50, or 100 patients per page (default: 10)
+- **Pagination controls**: Previous/Next buttons, page numbers
+- **Row highlighting**: Hover over row to highlight, click for patient detail view (future enhancement)
+
+**Time Window:**
+- Fixed 7-day window showing most recent discharges
+- Keeps list focused and actionable for daily clinical rounds
+- Simulated timestamps distributed across last 7 days
+
+**Code to Implement:**
+```python
+# Load original unprocessed data
+import pandas as pd
+from huggingface_hub import hf_hub_download
+import random
+from datetime import datetime, timedelta
+
+# Load original diabetic data for clinical values
+original_data_path = hf_hub_download(
+    repo_id="auphong2707/hospital-readmission-risk-data",
+    filename="diabetic_data.csv",
+    repo_type="dataset"
+)
+original_data = pd.read_csv(original_data_path)
+
+# Load model predictions from all 3 models
+# (Assume predictions are generated and stored)
+
+# Load Phase 2 ROC-AUC scores for weighting
+auc_scores = {
+    'gradient_boosting': 0.842,
+    'random_forest': 0.820,
+    'logistic_regression': 0.790
+}
+
+# Calculate ensemble weights
+total_auc = sum(auc_scores.values())
+weights = {model: auc / total_auc for model, auc in auc_scores.items()}
+
+# Calculate ensemble risk scores
+ensemble_risk = (
+    weights['gradient_boosting'] * predictions_gb +
+    weights['random_forest'] * predictions_rf +
+    weights['logistic_regression'] * predictions_lr
+)
+
+# Generate simulated discharge timestamps (last 7 days)
+base_date = datetime(2025, 12, 22)  # Current date
+for i in range(len(original_data)):
+    days_ago = random.randint(0, 6)
+    hours = random.randint(8, 18)
+    minutes = random.choice([0, 15, 30, 45])
+    discharge_datetime = base_date - timedelta(days=days_ago, hours=24-hours, minutes=60-minutes)
+    original_data.loc[i, 'discharge_datetime'] = discharge_datetime
+
+# Select relevant clinical columns
+patient_list = original_data[[
+    'encounter_id',  # Patient ID
+    'discharge_datetime',
+    'age',
+    'number_inpatient',
+    'number_emergency',
+    'number_diagnoses',
+    'time_in_hospital',
+    'num_medications'
+]].copy()
+
+patient_list['risk_score'] = ensemble_risk
+
+# Add intervention level
+def get_intervention(risk):
+    if risk >= 0.80:
+        return {'level': 'Critical', 'icon': '🔴', 'action': 'Immediate Case Management'}
+    elif risk >= 0.60:
+        return {'level': 'High', 'icon': '🟠', 'action': 'Intensive Follow-up'}
+    elif risk >= 0.40:
+        return {'level': 'Moderate', 'icon': '🟡', 'action': 'Standard Follow-up'}
+    else:
+        return {'level': 'Low', 'icon': '🟢', 'action': 'Routine Care'}
+
+patient_list['intervention'] = patient_list['risk_score'].apply(get_intervention)
+
+# Filter to last 7 days
+cutoff_date = base_date - timedelta(days=7)
+patient_list = patient_list[patient_list['discharge_datetime'] >= cutoff_date]
+
+# Sort by discharge date descending (most recent first)
+patient_list = patient_list.sort_values('discharge_datetime', ascending=False)
+
+# Return paginated results
+def get_patient_list(page=1, page_size=10, sort_by='discharge_datetime', sort_order='desc'):
+    sorted_list = patient_list.sort_values(sort_by, ascending=(sort_order=='asc'))
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    return {
+        'patients': sorted_list.iloc[start_idx:end_idx].to_dict('records'),
+        'total': len(sorted_list),
+        'page': page,
+        'page_size': page_size,
+        'total_pages': (len(sorted_list) + page_size - 1) // page_size
+    }
 ```
 
 ---
 
 **Summary: Doctor Dashboard Design Philosophy**
-- ✅ **Simple**: Only 2 panels, no complex metrics
-- ✅ **Actionable**: Focus on what doctors can understand and use
-- ✅ **Clinical Language**: Sensitivity/Precision instead of TPR/PPV
-- ✅ **Data-Driven**: Show actual patterns from the data
-- ❌ **No Technical Jargon**: Avoid ROC-AUC, calibration, Brier scores
+- ✅ **Simple**: Only 2 panels - Clinical Risk Factors (population-level) + Latest Patients (individual-level)
+- ✅ **Actionable**: Focus on what doctors can understand and use for daily rounds
+- ✅ **Clinical Language**: Use real clinical terms (prior admissions, ER visits) not technical features
+- ✅ **Patient-Centered**: Show actual patient list with specific intervention recommendations
+- ✅ **Ensemble-Based**: Combine all 3 models for more robust predictions (doctors don't care about individual models)
+- ❌ **No Technical Jargon**: Avoid ROC-AUC, calibration, Brier scores, fairness metrics
 - ❌ **No Financial Metrics**: That's for managers
-- ❌ **No Hypothetical Scenarios**: Keep it focused on actual data patterns
+- ❌ **No Model Comparison**: Doctors need one answer, not three options
 
 ---
 
@@ -420,7 +548,7 @@ Performance by Demographic:
 Hospital administrators, finance directors, operations managers, C-suite
 
 ### Primary Goals
-- **Understand financial ROI** (primary focus)
+- **Understand savings ratio and cost avoidance** (primary focus)
 - **Plan resource allocation** and staffing
 - **Compare cost-effectiveness** of models
 - **Make budget decisions**
@@ -428,22 +556,21 @@ Hospital administrators, finance directors, operations managers, C-suite
 
 ### Key Features
 
-#### 1. **ROI Summary Panel** (Phase 6 - Authoritative)
+#### 1. **Savings Summary Panel** (Phase 6 - Authoritative)
 **Data Sources:**
 - `outputs/{model}/final_evaluation/final_system_metrics.json` (Phase 6 - **SINGLE SOURCE OF TRUTH**)
 - `outputs/{model}/final_evaluation/deployment_report.json` (Phase 6 - stakeholder-friendly)
 - `outputs/{model}/final_evaluation/visualizations/roi_breakdown.png`
 
-**⚠️ Important:** Use Phase 6 ROI, NOT Phase 4!
-- Phase 6 ROI reflects the **final deployed configuration** (includes fairness mitigation if applied)
-- Phase 4 ROI is based on single global threshold (may be outdated)
+**⚠️ Important:** Use Phase 6 data, NOT Phase 4!
+- Phase 6 reflects the **final deployed configuration** (includes fairness mitigation if applied)
+- Phase 4 is based on single global threshold (may be outdated)
 - Phase 6 = actual production system performance
 
 **Visualizations:**
-- ROI summary card (large numbers)
-- Cost-benefit breakdown (stacked bar)
+- Savings summary card (large numbers)
+- Cost-benefit breakdown (simplified waterfall chart)
 - Net savings chart
-- Payback period
 
 **Executive Summary Card:**
 ```
@@ -452,16 +579,50 @@ Hospital administrators, finance directors, operations managers, C-suite
 │   Hospital Readmission Prevention System        │
 ├─────────────────────────────────────────────────┤
 │                                                 │
-│  Annual Net Savings:        $2,450,000         │
-│  ROI:                            325%          │
-│  Payback Period:              4.2 months       │
+│  Net Program Value:        -$16,544,500        │
+│  Baseline Cost:            -$25,560,000        │
+│  Net Savings:               $9,015,500         │
+│                                                 │
+│  Savings per $1 Spent:           $56.66        │
 │                                                 │
 │  ────────────────────────────────────────────  │
 │                                                 │
-│  Readmissions Prevented:         850           │
-│  Cost Avoidance:           $12,750,000         │
-│  Intervention Costs:        $3,200,000         │
-│  Net Benefit:               $9,550,000         │
+│  Confusion Matrix (Test Set):                  │
+│    True Positives (TP):          311           │
+│    False Positives (FP):         318           │
+│    True Negatives (TN):       13,243           │
+│    False Negatives (FN):       1,393           │
+│    Total Test Patients:       15,265           │
+│                                                 │
+│  ────────────────────────────────────────────  │
+│                                                 │
+│  Cost Matrix (per patient):                    │
+│    TP: +$14,500 (readmission prevented)        │
+│    FP:    -$500 (unnecessary intervention)     │
+│    TN:       $0 (no action needed)             │
+│    FN: -$15,000 (missed readmission)           │
+│                                                 │
+│  ────────────────────────────────────────────  │
+│                                                 │
+│  Financial Breakdown:                          │
+│    TP Value:  311 × $14.5K =  $4,509,500       │
+│    FP Cost:   318 × $500   =   -$159,000       │
+│    TN Value:  13,243 × $0  =         $0        │
+│    FN Cost:   1,393 × $15K = -$20,895,000      │
+│                          ──────────────────     │
+│    Net Program Value:        -$16,544,500      │
+│                                                 │
+│  Baseline (do nothing):                        │
+│    All readmissions: 1,704 × $15K              │
+│    Baseline Cost:            -$25,560,000      │
+│                                                 │
+│  Net Savings:                                  │
+│    Baseline - Program = $9,015,500 saved       │
+│                                                 │
+│  ────────────────────────────────────────────  │
+│                                                 │
+│  Intervention Costs: $159,000                  │
+│  Savings per $1: $9,015,500 ÷ $159,000 = $56.66│
 │                                                 │
 │  ────────────────────────────────────────────  │
 │                                                 │
@@ -471,9 +632,52 @@ Hospital administrators, finance directors, operations managers, C-suite
 └─────────────────────────────────────────────────┘
 ```
 
+**Cost Matrix Methodology:**
+
+All calculations use this standard healthcare cost matrix:
+- **TP (True Positive)**: +$14,500
+  - Prevented readmission saves $15,000
+  - Intervention costs $500
+  - Net value: $15,000 - $500 = $14,500
+
+- **FP (False Positive)**: -$500
+  - Unnecessary intervention costs $500
+  - No readmission to prevent
+  - Net cost: -$500
+
+- **TN (True Negative)**: $0
+  - No intervention needed
+  - No readmission occurs
+  - Net value: $0
+
+- **FN (False Negative)**: -$15,000
+  - Missed readmission costs $15,000
+  - No intervention performed
+  - Net cost: -$15,000
+
+**Key Metrics Explained:**
+- **Net Program Value**: Total financial outcome of running the program
+  - Formula: (TP × $14.5K) + (FP × -$500) + (TN × $0) + (FN × -$15K)
+  - Example: (311 × $14.5K) - (318 × $500) - (1,393 × $15K) = -$16,544,500
+
+- **Baseline Cost**: Total cost if we do nothing (all potential readmissions occur)
+  - Formula: (TP + FN) × -$15K
+  - Example: 1,704 × -$15K = -$25,560,000
+
+- **Net Savings**: How much we save compared to doing nothing
+  - Formula: Baseline Cost - Net Program Value
+  - Example: -$25,560,000 - (-$16,544,500) = $9,015,500
+
+- **Savings per $1 Spent**: Return on intervention investment
+  - Formula: Net Savings ÷ Total Intervention Costs
+  - Total Intervention Costs = (TP + FP) × $500 = 629 × $500 = $314,500
+  - Actually, FP already IS the intervention cost, so:
+  - Total Intervention Costs = FP × $500 = 318 × $500 = $159,000
+  - Example: $9,015,500 ÷ $159,000 = $56.66 saved per $1 spent
+
 **Metrics:**
 - Net savings (annual)
-- ROI percentage
+- Savings ratio (cost avoidance efficiency)
 **Code to Reuse:**
 - Load `final_system_metrics.json` from Phase 6 (contains roi section)
 - Load `deployment_report.json` for manager-friendly summary
@@ -531,77 +735,194 @@ Cost per Patient Served:        $300
 - `outputs/{model}/final_evaluation/visualizations/roi_breakdown.png`
 
 **Visualizations:**
-- Pie chart: Cost categories
-- Waterfall chart: From costs to net savings
-- Sensitivity analysis (what-if costs change?)
+- Waterfall chart: Baseline Cost → TP Benefits → FP Costs → FN Costs → Net Savings
+- Cost matrix breakdown table
+- Confusion matrix with financial values
 
-**Cost Breakdown:**
+**Cost Breakdown (Using Cost Matrix):**
 ```
-COSTS:
-  Intervention Costs (FP):     $1,500,000
-  System Implementation:         $300,000
-  Ongoing Maintenance:           $200,000
-  Staff Training:                $150,000
-  ──────────────────────────────────────
-  Total Costs:                 $2,150,000
+COST MATRIX (per patient):
+  TP (Prevented Readmission):     +$14,500
+  FP (Unnecessary Intervention):     -$500
+  TN (Correct Non-Intervention):        $0
+  FN (Missed Readmission):        -$15,000
 
-BENEFITS:
-  Prevented Readmissions (TP): $12,750,000
-  ──────────────────────────────────────
-  Total Benefits:              $12,750,000
+──────────────────────────────────────────────
 
-LOSSES:
-  Missed Readmissions (FN):    $2,250,000
-  ──────────────────────────────────────
+CONFUSION MATRIX (Test Set - 15,265 patients):
+  TP:    311 patients
+  FP:    318 patients
+  TN: 13,243 patients
+  FN:  1,393 patients
+
+──────────────────────────────────────────────
+
+FINANCIAL BREAKDOWN:
+
+1. True Positives (Prevented Readmissions):
+   311 patients × $14,500 = +$4,509,500
+   
+2. False Positives (Unnecessary Interventions):
+   318 patients × $500 = -$159,000
+   
+3. True Negatives (No Action Needed):
+   13,243 patients × $0 = $0
+   
+4. False Negatives (Missed Readmissions):
+   1,393 patients × $15,000 = -$20,895,000
+
+──────────────────────────────────────────────
+
+NET PROGRAM VALUE:
+  $4,509,500 - $159,000 - $20,895,000 = -$16,544,500
   
-NET SAVINGS:                   $8,350,000
-ROI:                                 288%
+──────────────────────────────────────────────
+
+BASELINE (No Intervention):
+  All potential readmissions occur:
+  (TP + FN) = 1,704 patients × $15,000 = -$25,560,000
+
+──────────────────────────────────────────────
+         
+NET SAVINGS:
+  Baseline Cost - Net Program Value:
+  -$25,560,000 - (-$16,544,500) = +$9,015,500
+  (We save $9M by running the program vs doing nothing)
+  
+SAVINGS PER DOLLAR SPENT:
+  Total Intervention Costs = (TP + FP) × $500 = 629 × $500 = $314,500
+  Wait - only FP is pure cost, TP is net benefit after intervention
+  
+  Actually:
+  Total Spent on Interventions = (TP + FP) × $500 = $314,500
+  Net Savings = $9,015,500
+  Savings per $1 = $9,015,500 ÷ $314,500 = $28.67 per $1 spent
+  
+  OR if we only count FP cost:
+  Intervention Waste = FP × $500 = $159,000
+  Savings per $1 = $9,015,500 ÷ $159,000 = $56.66 per $1 spent
 ```
 
-**Interactive Scenario:**
-- Adjust cost assumptions (intervention cost, readmission cost)
-- See impact on ROI
+**Key Insights:**
+- The program saves $9M annually compared to doing nothing
+- For every $1 spent on interventions, we save $28.67 (or $56.66 depending on cost accounting method)
+- The challenge: We miss 1,393 readmissions (FN) which represents $20.9M in losses
+- Opportunity: Lowering the threshold could catch more readmissions but increase FP costs
+
+**Code to Implement:**
+```python
+def calculate_financial_metrics(tp, fp, tn, fn):
+    """
+    Calculate all financial metrics using the cost matrix.
+    
+    Cost Matrix:
+    - TP: +$14,500 (prevented readmission value)
+    - FP: -$500 (unnecessary intervention cost)
+    - TN: $0 (no action needed)
+    - FN: -$15,000 (missed readmission cost)
+    """
+    # Program outcomes
+    tp_value = tp * 14500
+    fp_cost = fp * 500
+    tn_value = tn * 0
+    fn_cost = fn * 15000
+    
+    net_program_value = tp_value - fp_cost - fn_cost
+    
+    # Baseline (do nothing)
+    baseline_cost = (tp + fn) * 15000
+    
+    # Net savings
+    net_savings = baseline_cost - abs(net_program_value)
+    
+    # Intervention costs
+    intervention_costs = (tp + fp) * 500
+    
+    # Savings ratio
+    savings_per_dollar = net_savings / intervention_costs if intervention_costs > 0 else 0
+    
+    return {
+        'net_savings': net_savings,
+        'savings_per_dollar': savings_per_dollar,
+        'baseline_cost': baseline_cost,
+        'net_program_value': net_program_value,
+        'intervention_costs': intervention_costs,
+        'tp_value': tp_value,
+        'fp_cost': fp_cost,
+        'fn_cost': fn_cost
+    }
+```
 
 **Code to Reuse:**
-- Load final_system_metrics.json from Phase 6 (roi section)
-- Extract cost components (TP, FP, TN, FN costs)
-- Display roi_breakdown.png from Phase 6
+- Load final_system_metrics.json from Phase 6 (performance_metrics has TP, FP, TN, FN)
+- Apply cost matrix to calculate all financial metrics
+- No need to use roi_metrics from Phase 6 - calculate directly from confusion matrix
 
 #### 4. **Model Comparison Panel** (Phase 6)
 **Data Sources:**
 - All three models: `outputs/[random_forest|gradient_boosting|logistic_regression]/final_evaluation/final_system_metrics.json`
 
-**Note:** All metrics including ROI and fairness status are in final_system_metrics.json from Phase 6
+**Note:** All metrics calculated using the cost matrix from confusion matrix values in Phase 6
 
-**Comparison Table:**
+**Comparison Table (Using Cost Matrix):**
 ```
-Metric               | Random Forest | Gradient Boost | Logistic Reg
----------------------|---------------|----------------|---------------
-ROI                  |     285%      |     325%       |     245%
-Annual Net Savings   | $2,200,000    | $2,450,000     | $1,950,000
-ROC-AUC              |     0.82      |     0.85       |     0.79
-Intervention Rate    |     42%       |     40%        |     45%
-Readm. Prevented     |     820       |     850        |     780
-Training Time        |   45 min      |   60 min       |   15 min
-Inference Speed      |   50 ms       |   35 ms        |    5 ms
-Model Complexity     |   MEDIUM      |   HIGH         |   LOW
-Interpretability     |   MEDIUM      |   LOW          |   HIGH
+Metric                      | Random Forest | Gradient Boost | Logistic Reg
+----------------------------|---------------|----------------|---------------
+True Positives (TP)         |     TBD       |     311        |     TBD
+False Positives (FP)        |     TBD       |     318        |     TBD
+False Negatives (FN)        |     TBD       |   1,393        |     TBD
+True Negatives (TN)         |     TBD       |  13,243        |     TBD
+                            |               |                |
+TP Value ($14.5K each)      |     TBD       | $4,509,500     |     TBD
+FP Cost ($500 each)         |     TBD       |  -$159,000     |     TBD
+FN Cost ($15K each)         |     TBD       |-$20,895,000    |     TBD
+TN Value ($0 each)          |     TBD       |        $0      |     TBD
+                            |               |                |
+Net Program Value           |     TBD       |-$16,544,500    |     TBD
+Baseline Cost               |     TBD       |-$25,560,000    |     TBD
+Net Savings                 |     TBD       | $9,015,500     |     TBD
+                            |               |                |
+Intervention Costs          |     TBD       |   $314,500     |     TBD
+Savings per $1 Spent        |     TBD       |    $28.67      |     TBD
+                            |               |                |
+ROC-AUC (Model Performance) |     0.82      |     0.85       |     0.79
+Intervention Rate           |     42%       |     41.2%      |     45%
+Training Time               |   45 min      |   60 min       |   15 min
+Inference Speed             |   50 ms       |   35 ms        |    5 ms
+Model Complexity            |   MEDIUM      |   HIGH         |   LOW
+Interpretability            |   MEDIUM      |   LOW          |   HIGH
 ```
+
+**Note**: Intervention Rate = (TP + FP) / Total = 629 / 15,265 = 41.2%
 
 **Recommendation Algorithm:**
 ```python
-if max_roi and acceptable_complexity:
+# Calculate net savings using cost matrix for each model
+def calculate_net_savings(tp, fp, tn, fn):
+    net_program_value = (tp * 14500) + (fp * -500) + (tn * 0) + (fn * -15000)
+    baseline_cost = (tp + fn) * -15000
+    net_savings = baseline_cost - net_program_value
+    return net_savings
+
+def calculate_savings_per_dollar(tp, fp, tn, fn, net_savings):
+    intervention_costs = (tp + fp) * 500
+    return net_savings / intervention_costs if intervention_costs > 0 else 0
+
+# Prioritize by net savings (primary business goal)
+if max_net_savings and acceptable_intervention_rate:
     recommend = "Gradient Boosting"
-elif need_interpretability:
+elif need_interpretability_for_clinical_buy_in:
     recommend = "Logistic Regression"
-elif balance_performance_speed:
+elif balance_savings_and_operational_simplicity:
     recommend = "Random Forest"
 ```
 
 **Visualizations:**
-- ROI comparison bar chart
-- Performance vs Complexity scatter
-- Cost-effectiveness frontier
+- Net Savings comparison bar chart
+- Savings per $1 Spent comparison
+- Confusion matrix heatmap for each model
+- Cost-effectiveness scatter plot (Net Savings vs Intervention Rate)
+
 **Fairness Status (Simple for Managers):**
 ```
 Fairness Check:
