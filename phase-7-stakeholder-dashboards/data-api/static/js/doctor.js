@@ -50,6 +50,8 @@ async function initializeDashboard() {
         // Load all panels in parallel
         await Promise.all([
             loadRiskFactors(), // Uses ensemble endpoint (no model selector)
+            loadAgeStratification(), // Age-based readmission analysis
+            loadDiagnosisCategories(), // Diagnosis category prevalence
             loadRiskDistribution(), // Risk score distribution chart
             loadLatestPatients() // Uses ensemble endpoint for patient list
         ]);
@@ -427,6 +429,174 @@ async function loadFairnessOverall() {
     } catch (error) {
         console.error('Error loading overall fairness:', error);
         showError('table-fairness-overall', 'Failed to load fairness assessment');
+    }
+}
+
+/**
+ * Age Stratification Chart
+ */
+async function loadAgeStratification() {
+    try {
+        showLoading('chart-age-stratification');
+        
+        const data = await fetchJSON('/api/v1/clinical/age-stratification');
+        
+        // Prepare data for plotly
+        const ageBuckets = data.age_buckets;
+        const xValues = ageBuckets.map(b => b.age_range);
+        const yValues = ageBuckets.map(b => b.readmission_rate);
+        const ciLower = ageBuckets.map(b => b.ci_lower);
+        const ciUpper = ageBuckets.map(b => b.ci_upper);
+        const sampleSizes = ageBuckets.map(b => b.sample_size);
+        
+        // Line trace with error bars
+        const lineTrace = {
+            type: 'scatter',
+            mode: 'lines+markers',
+            x: xValues,
+            y: yValues,
+            marker: {
+                size: 10,
+                color: '#3498db',
+                line: { color: '#2874a6', width: 2 }
+            },
+            line: {
+                width: 3,
+                color: '#3498db'
+            },
+            name: 'Readmission Rate',
+            hovertemplate: '<b>%{x}</b><br>Rate: %{y:.2f}%<br>n=%{customdata:,}<extra></extra>',
+            customdata: sampleSizes
+        };
+        
+        // Confidence interval shading
+        const ciTrace = {
+            type: 'scatter',
+            mode: 'lines',
+            x: xValues.concat(xValues.slice().reverse()),
+            y: ciUpper.concat(ciLower.slice().reverse()),
+            fill: 'toself',
+            fillcolor: 'rgba(52, 152, 219, 0.2)',
+            line: { color: 'transparent' },
+            name: '95% CI',
+            showlegend: true,
+            hoverinfo: 'skip'
+        };
+        
+        // Overall rate line
+        const overallTrace = {
+            type: 'scatter',
+            mode: 'lines',
+            x: xValues,
+            y: Array(xValues.length).fill(data.overall_rate),
+            line: {
+                dash: 'dash',
+                width: 2,
+                color: '#e74c3c'
+            },
+            name: `Overall: ${data.overall_rate.toFixed(2)}%`,
+            hoverinfo: 'skip'
+        };
+        
+        const layout = {
+            margin: { l: 60, r: 40, t: 30, b: 100 },
+            height: 450,
+            xaxis: {
+                title: 'Age Range',
+                tickangle: -45
+            },
+            yaxis: {
+                title: 'Readmission Rate (%)',
+                gridcolor: '#e0e0e0'
+            },
+            plot_bgcolor: '#fafafa',
+            paper_bgcolor: 'white',
+            legend: {
+                x: 0.98,
+                y: 0.02,
+                bgcolor: 'rgba(255, 255, 255, 0.9)',
+                bordercolor: '#ddd',
+                borderwidth: 1,
+                xanchor: 'right',
+                yanchor: 'bottom'
+            },
+            hovermode: 'closest'
+        };
+        
+        const config = {
+            responsive: true,
+            displayModeBar: false
+        };
+        
+        Plotly.newPlot('chart-age-stratification', [ciTrace, lineTrace, overallTrace], layout, config);
+        
+    } catch (error) {
+        console.error('Error loading age stratification:', error);
+        showError('chart-age-stratification', 'Failed to load age stratification data');
+    }
+}
+
+/**
+ * Diagnosis Categories Bar Chart (Prevalence)
+ */
+async function loadDiagnosisCategories() {
+    try {
+        showLoading('chart-diagnosis-categories');
+        
+        const data = await fetchJSON('/api/v1/clinical/diagnosis-categories');
+        
+        // Prepare data for bar chart
+        const categories = data.categories.map(c => c.name);
+        const counts = data.categories.map(c => c.count);
+        
+        // Single health-vibed color (teal/green)
+        const healthColor = '#20b2aa';
+        
+        // Create bar chart
+        const trace = {
+            type: 'bar',
+            x: counts,
+            y: categories,
+            orientation: 'h',
+            marker: {
+                color: healthColor,
+                line: {
+                    color: '#fff',
+                    width: 1
+                }
+            },
+            text: counts.map(c => c.toLocaleString()),
+            textposition: 'inside',
+            textfont: { color: '#fff', size: 12 },
+            hovertemplate: '<b>%{y}</b><br>Patient Count: %{text}<extra></extra>'
+        };
+        
+        const layout = {
+            margin: { l: 120, r: 0, t: 20, b: 40 },
+            height: 450,
+            xaxis: {
+                title: 'Number of Patients',
+                gridcolor: '#e0e0e0'
+            },
+            yaxis: {
+                title: '',
+                autorange: 'reversed'
+            },
+            plot_bgcolor: '#fafafa',
+            paper_bgcolor: 'white',
+            showlegend: false
+        };
+        
+        const config = {
+            responsive: true,
+            displayModeBar: false
+        };
+        
+        Plotly.newPlot('chart-diagnosis-categories', [trace], layout, config);
+        
+    } catch (error) {
+        console.error('Error loading diagnosis categories:', error);
+        showError('chart-diagnosis-categories', 'Failed to load diagnosis category data');
     }
 }
 

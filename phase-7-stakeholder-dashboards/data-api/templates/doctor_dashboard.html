@@ -17,6 +17,10 @@
             <i class="fas fa-heartbeat"></i>
             <span>Clinical Risk Factors</span>
         </a>
+        <a href="#clinical-insights" class="section-nav-item">
+            <i class="fas fa-chart-line"></i>
+            <span>Clinical Insights</span>
+        </a>
         <a href="#latest-patients" class="section-nav-item">
             <i class="fas fa-hospital-user"></i>
             <span>Latest Patients</span>
@@ -59,6 +63,42 @@
             </div>
 
             <!-- Performance Metrics Explained - REMOVED -->
+        </div>
+    </section>
+
+    <!-- Clinical Insights Section -->
+    <section id="clinical-insights" class="phase-section">
+        <div class="section-content">
+            <div class="section-header">
+                <div class="section-icon">
+                    <i class="fas fa-chart-line"></i>
+                </div>
+                <div class="section-title">
+                    <h2>Clinical Insights</h2>
+                    <p>Data-driven patterns from patient population analysis</p>
+                </div>
+            </div>
+
+            <!-- Clinical Insights Row with Age and Diagnosis Side by Side -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+                <!-- Age Stratification -->
+                <div class="panel" id="panel-age-stratification">
+                    <div class="panel-header">
+                        <h3><i class="fas fa-birthday-cake"></i> Age Stratification Analysis</h3>
+                    </div>
+                    <p class="panel-description">Readmission rates across age groups with 95% confidence intervals. Higher rates in certain age groups may require targeted interventions.</p>
+                    <div id="chart-age-stratification" style="height: 450px;"></div>
+                </div>
+
+                <!-- Diagnosis Categories -->
+                <div class="panel" id="panel-diagnosis-categories">
+                    <div class="panel-header">
+                        <h3><i class="fas fa-notes-medical"></i> Diagnosis Category Prevalence</h3>
+                    </div>
+                    <p class="panel-description">Patient prevalence by diagnosis category. Shows which clinical conditions are most common in the patient population.</p>
+                    <div id="chart-diagnosis-categories" style="height: 450px;"></div>
+                </div>
+            </div>
         </div>
     </section>
 

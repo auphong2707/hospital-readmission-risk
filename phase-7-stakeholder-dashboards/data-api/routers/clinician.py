@@ -835,6 +835,222 @@ def get_latest_patients(
         raise HTTPException(status_code=500, detail=f"Error loading latest patients: {str(e)}")
 
 
+@router.get("/clinical/age-stratification")
+def get_age_stratification():
+    """
+    Get age-stratified readmission rates for clinical insights.
+    
+    Returns age bucket analysis with readmission rates, confidence intervals,
+    and sample sizes across age ranges from EDA-based analysis.
+    """
+    try:
+        # Load the raw data
+        data_path = Path(__file__).parent.parent.parent.parent / "data" / "diabetic_data.csv"
+        df = pd.read_csv(data_path)
+        
+        # Create target variable
+        df['readmitted_30day'] = (df['readmitted'] == '<30').astype(int)
+        
+        # Age mapping
+        age_mapping = {
+            '[0-10)': 0, '[10-20)': 1, '[20-30)': 2, '[30-40)': 3, '[40-50)': 4,
+            '[50-60)': 5, '[60-70)': 6, '[70-80)': 7, '[80-90)': 8, '[90-100)': 9
+        }
+        df['age_bucket'] = df['age'].map(age_mapping)
+        
+        # Calculate readmission rates by age bucket
+        age_analysis = []
+        overall_rate = df['readmitted_30day'].mean() * 100
+        
+        for bucket in sorted(df['age_bucket'].dropna().unique()):
+            subset = df[df['age_bucket'] == bucket]
+            n = len(subset)
+            readmit_rate = subset['readmitted_30day'].mean() * 100
+            
+            # Calculate 95% CI
+            p = readmit_rate / 100
+            se = np.sqrt(p * (1 - p) / n) if n > 0 else 0
+            ci_lower = max(0, (p - 1.96 * se) * 100)
+            ci_upper = min(100, (p + 1.96 * se) * 100)
+            
+            age_label = [k for k, v in age_mapping.items() if v == bucket][0]
+            
+            age_analysis.append({
+                'age_bucket': int(bucket),
+                'age_range': age_label,
+                'sample_size': int(n),
+                'readmission_rate': round(float(readmit_rate), 2),
+                'ci_lower': round(float(ci_lower), 2),
+                'ci_upper': round(float(ci_upper), 2)
+            })
+        
+        return {
+            "overall_rate": round(float(overall_rate), 2),
+            "age_buckets": age_analysis
+        }
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error calculating age stratification: {str(e)}")
+
+
+@router.get("/clinical/diagnosis-categories")
+def get_diagnosis_categories():
+    """
+    Get diagnosis category prevalence in the patient population.
+    
+    Categorizes ICD-9 codes into clinical categories (circulatory, respiratory, 
+    diabetes, digestive, injury, etc.) and calculates prevalence by sample size.
+    """
+    try:
+        # Load the raw data
+        data_path = Path(__file__).parent.parent.parent.parent / "data" / "diabetic_data.csv"
+        df = pd.read_csv(data_path)
+        
+        # Create target variable
+        df['readmitted_30day'] = (df['readmitted'] == '<30').astype(int)
+        
+        # Define ICD-9 categorization
+        def categorize_diagnosis(code):
+            try:
+                if pd.isna(code) or code == '?':
+                    return 'other'
+                
+                code_str = str(code)
+                if code_str.startswith('V') or code_str.startswith('E'):
+                    return 'other'
+                
+                code_num = float(code_str.split('.')[0]) if '.' in code_str else float(code_str)
+                
+                if 390 <= code_num < 460 or code_num == 785:
+                    return 'circulatory'
+                elif 460 <= code_num < 520 or code_num == 786:
+                    return 'respiratory'
+                elif 250 <= code_num < 251:
+                    return 'diabetes'
+                elif 520 <= code_num < 580 or code_num == 787:
+                    return 'digestive'
+                elif 800 <= code_num < 1000:
+                    return 'injury'
+                elif 710 <= code_num < 740:
+                    return 'musculoskeletal'
+                elif 580 <= code_num < 630 or code_num == 788:
+                    return 'genitourinary'
+                elif 140 <= code_num < 240:
+                    return 'neoplasms'
+                else:
+                    return 'other'
+            except:
+                return 'other'
+        
+        # Calculate prevalence for each diagnosis category
+        diag_columns = ['diag_1', 'diag_2', 'diag_3']
+        category_names = ['circulatory', 'respiratory', 'diabetes', 'digestive', 
+                         'injury', 'musculoskeletal', 'genitourinary', 'neoplasms', 'other']
+        
+        category_prevalence = {}
+        
+        for category in category_names:
+            total_count = 0
+            for diag_col in diag_columns:
+                # Count patients with this category in any diagnosis position
+                mask = df[diag_col].apply(lambda x: categorize_diagnosis(x) == category)
+                total_count += mask.sum()
+            
+            category_prevalence[category] = int(total_count)
+        
+        # Sort by prevalence (descending)
+        sorted_categories = sorted(category_prevalence.items(), key=lambda x: x[1], reverse=True)
+        
+        return {
+            "categories": [
+                {
+                    "name": cat.capitalize(),
+                    "count": count
+                }
+                for cat, count in sorted_categories
+            ]
+        }
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error calculating diagnosis categories: {str(e)}")
+
+
+@router.get("/clinical/key-indicators")
+def get_key_indicators():
+    """
+    Get key clinical indicator comparisons between readmitted and non-readmitted patients.
+    
+    Returns box plot data for top numerical features showing differences in 
+    distributions between readmitted and non-readmitted patients.
+    """
+    try:
+        # Load the raw data
+        data_path = Path(__file__).parent.parent.parent.parent / "data" / "diabetic_data.csv"
+        df = pd.read_csv(data_path)
+        
+        # Create target variable
+        df['readmitted_30day'] = (df['readmitted'] == '<30').astype(int)
+        
+        # Top numerical features from EDA
+        top_features = [
+            ('number_inpatient', 'Prior Hospitalizations'),
+            ('number_emergency', 'Emergency Room Visits'),
+            ('time_in_hospital', 'Length of Stay (days)'),
+            ('number_diagnoses', 'Number of Diagnoses'),
+            ('num_lab_procedures', 'Lab Procedures'),
+            ('num_medications', 'Number of Medications'),
+            ('num_procedures', 'Number of Procedures'),
+            ('number_outpatient', 'Outpatient Visits')
+        ]
+        
+        indicators = []
+        
+        for feature_col, feature_label in top_features:
+            if feature_col not in df.columns:
+                continue
+            
+            readmitted_data = df[df['readmitted_30day'] == 1][feature_col].dropna()
+            not_readmitted_data = df[df['readmitted_30day'] == 0][feature_col].dropna()
+            
+            if len(readmitted_data) == 0 or len(not_readmitted_data) == 0:
+                continue
+            
+            # Calculate quartiles for box plot
+            indicators.append({
+                'feature': feature_col,
+                'label': feature_label,
+                'not_readmitted': {
+                    'min': float(not_readmitted_data.min()),
+                    'q1': float(not_readmitted_data.quantile(0.25)),
+                    'median': float(not_readmitted_data.median()),
+                    'q3': float(not_readmitted_data.quantile(0.75)),
+                    'max': float(not_readmitted_data.max()),
+                    'count': int(len(not_readmitted_data))
+                },
+                'readmitted': {
+                    'min': float(readmitted_data.min()),
+                    'q1': float(readmitted_data.quantile(0.25)),
+                    'median': float(readmitted_data.median()),
+                    'q3': float(readmitted_data.quantile(0.75)),
+                    'max': float(readmitted_data.max()),
+                    'count': int(len(readmitted_data))
+                }
+            })
+        
+        return {
+            "indicators": indicators
+        }
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error calculating key indicators: {str(e)}")
+
+
 @router.get("/models/{method}/fairness-summary")
 def get_fairness_summary(method: str):
     """
