@@ -19,11 +19,16 @@ async function initializeDashboard() {
             loadRecommendedModel(),
             loadClassDistribution(),
             loadDatasetSplit(),
+            loadMissingData(),
+            loadPredictiveStrength(),
+            loadProtectedAttributes(),
             loadROCCurves(),
             loadPRCurves(),
             loadModelComparison(),
             loadCalibrationDiagrams(),
             loadPhase4CostBenefit(),
+            loadPhase5RiskDistribution('race'),
+            loadPhase5FairnessGaps('race'),
             loadFairnessAssessment(),
             loadFinalEvaluation()
         ]);
@@ -59,18 +64,12 @@ async function loadRecommendedModel() {
             },
             {
                 label: 'ROI',
-                value: formatNumber((data.best_roi || 325), 0),
-                unit: '%',
-                color: getColorByThreshold(data.best_roi || 325, { green: 300, yellow: 200 })
+                value: (data.best_roi || 0).toFixed(2) + '%',
+                color: getColorByThreshold(data.best_roi || 0, { green: 0.01, yellow: 0 })
             },
             {
                 label: 'Annual Savings',
-                value: formatCurrency(2450000),
-                color: 'green'
-            },
-            {
-                label: 'Readmissions Prevented',
-                value: '850',
+                value: formatCurrency(data.best_annual_savings || 0),
                 color: 'green'
             },
             {
@@ -124,52 +123,426 @@ async function loadDatasetSplit() {
 }
 
 /**
+ * Panel 4: Missing Data Overview
+ */
+async function loadMissingData() {
+    try {
+        showLoading('plot-missing-data');
+        
+        const response = await fetchJSON('/api/v1/phase1/missing-data');
+        const data = response.missing_data;
+        
+        // Get top 5 features with most missing data
+        const sortedData = data.sort((a, b) => b.missing_pct - a.missing_pct).slice(0, 5);
+        
+        const features = sortedData.map(d => d.feature);
+        const percentages = sortedData.map(d => d.missing_pct);
+        const colors = percentages.map(pct => {
+            if (pct > 50) return '#ef4444'; // Red for >50%
+            if (pct > 10) return '#f59e0b'; // Orange for 10-50%
+            return '#10b981'; // Green for <10%
+        });
+        
+        const trace = {
+            y: features,
+            x: percentages,
+            type: 'bar',
+            orientation: 'h',
+            marker: {
+                color: colors
+            },
+            text: percentages.map(p => p.toFixed(1) + '%'),
+            textposition: 'auto',
+            cliponaxis: false,
+            hovertemplate: '<b>%{y}</b><br>Missing: %{x:.1f}%<extra></extra>'
+        };
+        
+        const layout = {
+            title: {
+                text: 'Top 5 Features by Missing Data %',
+                font: { size: 16, color: '#333333' }
+            },
+            xaxis: {
+                title: 'Missing Percentage (%)',
+                gridcolor: '#e0e0e0',
+                color: '#333333'
+            },
+            yaxis: {
+                automargin: true,
+                color: '#333333'
+            },
+            plot_bgcolor: '#ffffff',
+            paper_bgcolor: '#ffffff',
+            font: { color: '#333333', size: 12 },
+            showlegend: false,
+            margin: { l: 0, r: 20, t: 100, b: 50 },
+            height: 400,
+            shapes: [
+                {
+                    type: 'line',
+                    x0: 10, x1: 10,
+                    y0: -0.5, y1: features.length - 0.5,
+                    line: { color: 'gray', width: 2, dash: 'dash' }
+                },
+                {
+                    type: 'line',
+                    x0: 50, x1: 50,
+                    y0: -0.5, y1: features.length - 0.5,
+                    line: { color: 'red', width: 2, dash: 'dash' }
+                }
+            ],
+            annotations: [
+                {
+                    x: 10, y: features.length - 0.5,
+                    text: '10% threshold',
+                    showarrow: false,
+                    xanchor: 'left',
+                    yanchor: 'bottom',
+                    font: { size: 10, color: 'gray' }
+                },
+                {
+                    x: 50, y: features.length - 0.5,
+                    text: '50% threshold',
+                    showarrow: false,
+                    xanchor: 'left',
+                    yanchor: 'bottom',
+                    font: { size: 10, color: 'red' }
+                }
+            ]
+        };
+        
+        const config = { responsive: true, displayModeBar: true };
+        Plotly.newPlot('plot-missing-data', [trace], layout, config);
+        
+    } catch (error) {
+        console.error('Error loading missing data:', error);
+        showError('plot-missing-data', 'Failed to load missing data');
+    }
+}
+
+/**
+ * Panel 5: Predictive Strength Ranking
+ */
+async function loadPredictiveStrength() {
+    try {
+        showLoading('plot-predictive-strength');
+        
+        const response = await fetchJSON('/api/v1/phase1/predictive-strength');
+        const data = response.features;
+        
+        const features = data.map(d => d.feature);
+        const strengths = data.map(d => d.strength);
+        const colors = data.map(d => d.type === 'Numerical' ? '#3b82f6' : '#f59e0b');
+        
+        const trace = {
+            y: features,
+            x: strengths,
+            type: 'bar',
+            orientation: 'h',
+            marker: {
+                color: colors
+            },
+            text: strengths.map(s => s.toFixed(4)),
+            textposition: 'auto',
+            cliponaxis: false,
+            hovertemplate: '<b>%{y}</b><br>Strength: %{x:.4f}<extra></extra>'
+        };
+        
+        const layout = {
+            title: {
+                text: 'Top 5 Features by Predictive Strength',
+                font: { size: 16, color: '#333333' }
+            },
+            xaxis: {
+                title: "Predictive Strength (Cramér's V / Point-Biserial)",
+                gridcolor: '#e0e0e0',
+                color: '#333333'
+            },
+            yaxis: {
+                automargin: true,
+                color: '#333333'
+            },
+            plot_bgcolor: '#ffffff',
+            paper_bgcolor: '#ffffff',
+            font: { color: '#333333', size: 12 },
+            showlegend: false,
+            margin: { l: 0, r: 20, t: 100, b: 50 },
+            height: 400,
+            shapes: [
+                {
+                    type: 'line',
+                    x0: 0.01, x1: 0.01,
+                    y0: -0.5, y1: features.length - 0.5,
+                    line: { color: 'gray', width: 1, dash: 'dash' }
+                },
+                {
+                    type: 'line',
+                    x0: 0.05, x1: 0.05,
+                    y0: -0.5, y1: features.length - 0.5,
+                    line: { color: 'orange', width: 1, dash: 'dash' }
+                },
+                {
+                    type: 'line',
+                    x0: 0.10, x1: 0.10,
+                    y0: -0.5, y1: features.length - 0.5,
+                    line: { color: 'red', width: 1, dash: 'dash' }
+                }
+            ],
+            annotations: [
+                {
+                    x: 0.95, y: 0.95,
+                    xref: 'paper', yref: 'paper',
+                    text: '<b>Feature Type</b><br>🔵 Numerical<br>🟠 Categorical',
+                    showarrow: false,
+                    xanchor: 'right',
+                    yanchor: 'top',
+                    bgcolor: 'rgba(255, 255, 255, 0.9)',
+                    bordercolor: '#cccccc',
+                    borderwidth: 1,
+                    borderpad: 4,
+                    font: { size: 10 }
+                }
+            ]
+        };
+        
+        const config = { responsive: true, displayModeBar: true };
+        Plotly.newPlot('plot-predictive-strength', [trace], layout, config);
+        
+    } catch (error) {
+        console.error('Error loading predictive strength:', error);
+        showError('plot-predictive-strength', 'Failed to load predictive strength');
+    }
+}
+
+/**
+ * Panel 6: Protected Attributes Analysis
+ */
+async function loadProtectedAttributes() {
+    try {
+        showLoading('plot-protected-attributes');
+        
+        const response = await fetchJSON('/api/v1/phase1/protected-attributes');
+        const overallRate = response.overall_rate;
+        
+        // Create subplots for race, gender, and age
+        const raceData = response.race;
+        const genderData = response.gender;
+        const ageData = response.age;
+        
+        // Create traces for each subplot
+        const traces = [];
+        
+        // Race subplot (column 1)
+        traces.push({
+            x: raceData.map(d => d.category),
+            y: raceData.map(d => d.readmit_rate),
+            error_y: {
+                type: 'data',
+                array: raceData.map(d => d.ci),
+                visible: true
+            },
+            type: 'bar',
+            marker: { color: '#3b82f6' },
+            name: 'Race',
+            xaxis: 'x1',
+            yaxis: 'y1',
+            hovertemplate: '<b>%{x}</b><br>Rate: %{y:.1f}%<br>n=%{customdata}<extra></extra>',
+            customdata: raceData.map(d => d.count.toLocaleString())
+        });
+        
+        // Gender subplot (column 2)
+        traces.push({
+            x: genderData.map(d => d.category),
+            y: genderData.map(d => d.readmit_rate),
+            error_y: {
+                type: 'data',
+                array: genderData.map(d => d.ci),
+                visible: true
+            },
+            type: 'bar',
+            marker: { color: '#8b5cf6' },
+            name: 'Gender',
+            xaxis: 'x2',
+            yaxis: 'y2',
+            hovertemplate: '<b>%{x}</b><br>Rate: %{y:.1f}%<br>n=%{customdata}<extra></extra>',
+            customdata: genderData.map(d => d.count.toLocaleString())
+        });
+        
+        // Age subplot (column 3)
+        traces.push({
+            x: ageData.map(d => d.category),
+            y: ageData.map(d => d.readmit_rate),
+            error_y: {
+                type: 'data',
+                array: ageData.map(d => d.ci),
+                visible: true
+            },
+            type: 'bar',
+            marker: { color: '#ec4899' },
+            name: 'Age',
+            xaxis: 'x3',
+            yaxis: 'y3',
+            hovertemplate: '<b>%{x}</b><br>Rate: %{y:.1f}%<br>n=%{customdata}<extra></extra>',
+            customdata: ageData.map(d => d.count.toLocaleString())
+        });
+        
+        const layout = {
+            title: {
+                text: 'Readmission Rates by Protected Attributes (with 95% CI)',
+                font: { size: 18, color: '#333333' }
+            },
+            grid: { rows: 1, columns: 3, pattern: 'independent' },
+            xaxis1: {
+                title: 'Race',
+                domain: [0, 0.30],
+                tickangle: -45,
+                color: '#333333'
+            },
+            yaxis1: {
+                title: 'Readmission Rate (%)',
+                range: [0, 15],
+                color: '#333333'
+            },
+            xaxis2: {
+                title: 'Gender',
+                domain: [0.35, 0.65],
+                color: '#333333'
+            },
+            yaxis2: {
+                title: '',
+                range: [0, 15],
+                color: '#333333'
+            },
+            xaxis3: {
+                title: 'Age Range',
+                domain: [0.70, 1.0],
+                tickangle: -45,
+                color: '#333333'
+            },
+            yaxis3: {
+                title: '',
+                range: [0, 15],
+                color: '#333333'
+            },
+            plot_bgcolor: '#ffffff',
+            paper_bgcolor: '#ffffff',
+            font: { color: '#333333', size: 11 },
+            showlegend: false,
+            margin: { l: 70, r: 40, t: 70, b: 120 },
+            height: 500,
+            shapes: [
+                // Overall rate lines for each subplot
+                {
+                    type: 'line',
+                    x0: 0, x1: 1,
+                    xref: 'x1 domain',
+                    y0: overallRate, y1: overallRate,
+                    yref: 'y1',
+                    line: { color: 'red', width: 2, dash: 'dash' }
+                },
+                {
+                    type: 'line',
+                    x0: 0, x1: 1,
+                    xref: 'x2 domain',
+                    y0: overallRate, y1: overallRate,
+                    yref: 'y2',
+                    line: { color: 'red', width: 2, dash: 'dash' }
+                },
+                {
+                    type: 'line',
+                    x0: 0, x1: 1,
+                    xref: 'x3 domain',
+                    y0: overallRate, y1: overallRate,
+                    yref: 'y3',
+                    line: { color: 'red', width: 2, dash: 'dash' }
+                }
+            ]
+        };
+        
+        const config = { responsive: true, displayModeBar: true };
+        Plotly.newPlot('plot-protected-attributes', traces, layout, config);
+        
+    } catch (error) {
+        console.error('Error loading protected attributes:', error);
+        showError('plot-protected-attributes', 'Failed to load protected attributes');
+    }
+}
+
+/**
  * Panel 9: ROC Curves Comparison
  */
 async function loadROCCurves() {
     try {
         showLoading('plot-roc-curves');
         
-        const data = await fetchJSON('/api/v1/visualizations/roc-pr-curves');
+        const response = await fetchJSON('/api/v1/visualizations/merged-roc-curves');
+        const curves = response.curves;
         
+        // Create traces for each model
         const traces = [];
+        const colors = {
+            'Gradient Boosting': '#2E7D32',
+            'Random Forest': '#1565C0',
+            'Logistic Regression': '#C62828',
+            'Random Classifier': '#999999'
+        };
         
-        // Add ROC curves for each model
-        Object.keys(data).forEach(modelKey => {
-            if (data[modelKey].roc) {
-                traces.push({
-                    type: 'scatter',
-                    mode: 'lines',
-                    name: MODEL_NAMES[modelKey],
-                    x: data[modelKey].roc.fpr,
-                    y: data[modelKey].roc.tpr,
-                    line: {
-                        color: MODEL_COLORS[modelKey],
-                        width: 2
-                    },
-                    hovertemplate: '<b>%{fullData.name}</b><br>FPR: %{x:.3f}<br>TPR: %{y:.3f}<br>AUC: ' + 
-                                   formatNumber(data[modelKey].roc.auc, 3) + '<extra></extra>'
-                });
-            }
-        });
+        for (const [modelName, data] of Object.entries(curves)) {
+            traces.push({
+                x: data.fpr,
+                y: data.tpr,
+                mode: 'lines',
+                name: modelName,
+                line: {
+                    color: colors[modelName] || '#7f7f7f',
+                    width: modelName === 'Random Classifier' ? 2 : 3,
+                    dash: modelName === 'Random Classifier' ? 'dash' : 'solid'
+                },
+                hovertemplate: `${modelName}<br>FPR: %{x:.3f}<br>TPR: %{y:.3f}<br>AUC: ${data.auc.toFixed(3)}<extra></extra>`
+            });
+        }
         
-        // Add diagonal reference line
-        traces.push({
-            type: 'scatter',
-            mode: 'lines',
-            name: 'Random (AUC=0.5)',
-            x: [0, 1],
-            y: [0, 1],
-            line: {
-                color: '#6b7280',
-                width: 1,
-                dash: 'dash'
+        const layout = {
+            title: {
+                text: 'ROC Curves Comparison',
+                font: { size: 18, color: '#333333' }
             },
-            hoverinfo: 'skip',
-            showlegend: true
-        });
+            xaxis: {
+                title: 'False Positive Rate',
+                gridcolor: '#e0e0e0',
+                color: '#333333',
+                range: [-0.05, 1.05],
+                constrain: 'domain'
+            },
+            yaxis: {
+                title: 'True Positive Rate',
+                gridcolor: '#e0e0e0',
+                color: '#333333',
+                range: [-0.05, 1.05],
+                scaleanchor: 'x',
+                scaleratio: 1,
+                constrain: 'domain'
+            },
+            plot_bgcolor: '#ffffff',
+            paper_bgcolor: '#ffffff',
+            font: { color: '#333333' },
+            showlegend: true,
+            legend: {
+                x: 0.6,
+                y: 0.2,
+                bgcolor: 'rgba(255, 255, 255, 0.9)',
+                bordercolor: '#cccccc',
+                borderwidth: 1
+            },
+            hovermode: 'closest',
+            margin: { l: 60, r: 30, t: 60, b: 60 },
+            autosize: true
+        };
         
-        createLineChart('plot-roc-curves', traces, 'False Positive Rate', 'True Positive Rate');
+        const config = { responsive: true, displayModeBar: true };
+        
+        Plotly.newPlot('plot-roc-curves', traces, layout, config);
+        
     } catch (error) {
         console.error('Error loading ROC curves:', error);
         showError('plot-roc-curves', 'Failed to load ROC curves');
@@ -183,30 +556,74 @@ async function loadPRCurves() {
     try {
         showLoading('plot-pr-curves');
         
-        const data = await fetchJSON('/api/v1/visualizations/roc-pr-curves');
+        const response = await fetchJSON('/api/v1/visualizations/merged-pr-curves');
+        const curves = response.curves;
         
+        // Create traces for each model
         const traces = [];
+        const colors = {
+            'Gradient Boosting': '#2E7D32',
+            'Random Forest': '#1565C0',
+            'Logistic Regression': '#C62828',
+            'Baseline': '#999999'
+        };
         
-        // Add PR curves for each model
-        Object.keys(data).forEach(modelKey => {
-            if (data[modelKey].pr) {
-                traces.push({
-                    type: 'scatter',
-                    mode: 'lines',
-                    name: MODEL_NAMES[modelKey],
-                    x: data[modelKey].pr.recall,
-                    y: data[modelKey].pr.precision,
-                    line: {
-                        color: MODEL_COLORS[modelKey],
-                        width: 2
-                    },
-                    hovertemplate: '<b>%{fullData.name}</b><br>Recall: %{x:.3f}<br>Precision: %{y:.3f}<br>AP: ' + 
-                                   formatNumber(data[modelKey].pr.ap, 3) + '<extra></extra>'
-                });
-            }
-        });
+        for (const [modelName, data] of Object.entries(curves)) {
+            traces.push({
+                x: data.recall,
+                y: data.precision,
+                mode: 'lines',
+                name: modelName,
+                line: {
+                    color: colors[modelName] || '#7f7f7f',
+                    width: modelName === 'Baseline' ? 2 : 3,
+                    dash: modelName === 'Baseline' ? 'dash' : 'solid'
+                },
+                hovertemplate: `${modelName}<br>Recall: %{x:.3f}<br>Precision: %{y:.3f}<br>AP: ${data.auc.toFixed(3)}<extra></extra>`
+            });
+        }
         
-        createLineChart('plot-pr-curves', traces, 'Recall', 'Precision');
+        const layout = {
+            title: {
+                text: 'Precision-Recall Curves Comparison',
+                font: { size: 18, color: '#333333' }
+            },
+            xaxis: {
+                title: 'Recall',
+                gridcolor: '#e0e0e0',
+                color: '#333333',
+                range: [-0.05, 1.05],
+                constrain: 'domain'
+            },
+            yaxis: {
+                title: 'Precision',
+                gridcolor: '#e0e0e0',
+                color: '#333333',
+                range: [-0.05, 1.05],
+                scaleanchor: 'x',
+                scaleratio: 1,
+                constrain: 'domain'
+            },
+            plot_bgcolor: '#ffffff',
+            paper_bgcolor: '#ffffff',
+            font: { color: '#333333' },
+            showlegend: true,
+            legend: {
+                x: 0.6,
+                y: 0.9,
+                bgcolor: 'rgba(255, 255, 255, 0.9)',
+                bordercolor: '#cccccc',
+                borderwidth: 1
+            },
+            hovermode: 'closest',
+            margin: { l: 60, r: 30, t: 60, b: 60 },
+            autosize: true
+        };
+        
+        const config = { responsive: true, displayModeBar: true };
+        
+        Plotly.newPlot('plot-pr-curves', traces, layout, config);
+        
     } catch (error) {
         console.error('Error loading PR curves:', error);
         showError('plot-pr-curves', 'Failed to load PR curves');
@@ -251,20 +668,84 @@ async function loadModelComparison() {
 async function loadCalibrationDiagrams() {
     const models = ['gradient_boosting', 'random_forest', 'logistic_regression'];
     const divIds = ['plot-calibration-gb', 'plot-calibration-rf', 'plot-calibration-lr'];
+    const colors = {
+        'gradient_boosting': '#2E7D32',
+        'random_forest': '#1565C0',
+        'logistic_regression': '#C62828'
+    };
     
     for (let i = 0; i < models.length; i++) {
         try {
-            showLoading(divIds[i]);
+            const response = await fetchJSON(`/api/v1/visualizations/calibration-curve-data/${models[i]}`);
             
-            // For now, display the static images from the API
-            // In the future, we could render interactive Plotly calibration plots
-            const imageUrl = `/api/v1/visualizations/reliability-diagram/${models[i]}`;
-            document.getElementById(divIds[i]).innerHTML = `
-                <img src="${imageUrl}" 
-                     style="width: 100%; height: auto;" 
-                     alt="${MODEL_NAMES[models[i]]} Calibration"
-                     onerror="this.parentElement.innerHTML='<div class=\\'error-message\\'>Failed to load calibration diagram</div>'">
-            `;
+            // Create traces
+            const traces = [
+                // Perfect calibration line
+                {
+                    x: response.perfect_calibration.x,
+                    y: response.perfect_calibration.y,
+                    mode: 'lines',
+                    name: 'Perfect Calibration',
+                    line: { color: '#999999', width: 2, dash: 'dash' }
+                },
+                // Uncalibrated model
+                {
+                    x: response.uncalibrated.prob_pred,
+                    y: response.uncalibrated.prob_true,
+                    mode: 'lines+markers',
+                    name: 'Uncalibrated',
+                    line: { color: '#FF9800', width: 2 },
+                    marker: { size: 8, color: '#FF9800' }
+                },
+                // Calibrated model
+                {
+                    x: response.calibrated.prob_pred,
+                    y: response.calibrated.prob_true,
+                    mode: 'lines+markers',
+                    name: 'Calibrated',
+                    line: { color: colors[models[i]], width: 3 },
+                    marker: { size: 8, color: colors[models[i]] }
+                }
+            ];
+            
+            const layout = {
+                title: {
+                    text: `Reliability Diagram`,
+                    font: { size: 16, color: '#333333' }
+                },
+                xaxis: {
+                    title: 'Mean Predicted Probability',
+                    gridcolor: '#e0e0e0',
+                    color: '#333333',
+                    range: [-0.05, 1.05]
+                },
+                yaxis: {
+                    title: 'Fraction of Positives (Observed)',
+                    gridcolor: '#e0e0e0',
+                    color: '#333333',
+                    range: [-0.05, 1.05],
+                    scaleanchor: 'x',
+                    scaleratio: 1
+                },
+                plot_bgcolor: '#ffffff',
+                paper_bgcolor: '#ffffff',
+                font: { color: '#333333' },
+                showlegend: true,
+                legend: {
+                    x: 0.05,
+                    y: 0.95,
+                    bgcolor: 'rgba(255, 255, 255, 0.9)',
+                    bordercolor: '#cccccc',
+                    borderwidth: 1
+                },
+                hovermode: 'closest',
+                margin: { l: 60, r: 0, t: 100, b: 60 }
+            };
+            
+            const config = { responsive: true, displayModeBar: true };
+            
+            Plotly.newPlot(divIds[i], traces, layout, config);
+            
         } catch (error) {
             console.error(`Error loading calibration for ${models[i]}:`, error);
             showError(divIds[i], 'Failed to load calibration diagram');
@@ -277,27 +758,148 @@ async function loadCalibrationDiagrams() {
  */
 async function loadPhase4CostBenefit() {
     try {
-        // Load costs plot
         showLoading('plot-costs-threshold');
-        const costsImageUrl = '/static/phase4_costs_vs_threshold.png';
-        document.getElementById('plot-costs-threshold').innerHTML = `
-            <img src="${costsImageUrl}" 
-                 style="width: 100%; height: auto;" 
-                 alt="Costs vs Threshold"
-                 onerror="this.parentElement.innerHTML='<div class=\\'error-message\\'>Failed to load costs plot</div>'">
-        `;
-        
-        // Load benefits plot
         showLoading('plot-benefits-threshold');
-        const benefitsImageUrl = '/static/phase4_benefits_vs_threshold.png';
-        document.getElementById('plot-benefits-threshold').innerHTML = `
-            <img src="${benefitsImageUrl}" 
-                 style="width: 100%; height: auto;" 
-                 alt="Benefits vs Threshold"
-                 onerror="this.parentElement.innerHTML='<div class=\\'error-message\\'>Failed to load benefits plot</div>'">
-        `;
+        
+        // Fetch threshold curve data for all models
+        const response = await fetchJSON('/api/v1/models/phase4/threshold-curves');
+        
+        if (!response || !response.models) {
+            showError('plot-costs-threshold', 'Failed to load Phase 4 data');
+            showError('plot-benefits-threshold', 'Failed to load Phase 4 data');
+            return;
+        }
+        
+        const models = response.models;
+        const colors = {
+            'gradient_boosting': '#2E7D32',
+            'random_forest': '#1976D2',
+            'logistic_regression': '#C62828'
+        };
+        
+        // Prepare data for costs plot
+        const costsTraces = [];
+        const benefitsTraces = [];
+        
+        Object.keys(models).forEach(method => {
+            const modelData = models[method];
+            if (!modelData) return;
+            
+            // Costs trace
+            costsTraces.push({
+                x: modelData.thresholds,
+                y: modelData.costs,
+                mode: 'lines',
+                name: modelData.model_name,
+                line: { color: colors[method], width: 2.5 }
+            });
+            
+            // Optimal threshold line for costs
+            costsTraces.push({
+                x: [modelData.optimal_threshold, modelData.optimal_threshold],
+                y: [0, Math.max(...modelData.costs)],
+                mode: 'lines',
+                name: `${modelData.model_name} Optimal`,
+                line: { color: colors[method], width: 1.5, dash: 'dash' },
+                showlegend: false,
+                hoverinfo: 'skip'
+            });
+            
+            // Benefits trace
+            benefitsTraces.push({
+                x: modelData.thresholds,
+                y: modelData.benefits,
+                mode: 'lines',
+                name: modelData.model_name,
+                line: { color: colors[method], width: 2.5 }
+            });
+            
+            // Optimal threshold line for benefits
+            benefitsTraces.push({
+                x: [modelData.optimal_threshold, modelData.optimal_threshold],
+                y: [0, Math.max(...modelData.benefits)],
+                mode: 'lines',
+                name: `${modelData.model_name} Optimal`,
+                line: { color: colors[method], width: 1.5, dash: 'dash' },
+                showlegend: false,
+                hoverinfo: 'skip'
+            });
+        });
+        
+        // Costs plot layout
+        const costsLayout = {
+            title: {
+                text: 'Total Costs vs Decision Threshold',
+                font: { size: 16, color: '#333' }
+            },
+            xaxis: {
+                title: 'Decision Threshold',
+                gridcolor: '#e0e0e0',
+                range: [-0.05, 1.05]
+            },
+            yaxis: {
+                title: 'Total Costs ($)',
+                gridcolor: '#e0e0e0',
+                rangemode: 'tozero'
+            },
+            plot_bgcolor: '#ffffff',
+            paper_bgcolor: '#ffffff',
+            showlegend: true,
+            legend: {
+                x: 0.98,
+                y: 0.15,
+                xanchor: 'right',
+                yanchor: 'bottom',
+                bgcolor: 'rgba(255,255,255,0.9)',
+                bordercolor: '#ccc',
+                borderwidth: 1
+            },
+            margin: { l: 70, r: 0, t: 100, b: 60 },
+            hovermode: 'closest',
+            height: 500
+        };
+        
+        // Benefits plot layout
+        const benefitsLayout = {
+            title: {
+                text: 'Total Benefits vs Decision Threshold',
+                font: { size: 16, color: '#333' }
+            },
+            xaxis: {
+                title: 'Decision Threshold',
+                gridcolor: '#e0e0e0',
+                range: [-0.05, 1.05]
+            },
+            yaxis: {
+                title: 'Total Benefits ($)',
+                gridcolor: '#e0e0e0',
+                rangemode: 'tozero'
+            },
+            plot_bgcolor: '#ffffff',
+            paper_bgcolor: '#ffffff',
+            showlegend: true,
+            legend: {
+                x: 0.7,
+                y: 0.95,
+                bgcolor: 'rgba(255,255,255,0.9)',
+                bordercolor: '#ccc',
+                borderwidth: 1
+            },
+            margin: { l: 70, r: 0, t: 100, b: 60 },
+            hovermode: 'closest',
+            height: 500
+        };
+        
+        const config = { responsive: true, displayModeBar: true };
+        
+        // Plot both charts
+        Plotly.newPlot('plot-costs-threshold', costsTraces, costsLayout, config);
+        Plotly.newPlot('plot-benefits-threshold', benefitsTraces, benefitsLayout, config);
+        
     } catch (error) {
         console.error('Error loading Phase 4 plots:', error);
+        showError('plot-costs-threshold', 'Failed to load costs plot');
+        showError('plot-benefits-threshold', 'Failed to load benefits plot');
     }
 }
 
@@ -340,27 +942,358 @@ async function loadFinalEvaluation() {
     try {
         showLoading('table-final-evaluation');
         
-        // Placeholder data (to be replaced with real API endpoint)
-        const columns = ['Model', 'Final ROC-AUC', 'Final Brier', 'Final ROI %', 'Readmissions Prevented', 'Deployment Status'];
-        const rows = [
-            ['Gradient Boosting', '0.842', '0.18', '325', '850', '✅ Ready'],
-            ['Random Forest', '0.820', '0.19', '285', '820', '✅ Ready'],
-            ['Logistic Regression', '0.790', '0.21', '245', '780', '✅ Ready']
-        ];
+        // Fetch real data from API
+        const data = await fetchJSON('/api/v1/models/phase6/final-evaluation');
         
-        // Define thresholds for color coding
-        const thresholds = [
-            null, // Model name
-            { green: 0.8, yellow: 0.7 }, // ROC-AUC (higher is better)
-            { green: 0.15, yellow: 0.25, inverse: true }, // Brier (lower is better)
-            { green: 300, yellow: 200 }, // ROI (higher is better)
-            null, // Readmissions prevented
-            null  // Status
-        ];
+        if (!data || !data.models || data.models.length === 0) {
+            showError('table-final-evaluation', 'No Phase 6 evaluation data available');
+            return;
+        }
         
-        createTable('table-final-evaluation', columns, rows, thresholds);
+        // Define columns (removed Specificity)
+        const columns = ['Model', 'ROC-AUC', 'Brier', 'Accuracy', 'Sensitivity', 
+                        'Precision', 'ROI %', 'Readmissions', 'Cost Savings', 'Status'];
+        
+        // Build rows from API data
+        const rows = data.models.map(model => [
+            model.model_name,
+            model.roc_auc.toFixed(3),
+            model.brier_score.toFixed(3),
+            model.accuracy.toFixed(3),
+            model.sensitivity.toFixed(3),
+            model.precision.toFixed(3),
+            model.roi_percentage.toFixed(1),
+            `${model.readmissions_prevented}/${model.total_readmissions}`,
+            `$${(model.cost_savings / 1000).toFixed(0)}K`,
+            model.deployment_status
+        ]);
+        
+        // Store raw values for comparison
+        const rawData = data.models.map(model => ({
+            readmissions_prevented: model.readmissions_prevented,
+            cost_savings: model.cost_savings
+        }));
+        
+        // Use standard createTable (no thresholds for now)
+        createTable('table-final-evaluation', columns, rows, null);
+        
+        // Apply custom highlighting for best values in each column
+        const table = document.querySelector('#table-final-evaluation table');
+        if (!table) return;
+        
+        const tbody = table.querySelector('tbody');
+        const trows = tbody.querySelectorAll('tr');
+        
+        // Find best values for each column
+        const numericColumns = [1, 2, 3, 4, 5, 6, 7, 8]; // All numeric columns including readmissions and cost
+        const bestIndices = {};
+        
+        numericColumns.forEach(colIdx => {
+            if (colIdx === 2) { // Brier - lower is better
+                const values = rows.map(row => parseFloat(row[colIdx]));
+                const minValue = Math.min(...values);
+                bestIndices[colIdx] = values.findIndex(v => v === minValue);
+            } else if (colIdx === 7) { // Readmissions prevented
+                const values = rawData.map(d => d.readmissions_prevented);
+                const maxValue = Math.max(...values);
+                bestIndices[colIdx] = values.findIndex(v => v === maxValue);
+            } else if (colIdx === 8) { // Cost savings
+                const values = rawData.map(d => d.cost_savings);
+                const maxValue = Math.max(...values);
+                bestIndices[colIdx] = values.findIndex(v => v === maxValue);
+            } else { // All others - higher is better
+                const values = rows.map(row => parseFloat(row[colIdx]));
+                const maxValue = Math.max(...values);
+                bestIndices[colIdx] = values.findIndex(v => v === maxValue);
+            }
+        });
+        
+        // Apply highlighting
+        trows.forEach((tr, rowIdx) => {
+            const cells = tr.querySelectorAll('td');
+            cells.forEach((cell, colIdx) => {
+                // Set narrower width for Model column
+                if (colIdx === 0) {
+                    cell.style.maxWidth = '140px';
+                    cell.style.whiteSpace = 'nowrap';
+                }
+                // Set narrower width for Readmissions column
+                if (colIdx === 7) {
+                    cell.style.maxWidth = '100px';
+                    cell.style.fontSize = '0.9em';
+                }
+                
+                // Highlight best values
+                if (numericColumns.includes(colIdx) && bestIndices[colIdx] === rowIdx) {
+                    cell.style.backgroundColor = '#d4edda';
+                    cell.style.fontWeight = 'bold';
+                    cell.style.color = '#155724';
+                }
+            });
+        });
+        
     } catch (error) {
         console.error('Error loading final evaluation:', error);
         showError('table-final-evaluation', 'Failed to load final evaluation');
     }
 }
+
+/**
+ * Update Phase 5 Risk Distribution based on selected demographic
+ */
+function updatePhase5RiskDistribution() {
+    const select = document.getElementById('demographic-select');
+    const demographic = select.value;
+    loadPhase5RiskDistribution(demographic);
+    loadPhase5FairnessGaps(demographic);
+}
+
+/**
+ * Load Phase 5 Risk Distribution by Demographic (Dynamic Plotly)
+ */
+async function loadPhase5RiskDistribution(demographic = 'race') {
+    try {
+        showLoading('phase5-risk-distribution-chart');
+        
+        const data = await fetchJSON(`/api/phase5/actual-risk-distributions?demographic=${demographic}`);
+        
+        // Create stacked bar chart traces for 3 models
+        const models = ['gradient_boosting', 'random_forest', 'logistic_regression'];
+        const riskLevels = ['Low', 'Medium', 'High'];
+        const colors = {
+            'Low': '#4ade80',      // Green
+            'Medium': '#fb923c',   // Orange
+            'High': '#ef4444'      // Red
+        };
+        
+        // Abbreviation mappings
+        const demographicAbbrev = {
+            'race': {
+                'Caucasian': 'C',
+                'AfricanAmerican': 'AA',
+                'Hispanic': 'H',
+                'Asian': 'A',
+                'Other': 'O'
+            },
+            'gender': {
+                'Male': 'M',
+                'Female': 'F'
+            },
+            'age': {
+                'young': 'Y',
+                'adult': 'A',
+                'middle_age': 'M',
+                'senior': 'S',
+                'elderly': 'E'
+            }
+        };
+        
+        const traces = [];
+        
+        models.forEach((modelKey, modelIdx) => {
+            const modelData = data[modelKey];
+            if (modelData.error) {
+                console.error(`Error loading ${modelKey}:`, modelData.error);
+                return;
+            }
+            
+            // Create stacked bar traces for each risk level
+            riskLevels.forEach(riskLevel => {
+                const xValues = [];
+                const yValues = [];
+                
+                modelData.groups.forEach(group => {
+                    const abbrev = demographicAbbrev[demographic][group.group] || group.group;
+                    xValues.push(abbrev);
+                    yValues.push(group.risk_categories[`${riskLevel}_pct`]);
+                });
+                
+                traces.push({
+                    x: xValues,
+                    y: yValues,
+                    name: riskLevel,
+                    type: 'bar',
+                    marker: { color: colors[riskLevel] },
+                    xaxis: `x${modelIdx + 1}`,
+                    yaxis: `y${modelIdx + 1}`,
+                    legendgroup: riskLevel,
+                    showlegend: modelIdx === 0
+                });
+            });
+        });
+        
+        const demographicLabel = demographic.charAt(0).toUpperCase() + demographic.slice(1);
+        
+        // Create legend/note text based on demographic
+        let noteText = '';
+        if (demographic === 'race') {
+            noteText = 'Groups: C=Caucasian, AA=African American, H=Hispanic, A=Asian, O=Other';
+        } else if (demographic === 'gender') {
+            noteText = 'Groups: M=Male, F=Female';
+        } else if (demographic === 'age') {
+            noteText = 'Age Groups: Y=Young (0-30 years), A=Adult (30-50 years), M=Middle Age (50-70 years), S=Senior (70-80 years), E=Elderly (80+ years)';
+        }
+        
+        const layout = {
+            title: {
+                text: `Risk Category Distribution by ${demographicLabel}`,
+                font: { size: 16 }
+            },
+            grid: {
+                rows: 1,
+                columns: 3,
+                pattern: 'independent',
+                xgap: 0.1
+            },
+            xaxis: { title: '' },
+            xaxis2: { title: demographicLabel },
+            xaxis3: { title: '' },
+            yaxis: { title: 'Percentage (%)', range: [0, 100] },
+            yaxis2: { title: '', range: [0, 100] },
+            yaxis3: { title: '', range: [0, 100] },
+            annotations: [
+                { text: MODEL_NAMES.gradient_boosting, xref: 'x domain', yref: 'y domain', x: 0.5, y: 1.15, xanchor: 'center', showarrow: false, font: { size: 14, weight: 'bold' } },
+                { text: MODEL_NAMES.random_forest, xref: 'x2 domain', yref: 'y2 domain', x: 0.5, y: 1.15, xanchor: 'center', showarrow: false, font: { size: 14, weight: 'bold' } },
+                { text: MODEL_NAMES.logistic_regression, xref: 'x3 domain', yref: 'y3 domain', x: 0.5, y: 1.15, xanchor: 'center', showarrow: false, font: { size: 14, weight: 'bold' } },
+                { text: noteText, xref: 'paper', yref: 'paper', x: 0.5, y: -0.12, xanchor: 'center', showarrow: false, font: { size: 11, color: '#666' } }
+            ],
+            barmode: 'stack',
+            height: 550,
+            margin: { t: 120, b: 120 }
+        };
+        
+        Plotly.newPlot('phase5-risk-distribution-chart', traces, layout, {responsive: true});
+        
+    } catch (error) {
+        showError('phase5-risk-distribution-chart', 'Failed to load risk distributions');
+        console.error('Error loading Phase 5 risk distributions:', error);
+    }
+}
+
+/**
+ * Load Phase 5 Fairness Gaps (TPR and FPR) - filtered by demographic
+ */
+async function loadPhase5FairnessGaps(demographic = 'race') {
+    try {
+        showLoading('phase5-fairness-tpr-chart');
+        showLoading('phase5-fairness-fpr-chart');
+        
+        const data = await fetchJSON('/api/phase5/fairness-gaps-data');
+        
+        const models = ['gradient_boosting', 'random_forest', 'logistic_regression'];
+        
+        // Collect data for proper grouped bar chart
+        const modelNames = [];
+        const tprBeforeValues = [];
+        const tprAfterValues = [];
+        const fprBeforeValues = [];
+        const fprAfterValues = [];
+        
+        models.forEach(modelKey => {
+            const modelData = data[modelKey];
+            if (modelData.error) return;
+            
+            const demoData = modelData.gaps[demographic];
+            
+            modelNames.push(MODEL_NAMES[modelKey]);
+            tprBeforeValues.push(demoData.tpr_gap_before * 100);
+            tprAfterValues.push(demoData.tpr_gap_after * 100);
+            fprBeforeValues.push(demoData.fpr_gap_before * 100);
+            fprAfterValues.push(demoData.fpr_gap_after * 100);
+        });
+        
+        // Create TWO traces total - After first (bottom), Before second (top)
+        const tprTraces = [
+            {
+                y: modelNames,
+                x: tprAfterValues,
+                name: 'After Mitigation',
+                type: 'bar',
+                orientation: 'h',
+                marker: { color: '#ef4444' }
+            },
+            {
+                y: modelNames,
+                x: tprBeforeValues,
+                name: 'Before Mitigation',
+                type: 'bar',
+                orientation: 'h',
+                marker: { color: '#10b981' }
+            }
+        ];
+        
+        const fprTraces = [
+            {
+                y: modelNames,
+                x: fprAfterValues,
+                name: 'After Mitigation',
+                type: 'bar',
+                orientation: 'h',
+                marker: { color: '#ef4444' }
+            },
+            {
+                y: modelNames,
+                x: fprBeforeValues,
+                name: 'Before Mitigation',
+                type: 'bar',
+                orientation: 'h',
+                marker: { color: '#10b981' }
+            }
+        ];
+        
+        const demographicLabel = demographic.charAt(0).toUpperCase() + demographic.slice(1);
+        
+        const tprLayout = {
+            title: {
+                text: `TPR Disparity for ${demographicLabel}`,
+                font: { size: 14 }
+            },
+            yaxis: { title: '' },
+            xaxis: { title: 'TPR Gap (%)', range: [0, Math.max(...tprTraces.map(t => Math.max(...t.x))) * 1.2] },
+            barmode: 'group',
+            bargap: 0.15,
+            bargroupgap: 0.1,
+            height: 400,
+            margin: { t: 60, b: 60, l: 150, r: 20 },
+            showlegend: true,
+            legend: { orientation: 'v', x: 1.05, y: 1 }
+        };
+        
+        const fprLayout = {
+            title: {
+                text: `FPR Disparity for ${demographicLabel}`,
+                font: { size: 14 }
+            },
+            yaxis: { title: '' },
+            xaxis: { title: 'FPR Gap (%)', range: [0, Math.max(...fprTraces.map(t => Math.max(...t.x))) * 1.2] },
+            barmode: 'group',
+            bargap: 0.15,
+            bargroupgap: 0.1,
+            height: 400,
+            margin: { t: 60, b: 60, l: 150, r: 20 },
+            showlegend: true,
+            legend: { orientation: 'v', x: 1.05, y: 1 }
+        };
+        
+        Plotly.newPlot('phase5-fairness-tpr-chart', tprTraces, tprLayout, {responsive: true});
+        Plotly.newPlot('phase5-fairness-fpr-chart', fprTraces, fprLayout, {responsive: true});
+        
+    } catch (error) {
+        showError('phase5-fairness-tpr-chart', 'Failed to load TPR gaps');
+        showError('phase5-fairness-fpr-chart', 'Failed to load FPR gaps');
+        console.error('Error loading Phase 5 fairness gaps:', error);
+    }
+}
+
+/**
+ * Get model color for consistent theming
+ */
+function getModelColor(modelKey) {
+    const colors = {
+        'gradient_boosting': '#667eea',
+        'random_forest': '#f093fb',
+        'logistic_regression': '#4facfe'
+    };
+    return colors[modelKey] || '#999';
+}
+

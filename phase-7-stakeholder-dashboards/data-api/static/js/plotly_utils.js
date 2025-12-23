@@ -53,6 +53,12 @@ const PLOTLY_CONFIG = {
  * Create a pie chart
  */
 function createPieChart(divId, labels, values, colors = null) {
+    // Clear loading indicator
+    const element = document.getElementById(divId);
+    if (element) {
+        element.innerHTML = '';
+    }
+    
     const data = [{
         type: 'pie',
         labels: labels,
@@ -62,6 +68,11 @@ function createPieChart(divId, labels, values, colors = null) {
         },
         textinfo: 'label+percent',
         textposition: 'auto',
+        textfont: {
+            size: 14,
+            family: 'Arial, sans-serif',
+            weight: 700
+        },
         hovertemplate: '<b>%{label}</b><br>Count: %{value}<br>Percent: %{percent}<extra></extra>',
         hole: 0
     }];
@@ -84,6 +95,12 @@ function createPieChart(divId, labels, values, colors = null) {
  * Create a grouped bar chart
  */
 function createGroupedBarChart(divId, categories, data, dataLabels, colors = null) {
+    // Clear loading indicator
+    const element = document.getElementById(divId);
+    if (element) {
+        element.innerHTML = '';
+    }
+    
     const traces = data.map((values, idx) => ({
         type: 'bar',
         name: dataLabels[idx],
@@ -115,6 +132,12 @@ function createGroupedBarChart(divId, categories, data, dataLabels, colors = nul
  * Create a line chart (ROC/PR curves)
  */
 function createLineChart(divId, traces, xAxisTitle = '', yAxisTitle = '', title = '') {
+    // Clear loading indicator
+    const element = document.getElementById(divId);
+    if (element) {
+        element.innerHTML = '';
+    }
+    
     const layout = {
         ...LIGHT_LAYOUT,
         title: title ? { text: title, font: { size: 16 } } : undefined,
@@ -277,10 +300,7 @@ async function fetchJSON(url) {
  * Show loading indicator
  */
 function showLoading(divId) {
-    const element = document.getElementById(divId);
-    if (element) {
-        element.innerHTML = '<div class="loading"></div>';
-    }
+    // Do nothing - loading indicators removed
 }
 
 /**

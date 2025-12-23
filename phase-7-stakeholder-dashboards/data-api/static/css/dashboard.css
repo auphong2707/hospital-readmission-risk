@@ -580,7 +580,22 @@ body {
 
 /* Plotly Container Adjustments */
 .panel > div[id^="plot-"] {
-    min-height: 300px;
+    width: 90%;
+    margin: 0 auto;
+}
+
+/* Square aspect ratio for ROC, PR curves, and calibration diagrams */
+#plot-roc-curves,
+#plot-pr-curves,
+#plot-calibration-gb,
+#plot-calibration-rf,
+#plot-calibration-lr {
+    aspect-ratio: 1 / 1;
+}
+
+/* Normal height for other plots */
+#plot-model-comparison {
+    height: 400px;
 }
 
 /* Loading Indicator */
@@ -594,13 +609,18 @@ body {
 }
 
 .loading::after {
-    content: "Loading...";
-    animation: pulse 1.5s ease-in-out infinite;
+    content: "";
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
 }
 
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 /* Error Message */
