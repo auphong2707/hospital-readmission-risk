@@ -212,21 +212,26 @@ class CompletePreprocessor:
         # 2. Create 6 age stratification features
         # Keep original 'age' column (it's one of the 23 raw features)
         if 'age' in data.columns:
-            # Map age brackets to ordinal codes (0-9)
+            # Map age brackets to ordinal codes (0-9) - refined based on risk patterns
             age_bucket_mapping = {
                 '[0-10)': 0, '[10-20)': 1, '[20-30)': 2, '[30-40)': 3, '[40-50)': 4,
                 '[50-60)': 5, '[60-70)': 6, '[70-80)': 7, '[80-90)': 8, '[90-100)': 9
             }
             data['age_bucket'] = data['age'].map(age_bucket_mapping).fillna(5).astype(int)
             
-            # Create 5 binary age indicators
-            data['age_young'] = (data['age_bucket'] < 3).astype(int)      # [0-30)
-            data['age_adult'] = ((data['age_bucket'] >= 3) & (data['age_bucket'] < 5)).astype(int)  # [30-50)
-            data['age_middle'] = ((data['age_bucket'] >= 5) & (data['age_bucket'] < 7)).astype(int) # [50-70)
-            data['age_senior'] = (data['age_bucket'] == 7).astype(int)    # [70-80)
-            data['age_elderly'] = (data['age_bucket'] >= 8).astype(int)   # [80-100)
+            # Create 5 binary age indicators based on refined risk stratification
+            data['age_very_young'] = (data['age_bucket'] < 2).astype(int)      # [0-20): low risk
+            data['age_adult'] = ((data['age_bucket'] >= 2) & (data['age_bucket'] < 4)).astype(int)  # [20-40): higher risk
+            data['age_middle'] = ((data['age_bucket'] >= 4) & (data['age_bucket'] < 6)).astype(int) # [40-60): moderate risk
+            data['age_senior'] = ((data['age_bucket'] >= 6) & (data['age_bucket'] < 8)).astype(int)    # [60-80): moderate-high risk
+            data['age_elderly'] = (data['age_bucket'] >= 8).astype(int)   # [80+): higher risk
             
-            print("  Created age_bucket (ordinal 0-9) + 5 binary age indicators")
+            print("  Created age_bucket (ordinal 0-9) + 5 refined binary age indicators:")
+            print("    - age_very_young: [0-20), low risk")
+            print("    - age_adult: [20-40), higher risk")
+            print("    - age_middle: [40-60), moderate risk")
+            print("    - age_senior: [60-80), moderate-high risk")
+            print("    - age_elderly: [80+), higher risk")
             print("  Kept original 'age' column as raw feature")
         
         return data
