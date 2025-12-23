@@ -31,7 +31,6 @@ async function initializeDashboard() {
             loadCalibrationDiagrams(),
             loadPhase4CostBenefit(),
             loadPhase4ConfusionMatrices(),
-            loadPhase5RiskDistribution('race'),
             loadPhase5FairnessGaps('race'),
             loadFairnessAssessment(),
             loadFinalEvaluation()
@@ -1532,125 +1531,6 @@ function updatePhase5RiskDistribution() {
 /**
  * Load Phase 5 Risk Distribution by Demographic (Dynamic Plotly)
  */
-async function loadPhase5RiskDistribution(demographic = 'race') {
-    try {
-        showLoading('phase5-risk-distribution-chart');
-        
-        const data = await fetchJSON(`/api/phase5/actual-risk-distributions?demographic=${demographic}`);
-        
-        // Create stacked bar chart traces for 3 models
-        const models = ['gradient_boosting', 'random_forest', 'logistic_regression'];
-        const riskLevels = ['Low', 'Medium', 'High'];
-        const colors = {
-            'Low': '#4ade80',      // Green
-            'Medium': '#fb923c',   // Orange
-            'High': '#ef4444'      // Red
-        };
-        
-        // Abbreviation mappings
-        const demographicAbbrev = {
-            'race': {
-                'Caucasian': 'C',
-                'AfricanAmerican': 'AA',
-                'Hispanic': 'H',
-                'Asian': 'A',
-                'Other': 'O'
-            },
-            'gender': {
-                'Male': 'M',
-                'Female': 'F'
-            },
-            'age': {
-                'young': 'Y',
-                'adult': 'A',
-                'middle_age': 'M',
-                'senior': 'S',
-                'elderly': 'E'
-            }
-        };
-        
-        const traces = [];
-        
-        models.forEach((modelKey, modelIdx) => {
-            const modelData = data[modelKey];
-            if (modelData.error) {
-                console.error(`Error loading ${modelKey}:`, modelData.error);
-                return;
-            }
-            
-            // Create stacked bar traces for each risk level
-            riskLevels.forEach(riskLevel => {
-                const xValues = [];
-                const yValues = [];
-                
-                modelData.groups.forEach(group => {
-                    const abbrev = demographicAbbrev[demographic][group.group] || group.group;
-                    xValues.push(abbrev);
-                    yValues.push(group.risk_categories[`${riskLevel}_pct`]);
-                });
-                
-                traces.push({
-                    x: xValues,
-                    y: yValues,
-                    name: riskLevel,
-                    type: 'bar',
-                    marker: { color: colors[riskLevel] },
-                    xaxis: `x${modelIdx + 1}`,
-                    yaxis: `y${modelIdx + 1}`,
-                    legendgroup: riskLevel,
-                    showlegend: modelIdx === 0
-                });
-            });
-        });
-        
-        const demographicLabel = demographic.charAt(0).toUpperCase() + demographic.slice(1);
-        
-        // Create legend/note text based on demographic
-        let noteText = '';
-        if (demographic === 'race') {
-            noteText = 'Groups: C=Caucasian, AA=African American, H=Hispanic, A=Asian, O=Other';
-        } else if (demographic === 'gender') {
-            noteText = 'Groups: M=Male, F=Female';
-        } else if (demographic === 'age') {
-            noteText = 'Age Groups: Y=Young (0-30 years), A=Adult (30-50 years), M=Middle Age (50-70 years), S=Senior (70-80 years), E=Elderly (80+ years)';
-        }
-        
-        const layout = {
-            title: {
-                text: `Risk Category Distribution by ${demographicLabel}`,
-                font: { size: 16 }
-            },
-            grid: {
-                rows: 1,
-                columns: 3,
-                pattern: 'independent',
-                xgap: 0.1
-            },
-            xaxis: { title: '' },
-            xaxis2: { title: demographicLabel },
-            xaxis3: { title: '' },
-            yaxis: { title: 'Percentage (%)', range: [0, 100] },
-            yaxis2: { title: '', range: [0, 100] },
-            yaxis3: { title: '', range: [0, 100] },
-            annotations: [
-                { text: MODEL_NAMES.gradient_boosting, xref: 'x domain', yref: 'y domain', x: 0.5, y: 1.15, xanchor: 'center', showarrow: false, font: { size: 14, weight: 'bold' } },
-                { text: MODEL_NAMES.random_forest, xref: 'x2 domain', yref: 'y2 domain', x: 0.5, y: 1.15, xanchor: 'center', showarrow: false, font: { size: 14, weight: 'bold' } },
-                { text: MODEL_NAMES.logistic_regression, xref: 'x3 domain', yref: 'y3 domain', x: 0.5, y: 1.15, xanchor: 'center', showarrow: false, font: { size: 14, weight: 'bold' } },
-                { text: noteText, xref: 'paper', yref: 'paper', x: 0.5, y: -0.12, xanchor: 'center', showarrow: false, font: { size: 11, color: '#666' } }
-            ],
-            barmode: 'stack',
-            height: 550,
-            margin: { t: 120, b: 120 }
-        };
-        
-        Plotly.newPlot('phase5-risk-distribution-chart', traces, layout, {responsive: true});
-        
-    } catch (error) {
-        showError('phase5-risk-distribution-chart', 'Failed to load risk distributions');
-        console.error('Error loading Phase 5 risk distributions:', error);
-    }
-}
-
 /**
  * Load Phase 5 Fairness Gaps (TPR and FPR) - filtered by demographic
  */
