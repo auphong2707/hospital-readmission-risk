@@ -150,22 +150,22 @@ def load_phase1_splits(cache_dir: str = "./data/downloaded",
     print(f"Cache directory: {cache_dir}")
     
     try:
-        # Download Phase 1 splits from HuggingFace
+        # Download Phase 1 splits from HuggingFace (NEW LOCATION - outside splits/ directory)
         train_path = hf_hub_download(
             repo_id=repo_id,
-            filename="splits/train.csv",
+            filename="train.csv",
             repo_type="dataset",
             cache_dir=cache_dir
         )
         val_path = hf_hub_download(
             repo_id=repo_id,
-            filename="splits/validation.csv",
+            filename="validation.csv",
             repo_type="dataset",
             cache_dir=cache_dir
         )
         test_path = hf_hub_download(
             repo_id=repo_id,
-            filename="splits/test.csv",
+            filename="test.csv",
             repo_type="dataset",
             cache_dir=cache_dir
         )
