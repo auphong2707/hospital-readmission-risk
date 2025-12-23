@@ -85,34 +85,44 @@ Data scientists, ML engineers, statisticians, technical reviewers
 
 **Summary Card:**
 ```
-🏆 RECOMMENDED MODEL: Gradient Boosting
+🏆 BEST PERFORMING MODEL: Gradient Boosting
 
 Performance:
   • ROC-AUC: 0.842 (highest)
   • Brier Score: 0.18 (best calibration)
-  • F1 Score: 0.72
+  • Recall (TPR): 96.6%
+  • F1 Score: 0.26
 
 Business Impact:
-  • ROI: 325%
-  • Annual Net Savings: $2,450,000
-  • Readmissions Prevented: 850
+  • ROI: 319%
+  • Annual Savings: $18.45M
+  • Interventions: 10,733 patients/year
+  • Readmissions Prevented: 1,646
 
 Fairness:
-  • Status: ✅ PASS
-  • Max Disparity: 4.2% (within threshold)
+  • Status: ❌ FAIL
+  • Race Disparity: 14.3% TPR, 13.0% FPR (threshold: <5%)
+  • Age Disparity: 60.6% FPR (threshold: <5%)
+  • Gender: ✅ PASS (1.6% TPR gap)
+  • Mitigation Attempted: Group-specific thresholds applied
 
-Deployment Readiness: ✅ READY
+Deployment Readiness: ⚠️ PENDING ETHICS REVIEW
+Blocker: Fairness violations in Race and Age groups
 ```
 
 **Data Sources:**
-- Aggregated from Phase 2 (performance), Phase 3 (calibration), Phase 6 (ROI, final metrics)
-- Best model determined by composite scoring across all phases
+- Aggregated from Phase 2 (performance), Phase 3 (calibration), Phase 5 (fairness), Phase 6 (final metrics)
+- Best model determined by composite scoring across all phases (performance + calibration + ROI)
+- Fairness status based on Phase 5 mitigation results
+
+**Note:** While Gradient Boosting has the best technical performance and ROI, it has **not passed fairness requirements** and requires further mitigation before deployment.
 
 **Code to Reuse:**
 - Load Phase 2 metrics for all 3 models
+- Load Phase 5 fairness evaluation and mitigation results
 - Load Phase 6 final evaluation for all 3 models
 - Calculate composite score to determine best model
-- Format as summary card
+- Format as summary card with realistic fairness status
 
 ---
 
@@ -230,27 +240,156 @@ Winner: Gradient Boosting (highest ROI and net savings)
 **Purpose:** Ensure equitable performance across demographic groups
 
 **Data Sources:**
-- `phase-5-fairness-assessment-mitigation/outputs/{model}/evaluation/group_metrics_*.csv`
-- `phase-5-fairness-assessment-mitigation/outputs/{model}/evaluation/statistical_tests.json`
-- `phase-5-fairness-assessment-mitigation/outputs/{model}/deployment_config.json`
+- `phase5_fairness_assessment/evaluation/fairness_report.json` (HuggingFace)
+- `phase5_fairness_assessment/evaluation/group_metrics_*.csv` (race, gender, age)
+- `phase5_fairness_assessment/evaluation/statistical_tests.json`
+- `phase5_fairness_assessment/mitigation/mitigation_impact.json`
+- `phase5_fairness_assessment/mitigation/group_thresholds.json`
+- `phase5_fairness_assessment/deployment_config.json`
+
+**⚠️ Important:** Phase 5 includes both **evaluation** (detect bias) and **mitigation** (fix bias with group-specific thresholds)
+
+**A. Fairness Evaluation Summary (Before Mitigation)**
 
 **Metrics Table:**
 ```
 Fairness Metric              | Gradient Boosting | Random Forest | Logistic Reg
 -----------------------------|-------------------|---------------|-------------
-Max TPR Disparity (Race)     |       2.3%        |     3.1%      |    4.2%
-Max FPR Disparity (Race)     |       1.8%        |     2.5%      |    3.1%
-Max TPR Disparity (Gender)   |       0.5%        |     0.8%      |    1.2%
-Max TPR Disparity (Age)      |       3.5%        |     4.2%      |    5.1%
+Max TPR Disparity (Race)     |       6.7%        |     TBD       |    TBD
+Max FPR Disparity (Race)     |      12.2%        |     TBD       |    TBD
+Max TPR Disparity (Gender)   |       1.6%        |     TBD       |    TBD
+Max FPR Disparity (Gender)   |       0.01%       |     TBD       |    TBD
+Max TPR Disparity (Age)      |       4.8%        |     TBD       |    TBD
+Max FPR Disparity (Age)      |      47.4%        |     TBD       |    TBD
 
-Threshold: < 5% disparity = PASS ✅
-Status: All models PASS fairness assessment
+Fairness Threshold: < 5% disparity = PASS ✅
+Status by Attribute:
+  • Race: ❌ FAIL (TPR=6.7%, FPR=12.2% > threshold)
+  • Gender: ✅ PASS (TPR=1.6%, FPR=0.01% < threshold)
+  • Age: ❌ FAIL (FPR=47.4% > threshold)
+
+Overall Status: ⚠️ BIAS DETECTED - Mitigation Required
+```
+
+**Group-Level Performance (Example: Race for Gradient Boosting)**
+```
+Race Group       | N    | TPR    | FPR    | Precision | Intervention Rate
+-----------------|------|--------|--------|-----------|------------------
+African American | 2901 | 96.9%  | 63.8%  | 16.2%     | 67.6%
+Caucasian        |11751 | 97.4%  | 68.3%  | 15.2%     | 71.6%
+Hispanic         | 320  | 100%   | 56.1%  | 20.3%     | 61.6%
+Other            | 202  | 93.3%  | 57.8%  | 11.5%     | 60.4%
+Asian            | 91   | 100%   | 57.1%  | 12.7%     | 60.4%
+
+Key Disparities:
+  • Highest intervention rate: Caucasian (71.6%)
+  • Lowest intervention rate: Other (60.4%)
+  • TPR gap: 6.7% (Other vs Hispanic/Asian)
+  • FPR gap: 12.2% (Caucasian vs Hispanic)
 ```
 
 **Visualizations:**
-- Disparity heatmap (TPR, FPR by demographic group)
-- Max disparity bar chart
-- Group-specific thresholds (if mitigation applied)
+
+**1. Risk Distribution by Demographic** (evaluation/visualizations/risk_distribution_race.png, risk_distribution_gender.png, risk_distribution_age.png)
+- **Purpose:** Diagnose if model systematically assigns different risk scores to different demographic groups
+- **What it shows:** 
+  - Predicted risk score distributions overlaid by demographic group
+  - Separate panels for Race, Gender, and Age
+  - Shows if distributions are shifted (bias in risk assignment)
+- **Key insights:**
+  - Are certain groups systematically assigned lower/higher risk?
+  - Do distributions overlap? (non-overlap suggests demographics used as proxy)
+  - Helps explain WHY disparities exist (root cause in model behavior)
+
+**2. Fairness Gaps (Before/After Mitigation)** (mitigation/visualizations/fairness_gaps.png)
+- **Purpose:** Quantitative proof of mitigation effectiveness (or failure)
+- **What it shows:**
+  - Bar chart comparing disparity gaps before and after group-specific thresholds
+  - Separate metrics for TPR gap and FPR gap
+  - All demographic attributes (Race, Gender, Age) in one view
+- **Key insights:**
+  - Race TPR gap: 6.7% → 14.3% (❌ Worse by +7.6pp)
+  - Race FPR gap: 12.2% → 13.0% (❌ Worse by +0.8pp)
+  - Age FPR gap: 47.4% → 60.6% (❌ Worse by +13.2pp)
+  - Gender: Minimal change (already passing fairness threshold)
+- **Conclusion:** Current mitigation strategy (group-specific thresholds) is ineffective
+
+---
+
+**B. Mitigation Strategy & Impact (After Applying Group-Specific Thresholds)**
+
+**Mitigation Approach:**
+- Strategy: Equalized Odds (adjust thresholds to minimize TPR & FPR gaps)
+- Method: Calculate optimal threshold per demographic group
+- Goal: Reduce disparities while maintaining overall performance
+
+**Mitigation Results (Gradient Boosting Example):**
+```
+Metric                       | Before Mitigation | After Mitigation | Change
+-----------------------------|-------------------|------------------|--------
+Overall TPR (Recall)         |     97.4%         |     96.6%        | -0.8%
+Overall FPR                  |     67.0%         |     67.0%        | +0.02%
+Overall ROI                  | $18,838,500       | $18,453,500      | -$385k (-2.0%)
+Intervention Rate            |     70.4%         |     70.3%        | -0.1%
+
+Fairness Improvements:
+  Race TPR Gap               |     6.7%          |    14.3%         | ❌ Worse (-7.6%)
+  Race FPR Gap               |    12.2%          |    13.0%         | ❌ Worse (-0.8%)
+  Gender TPR Gap             |     1.6%          |     1.6%         | ✅ Maintained
+  Age FPR Gap                |    47.4%          |    60.6%         | ⚠️ Worse (-13.2%)
+
+⚠️ Status: Mitigation did NOT improve fairness metrics
+Recommendation: Consider alternative strategies (reweighting, retraining, feature engineering)
+```
+
+**Group-Specific Thresholds Applied:**
+```
+Race Group       | Global Threshold | Group Threshold | TPR After | FPR After
+-----------------|------------------|-----------------|-----------|----------
+African American |      0.0251      |     0.0247      |   97.2%   |   65.7%
+Caucasian        |      0.0251      |     0.0253      |   96.4%   |   67.8%
+Hispanic         |      0.0251      |     0.0237      |   100%    |   58.9%
+Other            |      0.0251      |     0.0239      |   100%    |   58.8%
+Asian            |      0.0251      |     0.0243      |   100%    |   54.8%
+```
+
+---
+
+**Summary: Critical Visualizations Only**
+
+For a focused dashboard, show only the **Top 3**:
+1. **Fairness Heatmap** - See all bias at once
+2. **Trade-off Summary** - Understand the fairness-performance-ROI balance  
+3. **Fairness Gaps (Before/After)** - Did mitigation work? (Answer: No)
+
+These 3 charts tell the complete Phase 5 story: bias detected → mitigation attempted → fairness still not achieved → deployment blocked.
+
+---
+
+**C. Deployment Recommendation**
+
+**Decision Summary Card:**
+```
+🔴 NOT RECOMMENDED FOR DEPLOYMENT (Gradient Boosting)
+
+Reasons:
+  ✅ Fairness evaluation completed
+  ❌ Mitigation strategy failed to reduce disparities
+  ❌ Race and Age groups still show >5% disparities
+  ⚠️ Alternative mitigation approaches needed
+
+Next Steps:
+  1. Try alternative mitigation strategies:
+     - Reweight training data to balance demographics
+     - Retrain with fairness constraints
+     - Engineer features to reduce bias
+  2. Consult clinical ethics committee
+  3. Review clinical justification for disparities
+  4. Consider demographic-specific models
+
+ROI Impact: Minimal (-2%), performance acceptable
+Primary Blocker: Fairness violations not resolved
+```
 
 ---
 
@@ -260,24 +399,76 @@ Status: All models PASS fairness assessment
 **Data Sources:**
 - `outputs/{model}/final_evaluation/final_system_metrics.json` (all 3 models)
 - `outputs/{model}/final_evaluation/deployment_report.json`
+- Phase 5 mitigation results (if applied)
 
-**⚠️ Critical:** Phase 6 contains the **authoritative metrics** for the final deployed system (includes fairness mitigation adjustments)
+**⚠️ Critical:** Phase 6 contains the **authoritative metrics** for the final deployed system after Phase 5 fairness mitigation (if applied)
 
-**Metrics Table:**
+**Deployment Configuration:**
 ```
-Model              | Final ROC-AUC | Final Brier | Final ROI | Readm. Prevented | Status
--------------------|---------------|-------------|-----------|------------------|--------
-Gradient Boosting  |     0.842     |    0.18     |   325%    |       850        | ✅ Ready
-Random Forest      |     0.820     |    0.19     |   285%    |       820        | ✅ Ready
-Logistic Regression|     0.790     |    0.21     |   245%    |       780        | ✅ Ready
+Configuration Element        | Details
+-----------------------------|--------------------------------------------------
+Base Model                   | Gradient Boosting (LightGBM) + Platt Calibration
+Thresholding Strategy        | Group-specific thresholds (Equalized Odds)
+Fairness Mitigation Applied  | Yes (Race, Gender, Age groups)
+Deployment Status            | ⚠️ Pending Ethics Review
+```
 
-Recommended: Gradient Boosting (best overall performance)
+**Final Performance Metrics:**
+```
+Model              | Final ROC-AUC | Final Brier | Final TPR | Final FPR | Intervention Rate
+-------------------|---------------|-------------|-----------|-----------|------------------
+Gradient Boosting  |     0.842     |    0.18     |   96.6%   |   67.0%   |      70.3%
+Random Forest      |     TBD       |    TBD      |   TBD     |   TBD     |      TBD
+Logistic Regression|     TBD       |    TBD      |   TBD     |   TBD     |      TBD
+```
+
+**Final Business Impact (Gradient Boosting):**
+```
+Metric                          | Value
+--------------------------------|------------------
+Expected Annual Savings         | $18,453,500
+Interventions per Year          | 10,733
+True Positives (Prevented)      | 1,646
+False Positives (Over-intervene)| 9,087
+Cost per Intervention           | $500
+Benefit per True Positive       | $14,500
+ROI                             | 319%
+```
+
+**Final Fairness Status:**
+```
+Attribute | Fairness Status | TPR Gap | FPR Gap | Mitigation Applied | Passed
+----------|-----------------|---------|---------|--------------------|---------
+Race      | ❌ FAIL         |  14.3%  |  13.0%  | Yes (equalized odds)| No
+Gender    | ✅ PASS         |   1.6%  |   1.4%  | Yes (equalized odds)| Yes
+Age       | ❌ FAIL         | 100%*   |  60.6%  | Yes (equalized odds)| No
+
+*Age [0-10) has 0 TPR (insufficient positive samples in test set)
+```
+
+**Deployment Readiness Checklist:**
+```
+Criterion                           | Status | Notes
+------------------------------------|--------|-----------------------------------
+✅ Model Training Completed         | PASS   | Phase 2 complete
+✅ Calibration Applied              | PASS   | Platt scaling (Phase 3)
+✅ Optimal Threshold Determined     | PASS   | Group-specific thresholds (Phase 5)
+✅ ROI Validated                    | PASS   | $18.45M annual savings
+❌ Fairness Requirements Met        | FAIL   | Race & Age disparities > 5%
+⚠️ Clinical Validation              | PENDING| Awaiting physician review
+⚠️ Ethics Committee Approval        | PENDING| Fairness concerns flagged
+⚠️ Regulatory Compliance            | PENDING| Legal review needed
+
+Overall Status: ⚠️ NOT READY FOR DEPLOYMENT
+Blocker: Fairness violations in Race and Age groups
 ```
 
 **Visualizations:**
-- Final performance comparison (all metrics)
-- Deployment readiness checklist
+- Final performance comparison (all metrics, all models)
+- Deployment readiness dashboard (checklist with status indicators)
 - System integration diagram
+- Fairness-Performance trade-off chart
+- ROI breakdown with confidence intervals
 
 ---
 

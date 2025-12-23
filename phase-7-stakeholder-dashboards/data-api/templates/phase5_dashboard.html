@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phase 5: Fairness Assessment & Mitigation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .controls {
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        label {
+            font-weight: 600;
+            font-size: 1.1em;
+            color: #333;
+        }
+        
+        select {
+            padding: 12px 20px;
+            font-size: 1em;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 200px;
+        }
+        
+        select:hover {
+            border-color: #764ba2;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+        
+        select:focus {
+            outline: none;
+            border-color: #764ba2;
+            box-shadow: 0 0 0 3px rgba(118, 75, 162, 0.2);
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+        }
+        
+        .section-title {
+            font-size: 1.8em;
+            color: #333;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .section-description {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 1.05em;
+            line-height: 1.6;
+        }
+        
+        .viz-container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        iframe {
+            width: 100%;
+            height: 600px;
+            border: none;
+            border-radius: 4px;
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        .info-box.warning {
+            background: #fff3e0;
+            border-left-color: #ff9800;
+        }
+        
+        .info-box.error {
+            background: #ffebee;
+            border-left-color: #f44336;
+        }
+        
+        .info-box.success {
+            background: #e8f5e9;
+            border-left-color: #4caf50;
+        }
+        
+        .info-box strong {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 1.1em;
+        }
+        
+        footer {
+            background: #333;
+            color: white;
+            text-align: center;
+            padding: 20px;
+            margin-top: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Phase 5: Fairness Assessment & Mitigation</h1>
+            <p class="subtitle">Evaluating model fairness across demographic groups and mitigation effectiveness</p>
+        </header>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="demographic-select">Select Demographic Attribute:</label>
+                <select id="demographic-select" onchange="updateRiskDistribution()">
+                    <option value="race">Race</option>
+                    <option value="gender">Gender</option>
+                    <option value="age">Age Group</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="content">
+            <!-- Risk Distribution Section -->
+            <div class="section">
+                <h2 class="section-title">1. Risk Distribution by Demographic</h2>
+                <p class="section-description">
+                    Shows intervention rates by demographic group (higher rate = model predicts higher risk).
+                    Significant differences across groups indicate potential bias in risk assessment.
+                </p>
+                
+                <div class="info-box">
+                    <strong>📌 What to look for:</strong>
+                    Are intervention rates similar across groups? Large gaps suggest the model treats different demographics differently.
+                </div>
+                
+                <div class="viz-container">
+                    <iframe id="risk-distribution-frame" src="phase5_risk_distribution_race.html"></iframe>
+                </div>
+            </div>
+            
+            <!-- Fairness Gaps Section -->
+            <div class="section">
+                <h2 class="section-title">2. Fairness Gaps: Before vs After Mitigation</h2>
+                <p class="section-description">
+                    Compares fairness metrics (TPR and FPR gaps) before and after applying group-specific thresholds.
+                    Shows whether mitigation strategy successfully reduced disparities.
+                </p>
+                
+                <div class="info-box error">
+                    <strong>⚠️ Critical Finding:</strong>
+                    Mitigation FAILED - Disparities increased rather than decreased. Race TPR gap: 6.7% → 14.3% (worse by +7.6pp). 
+                    Alternative strategies needed (reweighting, retraining, feature engineering).
+                </div>
+                
+                <div class="viz-container">
+                    <h3 style="margin-bottom: 15px; color: #666;">TPR Gap (True Positive Rate Disparity)</h3>
+                    <iframe src="phase5_fairness_gaps_tpr.html" style="height: 550px;"></iframe>
+                </div>
+                
+                <div class="viz-container">
+                    <h3 style="margin-bottom: 15px; color: #666;">FPR Gap (False Positive Rate Disparity)</h3>
+                    <iframe src="phase5_fairness_gaps_fpr.html" style="height: 550px;"></iframe>
+                </div>
+            </div>
+            
+            <!-- Summary Section -->
+            <div class="section">
+                <h2 class="section-title">3. Key Findings & Recommendations</h2>
+                
+                <div class="info-box error">
+                    <strong>🔴 Deployment Status: NOT READY</strong>
+                    <ul style="margin-top: 10px; margin-left: 20px;">
+                        <li>Race: TPR gap 14.3%, FPR gap 13.0% (both exceed 5% threshold)</li>
+                        <li>Age: FPR gap 60.6% (severe disparity)</li>
+                        <li>Gender: PASS (1.6% TPR gap, 1.4% FPR gap)</li>
+                    </ul>
+                </div>
+                
+                <div class="info-box warning">
+                    <strong>📋 Next Steps:</strong>
+                    <ol style="margin-top: 10px; margin-left: 20px;">
+                        <li>Try alternative mitigation strategies (reweight training data, add fairness constraints)</li>
+                        <li>Consult clinical ethics committee on acceptable trade-offs</li>
+                        <li>Consider demographic-specific models or feature engineering to reduce bias</li>
+                        <li>Document findings for regulatory review</li>
+                    </ol>
+                </div>
+                
+                <div class="info-box success">
+                    <strong>✅ Positive Aspects:</strong>
+                    <ul style="margin-top: 10px; margin-left: 20px;">
+                        <li>ROI impact minimal (-2%, $385K loss) - financially acceptable</li>
+                        <li>Performance maintained (TPR only decreased by 0.8%)</li>
+                        <li>Gender fairness already achieved</li>
+                        <li>Systematic evaluation and mitigation attempted (process documented)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>Hospital Readmission Risk Prediction System | Phase 5 Dashboard</p>
+            <p style="margin-top: 10px; opacity: 0.8;">Powered by FastAPI + Plotly | Data from HuggingFace</p>
+        </footer>
+    </div>
+    
+    <script>
+        function updateRiskDistribution() {
+            const select = document.getElementById('demographic-select');
+            const demographic = select.value;
+            const frame = document.getElementById('risk-distribution-frame');
+            frame.src = `phase5_risk_distribution_${demographic}.html`;
+        }
+    </script>
+</body>
+</html>
