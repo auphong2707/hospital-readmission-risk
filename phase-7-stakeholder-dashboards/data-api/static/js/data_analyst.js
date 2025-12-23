@@ -22,11 +22,15 @@ async function initializeDashboard() {
             loadMissingData(),
             loadPredictiveStrength(),
             loadProtectedAttributes(),
+            loadCorrelationMatrix(),
+            loadMissingPatterns(),
+            loadFeatureImportanceComparison(),
             loadROCCurves(),
             loadPRCurves(),
             loadModelComparison(),
             loadCalibrationDiagrams(),
             loadPhase4CostBenefit(),
+            loadPhase4ConfusionMatrices(),
             loadPhase5RiskDistribution('race'),
             loadPhase5FairnessGaps('race'),
             loadFairnessAssessment(),
@@ -469,7 +473,267 @@ async function loadProtectedAttributes() {
 }
 
 /**
- * Panel 9: ROC Curves Comparison
+ * Panel 7: Correlation Matrix (NEW - Technical Analysis)
+ */
+async function loadCorrelationMatrix() {
+    try {
+        showLoading('plot-correlation-matrix');
+        
+        const response = await fetchJSON('/api/v1/phase1/correlation-matrix');
+        const features = response.features;
+        const correlations = response.correlations;
+        
+        // Build correlation matrix
+        const matrix = [];
+        for (let i = 0; i < features.length; i++) {
+            const row = [];
+            for (let j = 0; j < features.length; j++) {
+                if (i === j) {
+                    row.push(1.0);
+                } else if (i < j) {
+                    // Upper triangle - use correlations object
+                    const feat1 = features[i];
+                    const feat2 = features[j];
+                    row.push(correlations[feat1]?.[feat2] || 0);
+                } else {
+                    // Lower triangle - mirror from upper
+                    const feat1 = features[j];
+                    const feat2 = features[i];
+                    row.push(correlations[feat1]?.[feat2] || 0);
+                }
+            }
+            matrix.push(row);
+        }
+        
+        // Create heatmap
+        const trace = {
+            z: matrix,
+            x: features,
+            y: features,
+            type: 'heatmap',
+            colorscale: 'RdBu',
+            zmid: 0,
+            zmin: -1,
+            zmax: 1,
+            colorbar: {
+                title: 'Correlation',
+                titleside: 'right'
+            },
+            hovertemplate: '<b>%{y}</b> vs <b>%{x}</b><br>Correlation: %{z:.3f}<extra></extra>'
+        };
+        
+        // Add annotations for correlation values
+        const annotations = [];
+        for (let i = 0; i < features.length; i++) {
+            for (let j = 0; j < features.length; j++) {
+                annotations.push({
+                    x: features[j],
+                    y: features[i],
+                    text: matrix[i][j].toFixed(2),
+                    showarrow: false,
+                    font: {
+                        color: Math.abs(matrix[i][j]) > 0.5 ? 'white' : 'black',
+                        size: 10
+                    }
+                });
+            }
+        }
+        
+        const layout = {
+            title: {
+                text: 'Feature Correlation Matrix<br><sub>Red boxes indicate potential multicollinearity (|r| > 0.7)</sub>',
+                font: { size: 16, color: '#333333' }
+            },
+            xaxis: {
+                tickangle: -45,
+                side: 'bottom',
+                color: '#333333'
+            },
+            yaxis: {
+                color: '#333333'
+            },
+            plot_bgcolor: '#ffffff',
+            paper_bgcolor: '#ffffff',
+            font: { color: '#333333', size: 11 },
+            annotations: annotations,
+            height: 600,
+            margin: { l: 150, r: 100, t: 100, b: 150 }
+        };
+        
+        // Add rectangles for strong correlations
+        const shapes = [];
+        if (response.strong_correlations && response.strong_correlations.length > 0) {
+            response.strong_correlations.forEach(corr => {
+                const idx1 = features.indexOf(corr.feature1);
+                const idx2 = features.indexOf(corr.feature2);
+                shapes.push({
+                    type: 'rect',
+                    x0: idx2 - 0.5,
+                    x1: idx2 + 0.5,
+                    y0: idx1 - 0.5,
+                    y1: idx1 + 0.5,
+                    line: { color: 'red', width: 3 }
+                });
+                shapes.push({
+                    type: 'rect',
+                    x0: idx1 - 0.5,
+                    x1: idx1 + 0.5,
+                    y0: idx2 - 0.5,
+                    y1: idx2 + 0.5,
+                    line: { color: 'red', width: 3 }
+                });
+            });
+        }
+        layout.shapes = shapes;
+        
+        const config = { responsive: true, displayModeBar: true };
+        Plotly.newPlot('plot-correlation-matrix', [trace], layout, config);
+        
+    } catch (error) {
+        console.error('Error loading correlation matrix:', error);
+        showError('plot-correlation-matrix', 'Failed to load correlation matrix');
+    }
+}
+
+/**
+ * Panel 8: Missing Data Patterns (NEW - Data Quality Analysis)
+ */
+async function loadMissingPatterns() {
+    try {
+        showLoading('plot-missing-patterns');
+        
+        const response = await fetchJSON('/api/v1/phase1/missing-patterns');
+        const patterns = response.cooccurrence_patterns;
+        const highMissing = response.high_missing_features;
+        
+        // Create chord-like visualization showing co-occurrence
+        const features = [...new Set(patterns.flatMap(p => [p.feature1, p.feature2]))];
+        
+        // Create heatmap data
+        const matrix = Array(features.length).fill().map(() => Array(features.length).fill(0));
+        patterns.forEach(p => {
+            const i = features.indexOf(p.feature1);
+            const j = features.indexOf(p.feature2);
+            matrix[i][j] = p.cooccurrence;
+            matrix[j][i] = p.cooccurrence;
+        });
+        
+        const trace = {
+            z: matrix,
+            x: features,
+            y: features,
+            type: 'heatmap',
+            colorscale: 'YlOrRd',
+            colorbar: {
+                title: 'Co-occurrence %',
+                titleside: 'right'
+            },
+            hovertemplate: '<b>%{y}</b> & <b>%{x}</b><br>Missing together: %{z:.1f}%<extra></extra>'
+        };
+        
+        const layout = {
+            title: {
+                text: 'Missing Data Co-occurrence Patterns<br><sub>Higher values = features tend to be missing together</sub>',
+                font: { size: 14, color: '#333333' }
+            },
+            xaxis: {
+                tickangle: -45,
+                color: '#333333'
+            },
+            yaxis: {
+                color: '#333333'
+            },
+            plot_bgcolor: '#ffffff',
+            paper_bgcolor: '#ffffff',
+            font: { color: '#333333', size: 11 },
+            height: 450,
+            margin: { l: 120, r: 100, t: 80, b: 100 }
+        };
+        
+        const config = { responsive: true, displayModeBar: true };
+        Plotly.newPlot('plot-missing-patterns', [trace], layout, config);
+        
+    } catch (error) {
+        console.error('Error loading missing patterns:', error);
+        showError('plot-missing-patterns', 'Failed to load missing patterns');
+    }
+}
+
+/**
+ * Panel 9: Feature Importance Comparison (NEW - Model Agreement)
+ */
+async function loadFeatureImportanceComparison() {
+    try {
+        showLoading('plot-feature-importance-comparison');
+        
+        const response = await fetchJSON('/api/v1/phase1/feature-importance-comparison');
+        const features = response.feature_importance;
+        
+        // Create grouped bar chart
+        const traces = [
+            {
+                x: features.map(f => f.feature),
+                y: features.map(f => f.gradient_boosting),
+                name: 'Gradient Boosting',
+                type: 'bar',
+                marker: { color: '#2E7D32' }
+            },
+            {
+                x: features.map(f => f.feature),
+                y: features.map(f => f.random_forest),
+                name: 'Random Forest',
+                type: 'bar',
+                marker: { color: '#1565C0' }
+            },
+            {
+                x: features.map(f => f.feature),
+                y: features.map(f => f.logistic_regression),
+                name: 'Logistic Regression',
+                type: 'bar',
+                marker: { color: '#C62828' }
+            }
+        ];
+        
+        const layout = {
+            title: {
+                text: 'Top 10 Features: Model Agreement Analysis',
+                font: { size: 14, color: '#333333' }
+            },
+            xaxis: {
+                title: 'Features',
+                tickangle: -45,
+                color: '#333333'
+            },
+            yaxis: {
+                title: 'Feature Importance',
+                color: '#333333'
+            },
+            barmode: 'group',
+            plot_bgcolor: '#ffffff',
+            paper_bgcolor: '#ffffff',
+            font: { color: '#333333', size: 11 },
+            legend: {
+                orientation: 'h',
+                x: 0.5,
+                xanchor: 'center',
+                y: 1.12,
+                yanchor: 'top'
+            },
+            height: 450,
+            margin: { l: 70, r: 40, t: 80, b: 120 }
+        };
+        
+        const config = { responsive: true, displayModeBar: true };
+        Plotly.newPlot('plot-feature-importance-comparison', traces, layout, config);
+        
+    } catch (error) {
+        console.error('Error loading feature importance comparison:', error);
+        showError('plot-feature-importance-comparison', 'Failed to load feature importance comparison');
+    }
+}
+
+/**
+ * Panel 10: ROC Curves Comparison
  */
 async function loadROCCurves() {
     try {
@@ -904,7 +1168,224 @@ async function loadPhase4CostBenefit() {
 }
 
 /**
- * Panel 7: Fairness Assessment Table
+ * Panel 18: Phase 4 Confusion Matrices (NEW)
+ */
+async function loadPhase4ConfusionMatrices() {
+    try {
+        showLoading('plot-confusion-matrices');
+        
+        const response = await fetchJSON('/api/v1/phase4/confusion-matrices');
+        
+        if (!response || !response.confusion_matrices) {
+            showError('plot-confusion-matrices', 'Failed to load confusion matrices');
+            return;
+        }
+        
+        const matrices = response.confusion_matrices;
+        
+        // Create subplot for 3 confusion matrices side by side
+        const traces = [];
+        const annotations = [];
+        
+        matrices.forEach((model, idx) => {
+            const cm = model.matrix;
+            
+            // Confusion matrix as heatmap
+            // Standard layout: rows = Actual, columns = Predicted
+            // [[TN, FP], [FN, TP]]
+            const z = [
+                [cm.TN, cm.FP],  // Actual 0 (Not Readmitted)
+                [cm.FN, cm.TP]   // Actual 1 (Readmitted)
+            ];
+            
+            const xLabels = ['0', '1'];
+            const yLabels = ['0', '1'];
+            
+            // Determine subplot position
+            const xaxis = idx === 0 ? 'x' : `x${idx + 1}`;
+            const yaxis = idx === 0 ? 'y' : `y${idx + 1}`;
+            
+            // Lighter Blues colorscale for better visibility
+            const lightBluesColorscale = [
+                [0, '#f0f8ff'],      // Very light blue (alice blue)
+                [0.25, '#d6ebff'],   // Light blue
+                [0.5, '#a3d5ff'],    // Medium light blue
+                [0.75, '#70bfff'],   // Medium blue
+                [1, '#4da6ff']       // Bright blue (not too dark)
+            ];
+            
+            traces.push({
+                z: z,
+                x: xLabels,
+                y: yLabels,
+                type: 'heatmap',
+                colorscale: lightBluesColorscale,
+                showscale: idx === 2,  // Show colorbar only on last plot
+                hovertemplate: 'Actual: %{y}<br>Predicted: %{x}<br>Count: %{z}<extra></extra>',
+                xaxis: xaxis,
+                yaxis: yaxis,
+                colorbar: idx === 2 ? {
+                    title: 'Count',
+                    titleside: 'right',
+                    x: 1.02,
+                    len: 0.7
+                } : undefined
+            });
+            
+            // Annotate each cell with counts
+            [[0, 0], [0, 1], [1, 0], [1, 1]].forEach(([i, j]) => {
+                const value = z[i][j];
+                
+                annotations.push({
+                    x: j,
+                    y: i,
+                    xref: xaxis,
+                    yref: yaxis,
+                    text: `${value.toLocaleString()}`,
+                    showarrow: false,
+                    font: {
+                        color: '#000000',  // Always black for better visibility on light background
+                        size: 20,
+                        family: 'Arial, sans-serif',
+                        weight: 'bold'
+                    }
+                });
+            });
+            
+            // Calculate domain positions for titles and labels
+            const domain_x_start = idx * 0.30 + (idx * 0.05);
+            const domain_x_end = domain_x_start + 0.28;
+            
+            // Add model title
+            annotations.push({
+                x: (domain_x_start + domain_x_end) / 2,
+                y: 1.10,
+                xref: 'paper',
+                yref: 'paper',
+                text: `<b>${model.name}</b>`,
+                showarrow: false,
+                font: { size: 16, color: '#333' },
+                xanchor: 'center'
+            });
+            
+            // Add threshold only
+            annotations.push({
+                x: (domain_x_start + domain_x_end) / 2,
+                y: 1.05,
+                xref: 'paper',
+                yref: 'paper',
+                text: `Threshold: ${model.metrics.threshold.toFixed(3)}`,
+                showarrow: false,
+                font: { size: 11, color: '#666' },
+                xanchor: 'center'
+            });
+        });
+        
+        // Add axis labels strategically
+        // "Predicted" label only on middle matrix (2nd one)
+        annotations.push({
+            x: 0.5,
+            y: -0.12,
+            xref: 'paper',
+            yref: 'paper',
+            text: '<b>Predicted</b>',
+            showarrow: false,
+            font: { size: 14, color: '#333' }
+        });
+        
+        // "Actual" label only on first matrix (leftmost) - moved further left
+        annotations.push({
+            x: -0.06,
+            y: 0.5,
+            xref: 'paper',
+            yref: 'paper',
+            text: '<b>Actual</b>',
+            showarrow: false,
+            font: { size: 14, color: '#333' },
+            textangle: -90
+        });
+        
+        // Layout with 3 subplots - increased spacing
+        const layout = {
+            title: {
+                text: 'Confusion Matrices at Optimal Threshold',
+                font: { size: 18, color: '#333333' },
+                y: 0.97
+            },
+            grid: { rows: 1, columns: 3, pattern: 'independent' },
+            xaxis: {
+                domain: [0, 0.28],
+                side: 'bottom',
+                tickfont: { size: 14 },
+                showgrid: false,
+                zeroline: false,
+                tickvals: [0, 1],
+                ticktext: ['0', '1']
+            },
+            yaxis: {
+                domain: [0, 0.85],
+                autorange: 'reversed',
+                tickfont: { size: 14 },
+                showgrid: false,
+                zeroline: false,
+                tickvals: [0, 1],
+                ticktext: ['0', '1']
+            },
+            xaxis2: {
+                domain: [0.35, 0.63],
+                side: 'bottom',
+                tickfont: { size: 14 },
+                showgrid: false,
+                zeroline: false,
+                tickvals: [0, 1],
+                ticktext: ['0', '1']
+            },
+            yaxis2: {
+                domain: [0, 0.85],
+                autorange: 'reversed',
+                tickfont: { size: 14 },
+                showgrid: false,
+                zeroline: false,
+                tickvals: [0, 1],
+                ticktext: ['0', '1']
+            },
+            xaxis3: {
+                domain: [0.70, 0.98],
+                side: 'bottom',
+                tickfont: { size: 14 },
+                showgrid: false,
+                zeroline: false,
+                tickvals: [0, 1],
+                ticktext: ['0', '1']
+            },
+            yaxis3: {
+                domain: [0, 0.85],
+                autorange: 'reversed',
+                tickfont: { size: 14 },
+                showgrid: false,
+                zeroline: false,
+                tickvals: [0, 1],
+                ticktext: ['0', '1']
+            },
+            annotations: annotations,
+            plot_bgcolor: '#ffffff',
+            paper_bgcolor: '#ffffff',
+            showlegend: false,
+            height: 600,
+            margin: { l: 80, r: 120, t: 130, b: 80 }
+        };
+        
+        const config = { responsive: true, displayModeBar: true };
+        Plotly.newPlot('plot-confusion-matrices', traces, layout, config);
+        
+    } catch (error) {
+        console.error('Error loading confusion matrices:', error);
+        showError('plot-confusion-matrices', 'Failed to load confusion matrices');
+    }
+}
+
+/**
+ * Panel 19: Fairness Assessment Table
  */
 async function loadFairnessAssessment() {
     try {
