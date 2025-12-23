@@ -20,8 +20,8 @@ async function loadDashboardData() {
     try {
         console.log("Loading manager dashboard data...");
         
-        // Use Gradient Boosting as the recommended model
-        const method = "gradient_boosting";
+        // Use Random Forest as the recommended model
+        const method = "random_forest";
         
         // Load all data in parallel
         const [savings, cost, comparison] = await Promise.all([
