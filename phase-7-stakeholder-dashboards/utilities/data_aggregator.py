@@ -11,12 +11,12 @@ from typing import Dict, Optional, List
 import sys
 from pathlib import Path
 
-# Import the mapping file from project root
-sys.path.append(str(Path(__file__).parent.parent.parent))
+# Import the mapping file from data-api folder
+sys.path.append(str(Path(__file__).parent.parent / "data-api"))
 try:
     from file_to_hf_repo_mapping import REPO_MAPPING, get_download_info
 except ImportError:
-    print("Warning: file_to_hf_repo_mapping.py not found in project root")
+    print("Warning: file_to_hf_repo_mapping.py not found in data-api folder")
     REPO_MAPPING = {}
     def get_download_info(method, phase, filename):
         return None
@@ -171,9 +171,21 @@ class DashboardDataAggregator:
     def load_phase6_final(self) -> Dict:
         """Load Phase 6 final evaluation using mapping file."""
         try:
-            # Note: Phase 6 not yet in mapping, will be added later
-            # For now, return empty dict
-            return {}
+            # Load final system metrics JSON
+            final_metrics_path = self.download_file("phase6", "final_system_metrics.json")
+            deployment_report_path = self.download_file("phase6", "deployment_report.json")
+            
+            result = {}
+            
+            if final_metrics_path:
+                with open(final_metrics_path, 'r') as f:
+                    result['final_system_metrics'] = json.load(f)
+            
+            if deployment_report_path:
+                with open(deployment_report_path, 'r') as f:
+                    result['deployment_report'] = json.load(f)
+            
+            return result
         except Exception as e:
             print(f"Error loading Phase 6 final evaluation: {e}")
             return {}

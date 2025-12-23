@@ -172,9 +172,25 @@ class DashboardDataAggregator:
     def load_phase6_final(self) -> Dict:
         """Load Phase 6 final evaluation using mapping file."""
         try:
-            # Note: Phase 6 not yet in mapping, will be added later
-            # For now, return empty dict
-            return {}
+            # Load final system metrics
+            metrics_path = self.download_file("phase6", "final_system_metrics.json")
+            deployment_path = self.download_file("phase6", "deployment_report.json")
+            
+            final_metrics = {}
+            deployment_report = {}
+            
+            if metrics_path:
+                with open(metrics_path, 'r') as f:
+                    final_metrics = json.load(f)
+            
+            if deployment_path:
+                with open(deployment_path, 'r') as f:
+                    deployment_report = json.load(f)
+            
+            return {
+                'final_system_metrics': final_metrics,
+                'deployment_report': deployment_report
+            }
         except Exception as e:
             print(f"Error loading Phase 6 final evaluation: {e}")
             return {}
