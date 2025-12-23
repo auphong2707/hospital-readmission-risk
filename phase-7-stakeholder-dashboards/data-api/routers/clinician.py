@@ -17,13 +17,10 @@ from utilities.data_aggregator import DashboardDataAggregator
 
 router = APIRouter()
 
-# Comprehensive clinical meanings for all features
+# Comprehensive clinical meanings for all features (aligned with new dataset)
 CLINICAL_MEANINGS = {
-    # Hospital utilization - raw and aggregated
+    # Hospital utilization
     "number_inpatient": "Prior hospitalizations in past year",
-    "number_inpatient_mean": "Average prior hospitalizations per encounter",
-    "number_inpatient_sum": "Total prior hospitalizations",
-    "number_inpatient_max": "Maximum prior hospitalizations",
     "number_emergency": "Emergency room visits in past year",
     "number_outpatient": "Outpatient visits in past year",
     "time_in_hospital": "Length of hospital stay (days)",
@@ -94,14 +91,25 @@ CLINICAL_MEANINGS = {
     "weight_is_missing": "Patient weight not recorded",
     "payer_code_is_missing": "Insurance information missing",
     "medical_specialty_is_missing": "Physician specialty not recorded",
+    "max_glu_serum_is_missing": "Glucose serum test not performed",
+    "A1Cresult_is_missing": "A1C test not performed",
+    
+    # Diagnosis categories (from new feature engineering)
+    "diag_1_circulatory": "Primary diagnosis: Circulatory system disorder",
+    "diag_1_respiratory": "Primary diagnosis: Respiratory system disorder",
+    "diag_1_diabetes": "Primary diagnosis: Diabetes complications",
+    "diag_1_digestive": "Primary diagnosis: Digestive system disorder",
+    "diag_2_circulatory": "Secondary diagnosis: Circulatory system disorder",
+    "diag_2_respiratory": "Secondary diagnosis: Respiratory system disorder",
+    "diag_2_diabetes": "Secondary diagnosis: Diabetes complications",
+    "diag_3_circulatory": "Tertiary diagnosis: Circulatory system disorder",
+    "diag_3_respiratory": "Tertiary diagnosis: Respiratory system disorder",
+    "diag_3_diabetes": "Tertiary diagnosis: Diabetes complications",
 }
 
-# Clinical recommendations for actionable insights
+# Clinical recommendations for actionable insights (aligned with new dataset)
 CLINICAL_RECOMMENDATIONS = {
     "number_inpatient": "Implement intensive discharge planning and care coordination for patients with 2+ prior admissions",
-    "number_inpatient_mean": "Review patient's hospitalization pattern for chronic condition management needs",
-    "number_inpatient_sum": "High utilization patient - consider case management enrollment",
-    "number_inpatient_max": "Frequent admitter - ensure comprehensive discharge planning",
     "number_emergency": "Provide patient education on when to seek outpatient care vs. emergency services",
     "number_outpatient": "Ensure adequate outpatient follow-up is scheduled before discharge",
     "time_in_hospital": "Consider extended post-discharge support for patients with longer stays",
@@ -136,6 +144,20 @@ CLINICAL_RECOMMENDATIONS = {
     "weight_is_missing": "Document patient weight and nutritional status for future care",
     "payer_code_is_missing": "Verify insurance coverage to prevent care access barriers",
     "medical_specialty_is_missing": "Ensure appropriate specialty follow-up is identified",
+    "max_glu_serum_is_missing": "Consider glucose monitoring if diabetes risk factors present",
+    "A1Cresult_is_missing": "Recommend A1C testing for diabetes assessment",
+    
+    # Diagnosis categories
+    "diag_1_circulatory": "Monitor cardiovascular status closely - high readmission risk for heart conditions",
+    "diag_1_respiratory": "Ensure pulmonary follow-up and home oxygen if needed",
+    "diag_1_diabetes": "Intensive diabetes management and education required",
+    "diag_1_digestive": "Provide dietary counseling and GI follow-up",
+    "diag_2_circulatory": "Secondary cardiovascular condition requires monitoring",
+    "diag_2_respiratory": "Address respiratory comorbidity in discharge plan",
+    "diag_2_diabetes": "Diabetes comorbidity needs attention alongside primary condition",
+    "diag_3_circulatory": "Multiple cardiovascular conditions - comprehensive care coordination needed",
+    "diag_3_respiratory": "Multiple respiratory conditions - consider pulmonology referral",
+    "diag_3_diabetes": "Complex diabetes profile - endocrinology consultation may be beneficial",
 }
 
 # Feature categories for grouping
@@ -147,6 +169,88 @@ FEATURE_CATEGORIES = {
     "Admission Context": ["admission_type_id", "discharge_disposition_id", "admission_source_id"],
     "Diagnoses": ["diag_1", "diag_2", "diag_3"],
 }
+
+
+# ==================== EDA-BASED RISK FACTORS (FALLBACK/PRIMARY) ====================
+
+# Feature importance from EDA analysis (based on new dataset)
+# These are the top predictive features from comprehensive EDA
+EDA_FEATURE_IMPORTANCE = [
+    {"feature": "number_inpatient", "importance": 0.1651, "rank": 1},
+    {"feature": "diag_1", "importance": 0.1322, "rank": 2},
+    {"feature": "diag_3", "importance": 0.1230, "rank": 3},
+    {"feature": "diag_2", "importance": 0.1163, "rank": 4},
+    {"feature": "medical_specialty", "importance": 0.0809, "rank": 5},
+    {"feature": "number_emergency", "importance": 0.0607, "rank": 6},
+    {"feature": "discharge_disposition_id", "importance": 0.0506, "rank": 7},
+    {"feature": "number_diagnoses", "importance": 0.0495, "rank": 8},
+    {"feature": "time_in_hospital", "importance": 0.0442, "rank": 9},
+    {"feature": "insulin", "importance": 0.0433, "rank": 10},
+    {"feature": "num_lab_procedures", "importance": 0.0400, "rank": 11},
+    {"feature": "num_medications", "importance": 0.0385, "rank": 12},
+    {"feature": "admission_type_id", "importance": 0.0350, "rank": 13},
+    {"feature": "diabetesMed", "importance": 0.0320, "rank": 14},
+    {"feature": "num_procedures", "importance": 0.0310, "rank": 15},
+]
+
+@router.get("/models/eda/risk-factors")
+def get_eda_risk_factors(top_n: int = 10):
+    """
+    Get risk factors based on EDA analysis of the new dataset.
+    
+    This endpoint uses feature importance calculated from exploratory data analysis,
+    providing immediate insights even when model-based importance is not yet available.
+    
+    The importance scores are based on:
+    - Point-biserial correlation for numerical features
+    - Cramér's V for categorical features
+    
+    Args:
+        top_n: Number of top features to return (default: 10)
+    
+    Returns:
+        Top risk factors with importance scores, clinical meanings, and recommendations
+    """
+    print(f"=== EDA ENDPOINT CALLED with top_n={top_n} ===")
+    
+    try:
+        # Get top N features from EDA analysis
+        top_features = EDA_FEATURE_IMPORTANCE[:top_n]
+        
+        # Build response with clinical information
+        risk_factors = []
+        for item in top_features:
+            feature_name = item['feature']
+            importance = item['importance']
+            
+            risk_factors.append({
+                "rank": item['rank'],
+                "feature": feature_name,
+                "importance": float(importance),
+                "importance_percentage": float(importance * 100),
+                "clinical_meaning": CLINICAL_MEANINGS.get(feature_name, "Clinical factor"),
+                "recommendation": CLINICAL_RECOMMENDATIONS.get(feature_name, "Discuss with care team"),
+                "agreement": "high",  # EDA-based, single source
+                "num_models": 1,
+                "source": "EDA Analysis"
+            })
+        
+        result = {
+            "method": "eda",
+            "source": "Exploratory Data Analysis",
+            "analysis_type": "Point-biserial correlation (numerical) & Cramér's V (categorical)",
+            "dataset": "New preprocessed dataset (121 features)",
+            "top_n": top_n,
+            "risk_factors": risk_factors
+        }
+        
+        return result
+        
+    except Exception as e:
+        print(f"Exception in EDA risk factors: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error retrieving EDA risk factors: {str(e)}")
 
 
 # ==================== ENSEMBLE ENDPOINT (Must come BEFORE parametric routes) ====================
@@ -633,12 +737,12 @@ def get_latest_patients(
         recent_patients = original_data[original_data['discharge_datetime'] >= cutoff_date].copy()
         print(f"Filtered to {len(recent_patients)} recent patients")
         
-        # Select top 10 most important features for display
+        # Select top 10 most important features for display (from EDA analysis)
         display_columns = [
             'encounter_id', 'risk_score',
-            'number_inpatient', 'number_emergency', 'number_diagnoses',
-            'time_in_hospital', 'num_medications', 'num_lab_procedures',
-            'num_procedures', 'age', 'A1Cresult', 'discharge_disposition_id'
+            'number_inpatient', 'diag_1', 'diag_3', 'diag_2', 'medical_specialty',
+            'number_emergency', 'discharge_disposition_id', 'number_diagnoses',
+            'time_in_hospital', 'insulin'
         ]
         
         # Keep only available columns
@@ -650,14 +754,15 @@ def get_latest_patients(
             'patient_id': 'encounter_id',
             'risk_score': 'risk_score',
             'prior_admits': 'number_inpatient',
+            'primary_diag': 'diag_1',
+            'tertiary_diag': 'diag_3',
+            'secondary_diag': 'diag_2',
+            'medical_specialty': 'medical_specialty',
             'er_visits': 'number_emergency',
+            'discharge_disposition': 'discharge_disposition_id',
             'diagnoses': 'number_diagnoses',
             'los': 'time_in_hospital',
-            'medications': 'num_medications',
-            'lab_procedures': 'num_lab_procedures',
-            'procedures': 'num_procedures',
-            'a1c_result': 'A1Cresult',
-            'discharge_disposition': 'discharge_disposition_id'
+            'insulin': 'insulin'
         }
         
         # Sort using mapped column name
@@ -677,19 +782,26 @@ def get_latest_patients(
         # Convert to records
         patients = []
         for idx, row in paginated_patients.iterrows():
+            # Format medical specialty - replace ? with 'No information'
+            med_spec = str(row.get('medical_specialty', 'No information'))
+            if pd.isna(row.get('medical_specialty')) or med_spec == '?' or med_spec.lower() == 'nan':
+                med_spec = 'No information'
+            else:
+                med_spec = med_spec[:30]  # Truncate long specialty names
+            
             patient = {
                 'patient_id': str(row.get('encounter_id', idx)),
                 'risk_score': round(row['risk_score'] * 100, 1),
                 'prior_admits': int(row.get('number_inpatient', 0)) if pd.notna(row.get('number_inpatient')) else 0,
+                'primary_diag': str(row.get('diag_1', 'N/A'))[:20] if pd.notna(row.get('diag_1')) else 'N/A',
+                'tertiary_diag': str(row.get('diag_3', 'N/A'))[:20] if pd.notna(row.get('diag_3')) else 'N/A',
+                'secondary_diag': str(row.get('diag_2', 'N/A'))[:20] if pd.notna(row.get('diag_2')) else 'N/A',
+                'medical_specialty': med_spec,
                 'er_visits': int(row.get('number_emergency', 0)) if pd.notna(row.get('number_emergency')) else 0,
+                'discharge_disposition': int(row.get('discharge_disposition_id', 0)) if pd.notna(row.get('discharge_disposition_id')) else 0,
                 'diagnoses': int(row.get('number_diagnoses', 0)) if pd.notna(row.get('number_diagnoses')) else 0,
                 'los': int(row.get('time_in_hospital', 0)) if pd.notna(row.get('time_in_hospital')) else 0,
-                'medications': int(row.get('num_medications', 0)) if pd.notna(row.get('num_medications')) else 0,
-                'lab_procedures': int(row.get('num_lab_procedures', 0)) if pd.notna(row.get('num_lab_procedures')) else 0,
-                'procedures': int(row.get('num_procedures', 0)) if pd.notna(row.get('num_procedures')) else 0,
-                'age': row.get('age', 'Unknown'),
-                'a1c_result': str(row.get('A1Cresult', 'None')) if pd.notna(row.get('A1Cresult')) else 'None',
-                'discharge_disposition': int(row.get('discharge_disposition_id', 0)) if pd.notna(row.get('discharge_disposition_id')) else 0
+                'insulin': str(row.get('insulin', 'No'))[:10] if pd.notna(row.get('insulin')) else 'No'
             }
             patients.append(patient)
         

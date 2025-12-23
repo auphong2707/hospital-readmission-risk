@@ -62,15 +62,16 @@ async function initializeDashboard() {
 let globalRiskFactorsData = null;
 
 /**
- * Panel 2: Top 10 Risk Factors - Ensemble Visualization (2-Column Layout)
- * Shows performance-weighted ensemble from all 3 models
+ * Panel 2: Top 10 Risk Factors - EDA-Based Visualization (2-Column Layout)
+ * Shows feature importance from exploratory data analysis of new dataset
  */
 async function loadRiskFactors() {
     try {
         showLoading('table-risk-factors');
         
-        // Use ensemble endpoint instead of single model
-        const data = await fetchJSON(`/api/v1/models/ensemble/risk-factors?top_n=10`);
+        // Use EDA endpoint for feature importance (based on new dataset analysis)
+        // This provides immediate insights while models are being retrained
+        const data = await fetchJSON(`/api/v1/models/eda/risk-factors?top_n=10`);
         
         // Store data globally for click handling
         globalRiskFactorsData = data;
@@ -85,13 +86,14 @@ async function loadRiskFactors() {
         chartDiv.className = 'risk-factors-chart';
         container.appendChild(chartDiv);
         
-        // Prepare data for horizontal bar chart
-        const features = data.risk_factors.map(f => f.feature);
-        const importances = data.risk_factors.map(f => f.importance);
-        const agreements = data.risk_factors.map(f => f.agreement);
+        // Prepare data for horizontal bar chart (reverse to show highest at top)
+        const features = data.risk_factors.map(f => f.feature).reverse();
+        const importances = data.risk_factors.map(f => f.importance).reverse();
+        const agreements = data.risk_factors.map(f => f.agreement).reverse();
+        const reversedRiskFactors = data.risk_factors.slice().reverse();
         
         // Create bar chart with clinical labels and click handling
-        createHorizontalBarChart(chartDiv.id, features, importances, agreements, data.risk_factors);
+        createHorizontalBarChart(chartDiv.id, features, importances, agreements, reversedRiskFactors);
         
         // Display first feature by default
         if (data.risk_factors && data.risk_factors.length > 0) {
@@ -112,6 +114,9 @@ async function loadRiskFactors() {
 function displayFeatureDetail(feature, rank) {
     const detailCard = document.getElementById('feature-detail-card');
     
+    // Create feature-specific "What This Means" content
+    const whatThisMeans = getFeatureExplanation(feature.feature, feature.clinical_meaning);
+    
     detailCard.innerHTML = `
         <div class="feature-detail-header">
             <div class="feature-rank-badge">${rank + 1}</div>
@@ -124,8 +129,7 @@ function displayFeatureDetail(feature, rank) {
         <div class="feature-section">
             <div class="feature-section-title">What This Means</div>
             <div class="feature-section-content">
-                ${feature.clinical_meaning} is a significant predictor of hospital readmission. 
-                Patients with concerning patterns in this factor should receive targeted interventions.
+                ${whatThisMeans}
             </div>
         </div>
         
@@ -147,6 +151,38 @@ function displayFeatureDetail(feature, rank) {
 }
 
 /**
+ * Get feature-specific explanation based on the feature name
+ * @param {string} featureName - Technical feature name
+ * @param {string} clinicalMeaning - Human-readable meaning
+ * @returns {string} Feature-specific explanation
+ */
+function getFeatureExplanation(featureName, clinicalMeaning) {
+    const explanations = {
+        'number_inpatient': 'Patients who have been hospitalized multiple times in the past year are at significantly higher risk of readmission. This pattern often indicates chronic conditions requiring ongoing management, inadequate post-discharge support, or complications from previous treatments. Each prior admission increases readmission risk by approximately 15-20%.',
+        
+        'diag_1': 'The primary diagnosis is the main condition treated during the hospital stay and is a strong predictor of readmission risk. Certain diagnoses (heart failure, COPD, pneumonia, diabetes complications) carry inherently higher readmission rates. This factor helps identify disease-specific risk patterns.',
+        
+        'diag_3': 'The tertiary diagnosis represents additional comorbidities beyond the primary and secondary conditions. Patients with multiple diagnoses face higher readmission risk due to increased treatment complexity, medication interactions, and the challenge of managing multiple conditions simultaneously.',
+        
+        'diag_2': 'The secondary diagnosis indicates comorbidities that complicate the primary condition. Patients with significant secondary diagnoses require more comprehensive discharge planning and follow-up care to address all health concerns and prevent readmission.',
+        
+        'medical_specialty': 'The admitting physician\'s specialty reflects the complexity and nature of care required. Certain specialties (cardiology, pulmonology, endocrinology) are associated with conditions that have higher readmission rates. Specialty-specific discharge protocols can reduce readmission risk.',
+        
+        'number_emergency': 'Frequent emergency room visits indicate inadequate outpatient care, difficulty accessing primary care, poor disease management, or acute exacerbations of chronic conditions. Patients with multiple ER visits need better care coordination and patient education to prevent unnecessary hospitalizations.',
+        
+        'discharge_disposition_id': 'Where patients go after discharge significantly impacts readmission risk. Patients discharged to skilled nursing facilities, home with home health, or hospice have different risk profiles than those discharged home independently. Appropriate post-discharge placement is crucial for preventing readmissions.',
+        
+        'number_diagnoses': 'The total number of diagnoses reflects overall patient complexity and comorbidity burden. Patients with many diagnoses require coordinated care across multiple conditions, careful medication management, and comprehensive discharge planning to reduce readmission risk.',
+        
+        'time_in_hospital': 'Longer hospital stays often indicate more severe illness, complications during treatment, or slower recovery. These patients may need extended post-discharge support, closer monitoring, and more intensive follow-up care to prevent readmission.',
+        
+        'insulin': 'Insulin use indicates more advanced or difficult-to-control diabetes. Patients on insulin have higher readmission risk due to the complexity of insulin management, risk of hypoglycemia, and typically more severe diabetes-related complications. Proper insulin education is critical.'
+    };
+    
+    return explanations[featureName] || `${clinicalMeaning} is a significant predictor of hospital readmission. Patients with concerning patterns in this factor should receive targeted interventions to reduce their readmission risk.`;
+}
+
+/**
  * Create horizontal bar chart for risk factors
  * @param {string} elementId - ID of container element
  * @param {Array} labels - Clinical meanings (y-axis)
@@ -165,7 +201,7 @@ function createHorizontalBarChart(elementId, labels, values, agreements, riskFac
         type: 'bar',
         orientation: 'h',
         x: values,
-        y: labels.map((l, i) => labels.length - i), // Reverse order for top-to-bottom
+        y: labels.map((l, i) => i + 1), // Simple sequential numbering since data is pre-reversed
         text: labels.map(() => ''), // No text labels on bars
         hovertemplate: '<b>%{customdata}</b><br>Relative Importance<br><i>Click to view details</i><extra></extra>',
         customdata: labels,
@@ -193,8 +229,8 @@ function createHorizontalBarChart(elementId, labels, values, agreements, riskFac
         },
         yaxis: {
             title: '',
-            autorange: 'reversed',
-            ticktext: labels.slice().reverse(),
+            autorange: true, // Normal order since data is pre-reversed
+            ticktext: labels,
             tickvals: labels.map((l, i) => i + 1)
         },
         showlegend: false,
@@ -212,9 +248,10 @@ function createHorizontalBarChart(elementId, labels, values, agreements, riskFac
     // Add click handler
     const plotDiv = document.getElementById(elementId);
     plotDiv.on('plotly_click', function(data) {
-        const pointIndex = labels.length - 1 - data.points[0].pointNumber; // Reverse the index
+        const pointIndex = data.points[0].pointNumber; // Direct index since data is already reversed
         const feature = riskFactors[pointIndex];
-        displayFeatureDetail(feature, pointIndex);
+        const originalRank = riskFactors.length - 1 - pointIndex; // Calculate original rank for display
+        displayFeatureDetail(feature, originalRank);
     });
 }
 
@@ -544,18 +581,22 @@ function createPatientTable(elementId, patients) {
     // Create table
     let html = '<table class="table table-hover" style="width: 100%; font-size: 0.9rem;">';
     
-    // Headers with sort icons - patient ID + top features + risk score at end
+    // Headers with sort icons - ONLY top 10 risk factors from EDA analysis
+    // 1. number_inpatient, 2. diag_1, 3. diag_3, 4. diag_2, 5. medical_specialty,
+    // 6. number_emergency, 7. discharge_disposition_id, 8. number_diagnoses, 
+    // 9. time_in_hospital, 10. insulin
     const headers = [
         { key: 'patient_id', label: 'Patient ID', sortable: true },
         { key: 'prior_admits', label: 'Prior Admits', sortable: true },
+        { key: 'primary_diag', label: 'Primary Diag', sortable: true },
+        { key: 'tertiary_diag', label: 'Tertiary Diag', sortable: true },
+        { key: 'secondary_diag', label: 'Secondary Diag', sortable: true },
+        { key: 'medical_specialty', label: 'Medical Specialty', sortable: true },
         { key: 'er_visits', label: 'ER Visits', sortable: true },
+        { key: 'discharge_disposition', label: 'Discharge Disp.', sortable: true },
         { key: 'diagnoses', label: 'Diagnoses', sortable: true },
         { key: 'los', label: 'LOS (days)', sortable: true },
-        { key: 'medications', label: 'Medications', sortable: true },
-        { key: 'lab_procedures', label: 'Lab Procedures', sortable: true },
-        { key: 'procedures', label: 'Procedures', sortable: true },
-        { key: 'a1c_result', label: 'A1C Result', sortable: true },
-        { key: 'discharge_disposition', label: 'Discharge Disp.', sortable: true },
+        { key: 'insulin', label: 'Insulin', sortable: true },
         { key: 'risk_score', label: 'Risk Score', sortable: true }
     ];
     
@@ -573,14 +614,15 @@ function createPatientTable(elementId, patients) {
         html += '<tr>';
         html += `<td><strong>${patient.patient_id}</strong></td>`;
         html += `<td>${patient.prior_admits}</td>`;
+        html += `<td>${patient.primary_diag || 'N/A'}</td>`;
+        html += `<td>${patient.tertiary_diag || 'N/A'}</td>`;
+        html += `<td>${patient.secondary_diag || 'N/A'}</td>`;
+        html += `<td>${patient.medical_specialty || 'N/A'}</td>`;
         html += `<td>${patient.er_visits}</td>`;
+        html += `<td>${patient.discharge_disposition}</td>`;
         html += `<td>${patient.diagnoses}</td>`;
         html += `<td>${patient.los}</td>`;
-        html += `<td>${patient.medications}</td>`;
-        html += `<td>${patient.lab_procedures}</td>`;
-        html += `<td>${patient.procedures}</td>`;
-        html += `<td>${patient.a1c_result}</td>`;
-        html += `<td>${patient.discharge_disposition}</td>`;
+        html += `<td>${patient.insulin || 'No'}</td>`;
         html += `<td><strong style="color: ${getRiskColor(patient.risk_score)};">${patient.risk_score}%</strong></td>`;
         html += '</tr>';
     });
