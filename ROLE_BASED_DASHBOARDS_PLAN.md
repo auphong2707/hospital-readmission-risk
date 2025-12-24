@@ -249,6 +249,12 @@ All financial calculations use this standard healthcare cost matrix:
 **Savings per $1 Spent** = Net Savings ÷ Total Intervention Costs
 - Return on intervention investment
 
+**Intervention Rate** = (TP + FP) ÷ Total Patients × 100%
+- Percentage of patients flagged for intervention
+- Represents the proportion of patients predicted as high-risk by the model
+- Calculated as: (True Positives + False Positives) / (Total Test Set Patients) × 100
+- Example: If model flags 629 patients out of 15,265 total, intervention rate = 4.1%
+
 ---
 
 ## API Endpoints Summary
