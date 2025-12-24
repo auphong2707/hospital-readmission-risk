@@ -625,7 +625,16 @@ class ThresholdApplicator:
             print(f"✓ Applied group-specific thresholds to {len(group_thresholds)} groups")
         else:
             # Apply global threshold
-            global_threshold = self.threshold_config.get('global_threshold', 0.5)
+            global_threshold = self.threshold_config.get('global_threshold', None)
+            
+            # If not in config, this is an error - should always be provided
+            if global_threshold is None:
+                raise ValueError(
+                    "Global threshold not found in deployment_config.json. "
+                    "Expected 'threshold_configuration.global_threshold' to be set. "
+                    "This should come from Phase 4's optimal threshold."
+                )
+            
             predictions = (y_proba >= global_threshold).astype(int)
             print(f"✓ Applied global threshold: {global_threshold:.4f}")
         
@@ -892,25 +901,102 @@ class ROICalculator:
         
         expected_value = tp_benefit + tn_benefit + fp_cost + fn_cost
         
-        # Calculate baseline expected value (predict all negative)
+        # Calculate baseline expected value (predict all negative - no intervention)
+        baseline_readmissions = int(np.sum(y_true))
         baseline_expected_value = len(y_true) * self.cost_matrix['TN']
-        baseline_expected_value += np.sum(y_true) * (self.cost_matrix['FN'] - self.cost_matrix['TN'])
+        baseline_expected_value += baseline_readmissions * (self.cost_matrix['FN'] - self.cost_matrix['TN'])
         
-        # Calculate cost savings and ROI
+        # Extract intervention cost per patient from cost matrix
+        # TP benefit = readmission_cost - intervention_cost, so:
+        # intervention_cost = readmission_cost - TP_benefit
+        # FN cost = -readmission_cost (negative because it's a cost)
+        # Therefore: intervention_cost = -FN - TP
+        intervention_cost_per_patient = abs(self.cost_matrix['FP'])  # FP is the cost of unnecessary intervention
+        
+        # Calculate intervention costs
+        intervention_volume = int(tp + fp)
+        intervention_cost_total = intervention_volume * intervention_cost_per_patient
+        
+        # Calculate prevented readmissions and savings
+        prevented_readmissions = int(tp)
+        readmission_cost_per_patient = abs(self.cost_matrix['FN'])  # FN is the cost of missed readmission
+        prevented_readmission_savings = prevented_readmissions * readmission_cost_per_patient
+        
+        # Calculate missed readmissions and costs
+        missed_readmissions = int(fn)
+        missed_readmission_costs = missed_readmissions * readmission_cost_per_patient
+        
+        # Calculate baseline cost (no intervention - all readmissions occur)
+        baseline_cost = baseline_readmissions * readmission_cost_per_patient
+        
+        # Cost with intervention
+        cost_with_intervention = intervention_cost_total + missed_readmission_costs
+        
+        # Total savings
+        total_savings = baseline_cost - cost_with_intervention
+        
+        # Calculate cost savings from baseline
         cost_savings = expected_value - baseline_expected_value
-        roi_percentage = (cost_savings / abs(baseline_expected_value)) * 100 if baseline_expected_value != 0 else 0
+        
+        # ROI calculation (return on intervention investment)
+        roi_percentage = (expected_value / intervention_cost_total * 100) if intervention_cost_total > 0 else 0
+        
+        # Savings percentage
+        savings_percentage = (total_savings / baseline_cost * 100) if baseline_cost > 0 else 0
+        
+        # Readmission rate metrics
+        total_patients = int(len(y_true))
+        baseline_readmission_rate = baseline_readmissions / total_patients
+        intervention_readmission_rate = missed_readmissions / total_patients
+        readmission_reduction_absolute = baseline_readmission_rate - intervention_readmission_rate
+        readmission_reduction_relative = (readmission_reduction_absolute / baseline_readmission_rate * 100) if baseline_readmission_rate > 0 else 0
         
         metrics = {
+            # Confusion matrix components
+            'tp': int(tp),
+            'fp': int(fp),
+            'tn': int(tn),
+            'fn': int(fn),
+            'total_patients': total_patients,
+            
+            # Expected value metrics
             'expected_value': float(expected_value),
             'baseline_expected_value': float(baseline_expected_value),
             'cost_savings': float(cost_savings),
+            
+            # ROI metrics
             'roi_percentage': float(roi_percentage),
+            'savings_percentage': float(savings_percentage),
+            
+            # Intervention metrics
+            'intervention_volume': intervention_volume,
+            'intervention_rate': float(intervention_volume / total_patients),
+            'intervention_cost_total': float(intervention_cost_total),
+            
+            # Readmission prevention metrics
+            'prevented_readmissions': prevented_readmissions,
+            'prevented_readmission_savings': float(prevented_readmission_savings),
+            'missed_readmissions': missed_readmissions,
+            'missed_readmission_costs': float(missed_readmission_costs),
+            
+            # Baseline vs intervention comparison
+            'baseline_readmissions': baseline_readmissions,
+            'baseline_cost': float(baseline_cost),
+            'cost_with_intervention': float(cost_with_intervention),
+            'total_savings': float(total_savings),
+            
+            # Readmission rate metrics
+            'baseline_readmission_rate': float(baseline_readmission_rate),
+            'intervention_readmission_rate': float(intervention_readmission_rate),
+            'readmission_reduction_absolute': float(readmission_reduction_absolute),
+            'readmission_reduction_relative': float(readmission_reduction_relative),
+            
+            # Per-unit metrics
             'benefit_per_tp': float(tp_benefit / tp if tp > 0 else 0),
             'benefit_per_tn': float(tn_benefit / tn if tn > 0 else 0),
             'cost_per_fp': float(fp_cost / fp if fp > 0 else 0),
             'cost_per_fn': float(fn_cost / fn if fn > 0 else 0),
-            'avg_cost_per_patient': float(expected_value / len(y_true)),
-            'total_intervention_cost': float(abs(fp_cost)),
+            'avg_cost_per_patient': float(expected_value / total_patients),
             'total_missed_readmission_cost': float(abs(fn_cost))
         }
         
