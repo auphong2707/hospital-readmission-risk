@@ -882,7 +882,18 @@ class ROICalculator:
                              y_true: np.ndarray,
                              y_pred: np.ndarray) -> Dict[str, float]:
         """
-        Calculate comprehensive ROI metrics.
+        Calculate comprehensive ROI metrics using cost comparison approach.
+        
+        Compares two parallel scenarios:
+        1. Baseline (Do Nothing): No interventions, all readmissions occur
+        2. Model (AI-Driven): Intervene based on predictions
+        
+        Formula:
+        - Baseline Cost = (Total Positives) × $15,000
+        - Model Cost = (TP + FP) × $500 + (FN) × $15,000
+        - Total Savings = Baseline Cost - Model Cost
+        
+        Shortcut: Savings = (TP × $14,500) - (FP × $500)
         
         Args:
             y_true: True labels
@@ -893,63 +904,69 @@ class ROICalculator:
         """
         tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
         
-        # Calculate expected value (net benefit)
+        # Extract cost parameters from cost matrix
+        intervention_cost_per_patient = abs(self.cost_matrix['FP'])  # $500 - cost per intervention
+        readmission_cost_per_patient = abs(self.cost_matrix['FN'])   # $15,000 - cost per readmission
+        
+        # ============================================================================
+        # SCENARIO 1: BASELINE (Do Nothing - No Model)
+        # ============================================================================
+        # If we never intervene, all actual positives will be readmitted
+        baseline_readmissions = int(np.sum(y_true))  # Total actual positives (TP + FN)
+        baseline_cost = baseline_readmissions * readmission_cost_per_patient
+        # Baseline Cost = (TP + FN) × $15,000
+        
+        # ============================================================================
+        # SCENARIO 2: MODEL (AI-Driven Interventions)
+        # ============================================================================
+        # We intervene on predicted positives (TP + FP) and miss some (FN)
+        
+        # Intervention costs: We pay $500 for each patient we flag (TP + FP)
+        intervention_volume = int(tp + fp)
+        intervention_cost_total = intervention_volume * intervention_cost_per_patient
+        # Intervention Cost = (TP + FP) × $500
+        
+        # Readmission costs: We still pay $15,000 for each patient we missed (FN)
+        missed_readmissions = int(fn)
+        missed_readmission_costs = missed_readmissions * readmission_cost_per_patient
+        # Missed Readmission Cost = (FN) × $15,000
+        
+        # Total model cost = interventions + missed readmissions
+        cost_with_intervention = intervention_cost_total + missed_readmission_costs
+        # Model Cost = (TP + FP) × $500 + (FN) × $15,000
+        
+        # ============================================================================
+        # CALCULATE SAVINGS
+        # ============================================================================
+        # How much money we save by using the model vs doing nothing
+        total_savings = baseline_cost - cost_with_intervention
+        # Total Savings = Baseline Cost - Model Cost
+        
+        # Shortcut verification: Savings = (TP × $14,500) - (FP × $500)
+        # This expands to: (TP + FN)×$15k - [(TP+FP)×$500 + FN×$15k]
+        #                = TP×$15k - TP×$500 - FP×$500
+        #                = TP×$14,500 - FP×$500 ✓
+        
+        cost_savings = total_savings
+        
+        # ============================================================================
+        # ADDITIONAL METRICS
+        # ============================================================================
+        # Calculate expected value using traditional cost matrix (for compatibility)
         tp_benefit = tp * self.cost_matrix['TP']
         tn_benefit = tn * self.cost_matrix['TN']
         fp_cost = fp * self.cost_matrix['FP']
         fn_cost = fn * self.cost_matrix['FN']
-        
         expected_value = tp_benefit + tn_benefit + fp_cost + fn_cost
         
-        # Calculate baseline scenario (predict all negative - no intervention)
-        baseline_readmissions = int(np.sum(y_true))
-        
-        # Extract intervention cost per patient from cost matrix
-        # TP benefit = readmission_cost - intervention_cost, so:
-        # intervention_cost = readmission_cost - TP_benefit
-        # FN cost = -readmission_cost (negative because it's a cost)
-        # Therefore: intervention_cost = -FN - TP
-        intervention_cost_per_patient = abs(self.cost_matrix['FP'])  # FP is the cost of unnecessary intervention
-        
-        # Calculate intervention costs
-        intervention_volume = int(tp + fp)
-        intervention_cost_total = intervention_volume * intervention_cost_per_patient
-        
-        # Calculate prevented readmissions and savings
+        # Prevented readmissions (successful catches)
         prevented_readmissions = int(tp)
-        readmission_cost_per_patient = abs(self.cost_matrix['FN'])  # FN is the cost of missed readmission
         prevented_readmission_savings = prevented_readmissions * readmission_cost_per_patient
         
-        # Calculate missed readmissions and costs
-        missed_readmissions = int(fn)
-        missed_readmission_costs = missed_readmissions * readmission_cost_per_patient
+        # ROI percentage: How much value we generate per dollar spent on interventions
+        roi_percentage = (total_savings / intervention_cost_total * 100) if intervention_cost_total > 0 else 0
         
-        # Calculate baseline cost (no intervention - all readmissions occur)
-        # In pure cost terms: how much we pay if we do nothing
-        baseline_cost = baseline_readmissions * readmission_cost_per_patient
-        
-        # Calculate baseline expected value (predict all negative - no intervention)
-        # In expected value framework: TN=0, FN is negative (cost)
-        # This represents the "value" of doing nothing (will be negative since all readmissions occur)
-        baseline_expected_value = baseline_cost  # Use positive baseline cost representation
-        
-        # Cost with intervention (pure cost accounting view)
-        # Total costs incurred: interventions + missed readmissions
-        cost_with_intervention = intervention_cost_total + missed_readmission_costs
-        
-        # Total savings (cost accounting: baseline cost - actual cost)
-        # How much we save by using the model vs doing nothing
-        total_savings = baseline_cost - cost_with_intervention
-        
-        # Cost savings = same as total_savings in cost accounting framework
-        # This represents: baseline cost (positive) - cost with model (positive) = savings
-        cost_savings = total_savings
-        
-        # ROI calculation (return on intervention investment)
-        # Net benefit (expected_value) relative to intervention cost
-        roi_percentage = (expected_value / intervention_cost_total * 100) if intervention_cost_total > 0 else 0
-        
-        # Savings percentage
+        # Savings percentage: What fraction of baseline cost we saved
         savings_percentage = (total_savings / baseline_cost * 100) if baseline_cost > 0 else 0
         
         # Readmission rate metrics
