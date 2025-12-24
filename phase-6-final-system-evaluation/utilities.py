@@ -383,8 +383,8 @@ def calculate_all_metrics(y_true, y_pred, y_proba, demographics, cost_matrix):
     roi_calc = ROICalculator(cost_matrix)
     roi_metrics = roi_calc.calculate_roi_metrics(y_true, y_pred)
     print(f"✓ ROI metrics calculated")
-    print(f"  - Total cost: ${roi_metrics['total_cost']:,.0f}")
-    print(f"  - Cost savings: ${roi_metrics['cost_savings']:,.0f}")
+    print(f"  - Expected value: ${roi_metrics['expected_value']:,.0f}")
+    print(f"  - Net savings: ${roi_metrics['net_savings']:,.0f}")
     print(f"  - ROI: {roi_metrics['roi_percentage']:.2f}%")
     
     # Risk stratification analysis
@@ -884,34 +884,34 @@ class ROICalculator:
         """
         tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
         
-        # Calculate costs
-        tp_cost = tp * self.cost_matrix['TP']
-        tn_cost = tn * self.cost_matrix['TN']
+        # Calculate expected value (net benefit)
+        tp_benefit = tp * self.cost_matrix['TP']
+        tn_benefit = tn * self.cost_matrix['TN']
         fp_cost = fp * self.cost_matrix['FP']
         fn_cost = fn * self.cost_matrix['FN']
         
-        total_cost = tp_cost + tn_cost + fp_cost + fn_cost
+        expected_value = tp_benefit + tn_benefit + fp_cost + fn_cost
         
-        # Calculate baseline cost (predict all negative)
-        baseline_cost = len(y_true) * self.cost_matrix['TN']
-        baseline_cost += np.sum(y_true) * (self.cost_matrix['FN'] - self.cost_matrix['TN'])
+        # Calculate baseline expected value (predict all negative)
+        baseline_expected_value = len(y_true) * self.cost_matrix['TN']
+        baseline_expected_value += np.sum(y_true) * (self.cost_matrix['FN'] - self.cost_matrix['TN'])
         
-        # Calculate savings and ROI
-        cost_savings = baseline_cost - total_cost
-        roi_percentage = (cost_savings / abs(baseline_cost)) * 100 if baseline_cost != 0 else 0
+        # Calculate net savings and ROI
+        net_savings = expected_value - baseline_expected_value
+        roi_percentage = (net_savings / abs(baseline_expected_value)) * 100 if baseline_expected_value != 0 else 0
         
         metrics = {
-            'total_cost': float(total_cost),
-            'baseline_cost': float(baseline_cost),
-            'cost_savings': float(cost_savings),
+            'expected_value': float(expected_value),
+            'baseline_expected_value': float(baseline_expected_value),
+            'net_savings': float(net_savings),
             'roi_percentage': float(roi_percentage),
-            'cost_per_tp': float(tp_cost / tp if tp > 0 else 0),
-            'cost_per_tn': float(tn_cost / tn if tn > 0 else 0),
+            'benefit_per_tp': float(tp_benefit / tp if tp > 0 else 0),
+            'benefit_per_tn': float(tn_benefit / tn if tn > 0 else 0),
             'cost_per_fp': float(fp_cost / fp if fp > 0 else 0),
             'cost_per_fn': float(fn_cost / fn if fn > 0 else 0),
-            'avg_cost_per_patient': float(total_cost / len(y_true)),
-            'intervention_cost': float(tp_cost + fp_cost),
-            'missed_intervention_cost': float(fn_cost)
+            'avg_expected_value_per_patient': float(expected_value / len(y_true)),
+            'total_intervention_cost': float(abs(fp_cost)),
+            'total_missed_readmission_cost': float(abs(fn_cost))
         }
         
         return metrics
@@ -1117,17 +1117,17 @@ class FinalEvaluationVisualizer:
         return output_path
     
     def plot_roi_breakdown(self, roi_metrics: Dict[str, float]) -> str:
-        """Plot ROI cost breakdown."""
+        """Plot ROI expected value breakdown."""
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
         
-        # Cost comparison
-        costs = [roi_metrics['total_cost'], roi_metrics['baseline_cost']]
+        # Expected value comparison
+        values = [roi_metrics['expected_value'], roi_metrics['baseline_expected_value']]
         labels = ['With Model', 'Baseline\n(No Model)']
         colors = ['steelblue', 'gray']
         
-        bars = ax1.bar(range(len(costs)), costs, color=colors, alpha=0.7)
-        ax1.set_ylabel('Total Cost ($)')
-        ax1.set_title('Cost Comparison')
+        bars = ax1.bar(range(len(values)), values, color=colors, alpha=0.7)
+        ax1.set_ylabel('Expected Value ($)')
+        ax1.set_title('Expected Value Comparison')
         ax1.set_xticks(range(len(labels)))
         ax1.set_xticklabels(labels)
         ax1.grid(True, alpha=0.3, axis='y')
@@ -1139,14 +1139,14 @@ class FinalEvaluationVisualizer:
                     f'${height:,.0f}',
                     ha='center', va='bottom')
         
-        # Savings visualization
-        savings = roi_metrics['cost_savings']
+        # Net savings visualization
+        net_savings = roi_metrics['net_savings']
         roi_pct = roi_metrics['roi_percentage']
         
-        ax2.barh(['Cost Savings'], [savings], color='green' if savings > 0 else 'red', alpha=0.7)
-        ax2.set_xlabel('Cost Savings ($)')
+        ax2.barh(['Net Savings'], [net_savings], color='green' if net_savings > 0 else 'red', alpha=0.7)
+        ax2.set_xlabel('Net Savings ($)')
         ax2.set_title(f'Return on Investment: {roi_pct:.1f}%')
-        ax2.text(savings, 0, f'  ${savings:,.0f}', va='center', 
+        ax2.text(net_savings, 0, f'  ${net_savings:,.0f}', va='center', 
                 fontsize=12, fontweight='bold')
         ax2.grid(True, alpha=0.3, axis='x')
         
@@ -1337,8 +1337,8 @@ class DeploymentReportGenerator:
             },
             'financial_impact': {
                 'roi_percentage': roi_metrics['roi_percentage'],
-                'cost_savings': roi_metrics['cost_savings'],
-                'avg_cost_per_patient': roi_metrics['avg_cost_per_patient']
+                'net_savings': roi_metrics['net_savings'],
+                'avg_expected_value_per_patient': roi_metrics['avg_expected_value_per_patient']
             },
             'risk_stratification': {
                 level: {
