@@ -901,10 +901,8 @@ class ROICalculator:
         
         expected_value = tp_benefit + tn_benefit + fp_cost + fn_cost
         
-        # Calculate baseline expected value (predict all negative - no intervention)
+        # Calculate baseline scenario (predict all negative - no intervention)
         baseline_readmissions = int(np.sum(y_true))
-        baseline_expected_value = len(y_true) * self.cost_matrix['TN']
-        baseline_expected_value += baseline_readmissions * (self.cost_matrix['FN'] - self.cost_matrix['TN'])
         
         # Extract intervention cost per patient from cost matrix
         # TP benefit = readmission_cost - intervention_cost, so:
@@ -929,16 +927,22 @@ class ROICalculator:
         # Calculate baseline cost (no intervention - all readmissions occur)
         baseline_cost = baseline_readmissions * readmission_cost_per_patient
         
-        # Cost with intervention
+        # Calculate baseline expected value (predict all negative - no intervention)
+        # In expected value framework: TN=0, FN is negative (cost), so baseline is negative
+        baseline_expected_value = (len(y_true) - baseline_readmissions) * self.cost_matrix['TN'] + baseline_readmissions * self.cost_matrix['FN']
+        
+        # Cost with intervention (pure cost accounting view)
         cost_with_intervention = intervention_cost_total + missed_readmission_costs
         
-        # Total savings
+        # Total savings (cost accounting: baseline cost - actual cost)
         total_savings = baseline_cost - cost_with_intervention
         
-        # Calculate cost savings from baseline
+        # Cost savings (expected value framework: difference in expected values)
+        # This should equal total_savings but calculated via expected value difference
         cost_savings = expected_value - baseline_expected_value
         
         # ROI calculation (return on intervention investment)
+        # Use net benefit relative to intervention cost
         roi_percentage = (expected_value / intervention_cost_total * 100) if intervention_cost_total > 0 else 0
         
         # Savings percentage
