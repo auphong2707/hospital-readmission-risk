@@ -384,7 +384,7 @@ def calculate_all_metrics(y_true, y_pred, y_proba, demographics, cost_matrix):
     roi_metrics = roi_calc.calculate_roi_metrics(y_true, y_pred)
     print(f"✓ ROI metrics calculated")
     print(f"  - Expected value: ${roi_metrics['expected_value']:,.0f}")
-    print(f"  - Net savings: ${roi_metrics['net_savings']:,.0f}")
+    print(f"  - Cost savings: ${roi_metrics['cost_savings']:,.0f}")
     print(f"  - ROI: {roi_metrics['roi_percentage']:.2f}%")
     
     # Risk stratification analysis
@@ -896,14 +896,14 @@ class ROICalculator:
         baseline_expected_value = len(y_true) * self.cost_matrix['TN']
         baseline_expected_value += np.sum(y_true) * (self.cost_matrix['FN'] - self.cost_matrix['TN'])
         
-        # Calculate net savings and ROI
-        net_savings = expected_value - baseline_expected_value
-        roi_percentage = (net_savings / abs(baseline_expected_value)) * 100 if baseline_expected_value != 0 else 0
+        # Calculate cost savings and ROI
+        cost_savings = expected_value - baseline_expected_value
+        roi_percentage = (cost_savings / abs(baseline_expected_value)) * 100 if baseline_expected_value != 0 else 0
         
         metrics = {
             'expected_value': float(expected_value),
             'baseline_expected_value': float(baseline_expected_value),
-            'net_savings': float(net_savings),
+            'cost_savings': float(cost_savings),
             'roi_percentage': float(roi_percentage),
             'benefit_per_tp': float(tp_benefit / tp if tp > 0 else 0),
             'benefit_per_tn': float(tn_benefit / tn if tn > 0 else 0),
@@ -1139,14 +1139,14 @@ class FinalEvaluationVisualizer:
                     f'${height:,.0f}',
                     ha='center', va='bottom')
         
-        # Net savings visualization
-        net_savings = roi_metrics['net_savings']
+        # Cost savings visualization
+        cost_savings = roi_metrics['cost_savings']
         roi_pct = roi_metrics['roi_percentage']
         
-        ax2.barh(['Net Savings'], [net_savings], color='green' if net_savings > 0 else 'red', alpha=0.7)
-        ax2.set_xlabel('Net Savings ($)')
+        ax2.barh(['Cost Savings'], [cost_savings], color='green' if cost_savings > 0 else 'red', alpha=0.7)
+        ax2.set_xlabel('Cost Savings ($)')
         ax2.set_title(f'Return on Investment: {roi_pct:.1f}%')
-        ax2.text(net_savings, 0, f'  ${net_savings:,.0f}', va='center', 
+        ax2.text(cost_savings, 0, f'  ${cost_savings:,.0f}', va='center', 
                 fontsize=12, fontweight='bold')
         ax2.grid(True, alpha=0.3, axis='x')
         
@@ -1337,7 +1337,7 @@ class DeploymentReportGenerator:
             },
             'financial_impact': {
                 'roi_percentage': roi_metrics['roi_percentage'],
-                'net_savings': roi_metrics['net_savings'],
+                'cost_savings': roi_metrics['cost_savings'],
                 'avg_expected_value_per_patient': roi_metrics['avg_expected_value_per_patient']
             },
             'risk_stratification': {
