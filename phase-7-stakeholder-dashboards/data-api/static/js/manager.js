@@ -78,8 +78,8 @@ function renderExecutiveSummary() {
         <div class="executive-summary">
             <div class="summary-body">
                 <div class="summary-row">
-                    <div class="summary-label">Net Savings</div>
-                    <div class="summary-value" style="font-size: 2em; font-weight: 700; color: #10b981;">${formatCurrency(savingsData.net_savings)}</div>
+                    <div class="summary-label">Cost Saving</div>
+                    <div class="summary-value" style="font-size: 2em; font-weight: 700; color: #10b981;">${formatCurrency(savingsData.cost_savings)}</div>
                 </div>
                 <div class="summary-row">
                     <div class="summary-label">Savings per $1 Spent</div>
@@ -148,8 +148,8 @@ function renderSavingsMetrics() {
     const stats = [
         {
             icon: 'fas fa-dollar-sign',
-            label: 'Net Savings',
-            value: formatCurrency(savingsData.net_savings),
+            label: 'Cost Saving',
+            value: formatCurrency(savingsData.cost_savings),
             color: 'success'
         },
         {
@@ -336,7 +336,7 @@ function renderWaterfallChart() {
         'Prevented Readmissions<br>Value',
         'Unnecessary<br>Interventions Cost',
         'Missed Readmissions<br>Cost',
-        'Net Savings'
+        'Cost Saving'
     ];
     
     const measure = ['absolute', 'relative', 'relative', 'relative', 'total'];
@@ -345,7 +345,7 @@ function renderWaterfallChart() {
         breakdown.tp_value,
         -breakdown.fp_cost,
         -breakdown.fn_cost,
-        summary.net_savings
+        summary.cost_savings
     ];
     
     const text = y.map((val, idx) => {
@@ -494,7 +494,7 @@ function renderBenefitComponents() {
         { separator: true },
         { label: 'Financial Summary', value: '', bold: true, header: true },
         { label: 'Intervention Costs', value: summary.intervention_costs },
-        { label: 'Net Savings', value: summary.net_savings, bold: true, highlight: true },
+        { label: 'Cost Saving', value: summary.cost_savings, bold: true, highlight: true },
         { label: 'Savings per $1 Spent', value: `${summary.savings_ratio.toFixed(2)}`, bold: true, isRatio: true }
     ];
     
@@ -543,7 +543,7 @@ function renderModelComparisonTable() {
                     <th class="text-right">TP</th>
                     <th class="text-right">FP</th>
                     <th class="text-right">FN</th>
-                    <th class="text-right">Net Savings</th>
+                    <th class="text-right">Cost Saving</th>
                     <th class="text-right">Savings per $1</th>
                     <th class="text-right">Intervention Rate</th>
                     <th class="text-right">ROC-AUC</th>
@@ -564,7 +564,7 @@ function renderModelComparisonTable() {
                 <td class="text-right">${model.tp.toLocaleString()}</td>
                 <td class="text-right">${model.fp.toLocaleString()}</td>
                 <td class="text-right">${model.fn.toLocaleString()}</td>
-                <td class="text-right">${formatCurrency(model.net_savings)}</td>
+                <td class="text-right">${formatCurrency(model.cost_savings)}</td>
                 <td class="text-right">$${model.savings_ratio.toFixed(2)}</td>
                 <td class="text-right">${model.intervention_rate.toFixed(1)}%</td>
                 <td class="text-right">${model.roc_auc.toFixed(3)}</td>
