@@ -178,13 +178,13 @@ function renderImpactMetrics() {
     const stats = [
         {
             icon: 'fas fa-hospital',
-            label: 'Readmissions Prevented (TP)',
+            label: 'Readmissions Prevented',
             value: savingsData.tp.toLocaleString(),
             color: 'primary'
         },
         {
             icon: 'fas fa-exclamation-triangle',
-            label: 'Readmissions Missed (FN)',
+            label: 'Readmissions Missed',
             value: savingsData.fn.toLocaleString(),
             color: 'warning'
         },
