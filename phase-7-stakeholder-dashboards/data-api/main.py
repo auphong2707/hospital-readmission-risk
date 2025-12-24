@@ -154,6 +154,7 @@ def compare_models():
                 comparison_data.append({
                     "method": method,
                     "roc_auc": round(metrics.get('roc_auc', 0), 3),
+                    "pr_auc": round(metrics.get('pr_auc', 0), 3),
                     "precision": round(metrics.get('precision', 0), 3),
                     "recall": round(metrics.get('recall', 0), 3),
                     "f1_score": round(metrics.get('f1', 0), 3),
@@ -189,6 +190,7 @@ def compare_models_by_metric():
                 metrics = phase2_data['metrics']
                 model_metrics[method] = {
                     "roc_auc": round(metrics.get('roc_auc', 0), 3),
+                    "pr_auc": round(metrics.get('pr_auc', 0), 3),
                     "precision": round(metrics.get('precision', 0), 3),
                     "recall": round(metrics.get('recall', 0), 3),
                     "f1_score": round(metrics.get('f1', 0), 3)
@@ -198,6 +200,7 @@ def compare_models_by_metric():
         comparison_data = []
         metric_names = {
             "roc_auc": "ROC-AUC",
+            "pr_auc": "PR-AUC",
             "precision": "Precision",
             "recall": "Recall",
             "f1_score": "F1 Score"
