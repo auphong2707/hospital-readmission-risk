@@ -941,8 +941,9 @@ class ROICalculator:
         # How much we save by using the model vs doing nothing
         total_savings = baseline_cost - cost_with_intervention
         
-        # Cost savings = baseline cost - expected value
-        cost_savings = baseline_cost - expected_value
+        # Cost savings = same as total_savings in cost accounting framework
+        # This represents: baseline cost (positive) - cost with model (positive) = savings
+        cost_savings = total_savings
         
         # ROI calculation (return on intervention investment)
         # Net benefit (expected_value) relative to intervention cost
