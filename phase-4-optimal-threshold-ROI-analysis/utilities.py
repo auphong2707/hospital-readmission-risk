@@ -561,7 +561,7 @@ class ThresholdOptimizer:
             cost_params = {
                 'readmission_cost': 15000,
                 'intervention_cost': 500,
-                'tp_benefit': -14500,  # readmission_cost - intervention_cost
+                'tp_benefit': 14500,  # readmission_cost - intervention_cost
                 'fp_cost': -500,      # intervention cost wasted
                 'fn_cost': -15000,    # missed readmission
                 'tn_cost': 0          # correct prediction, no action

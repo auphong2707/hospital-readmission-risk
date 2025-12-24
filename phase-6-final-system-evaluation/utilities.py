@@ -925,25 +925,29 @@ class ROICalculator:
         missed_readmission_costs = missed_readmissions * readmission_cost_per_patient
         
         # Calculate baseline cost (no intervention - all readmissions occur)
+        # In pure cost terms: how much we pay if we do nothing
         baseline_cost = baseline_readmissions * readmission_cost_per_patient
         
         # Calculate baseline expected value (predict all negative - no intervention)
-        # All readmissions occur with no interventions: baseline_readmissions × FN cost
-        baseline_expected_value = baseline_readmissions * self.cost_matrix['FN']
+        # In expected value framework: TN=0, FN is negative (cost)
+        # This represents the "value" of doing nothing (will be negative since all readmissions occur)
+        baseline_expected_value = baseline_cost  # Use positive baseline cost representation
         
-        # Cost with intervention (interventions + missed readmissions)
+        # Cost with intervention (pure cost accounting view)
+        # Total costs incurred: interventions + missed readmissions
         cost_with_intervention = intervention_cost_total + missed_readmission_costs
         
         # Total savings (cost accounting: baseline cost - actual cost)
+        # How much we save by using the model vs doing nothing
         total_savings = baseline_cost - cost_with_intervention
         
-        # Cost savings (expected value framework: improvement over baseline)
-        cost_savings = expected_value - baseline_expected_value
+        # Cost savings = same as total_savings in cost accounting framework
+        # This represents: baseline cost (positive) - cost with model (positive) = savings
+        cost_savings = total_savings
         
         # ROI calculation (return on intervention investment)
-        # Standard ROI: (incremental benefit from using model / cost of intervention) × 100
-        # Incremental benefit = expected_value - baseline_expected_value
-        roi_percentage = ((expected_value - baseline_expected_value) / intervention_cost_total * 100) if intervention_cost_total > 0 else 0
+        # Net benefit (expected_value) relative to intervention cost
+        roi_percentage = (expected_value / intervention_cost_total * 100) if intervention_cost_total > 0 else 0
         
         # Savings percentage
         savings_percentage = (total_savings / baseline_cost * 100) if baseline_cost > 0 else 0
