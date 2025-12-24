@@ -586,23 +586,30 @@ class CompletePreprocessor:
                 print(f"⚠️  Repository may already exist: {e}")
             
             # Upload files
+            # CSV files and scaler go to splits/ folder for backward compatibility
+            # README stays in root for documentation
             files_to_upload = [
-                "train.csv", "validation.csv", "test.csv",
-                "train_demographics.csv", "validation_demographics.csv", "test_demographics.csv",
-                "scaler.pkl", "README.md"
+                ("train.csv", "splits/train.csv"),
+                ("validation.csv", "splits/validation.csv"),
+                ("test.csv", "splits/test.csv"),
+                ("train_demographics.csv", "splits/train_demographics.csv"),
+                ("validation_demographics.csv", "splits/validation_demographics.csv"),
+                ("test_demographics.csv", "splits/test_demographics.csv"),
+                ("scaler.pkl", "splits/scaler.pkl"),
+                ("README.md", "README.md")
             ]
             
-            for filename in files_to_upload:
-                file_path = os.path.join(splits_dir if 'demographics' in filename or filename.endswith('.csv') or filename == 'scaler.pkl' else output_dir, filename)
+            for filename, path_in_repo in files_to_upload:
+                file_path = os.path.join(splits_dir if filename != 'README.md' else output_dir, filename)
                 if os.path.exists(file_path):
                     api.upload_file(
                         path_or_fileobj=file_path,
-                        path_in_repo=filename,
+                        path_in_repo=path_in_repo,
                         repo_id=repo_id,
                         repo_type="dataset",
                         token=hf_token
                     )
-                    print(f"   ✅ Uploaded: {filename}")
+                    print(f"   ✅ Uploaded: {path_in_repo}")
             
             print(f"\n🎉 Upload complete: https://huggingface.co/datasets/{repo_id}")
             
