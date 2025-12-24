@@ -253,7 +253,8 @@ mitigation_dir = Path("$MITIGATION_OUTPUT")
 is_mitigated = True if "$MITIGATION_APPLIED" == "true" else False
 use_group_thresholds = False
 threshold_source = None
-group_thresholds = None
+flattened_group_thresholds = {}
+global_threshold = fairness_report.get("optimal_threshold", 0.5)
 
 if is_mitigated:
     # Load mitigation results
@@ -264,8 +265,25 @@ if is_mitigated:
     
     if use_group_thresholds and (mitigation_dir / "group_thresholds.json").exists():
         with open(mitigation_dir / "group_thresholds.json", 'r') as f:
-            group_thresholds = json.load(f)
+            group_thresholds_data = json.load(f)
+        
+        # Flatten nested structure for Phase 6
+        # From: {"race": {"Caucasian": {"threshold": 0.25}, ...}, "gender": {...}}
+        # To: {"race_Caucasian": 0.25, "gender_Female": 0.42, ...}
+        nested_thresholds = group_thresholds_data.get("group_specific_thresholds", {})
+        for attribute, groups in nested_thresholds.items():
+            for group_name, group_data in groups.items():
+                if isinstance(group_data, dict):
+                    threshold_value = group_data.get("threshold", global_threshold)
+                else:
+                    threshold_value = group_data
+                
+                # Create flat key: "attribute_groupname"
+                flat_key = f"{attribute}_{group_name}"
+                flattened_group_thresholds[flat_key] = threshold_value
+        
         threshold_source = "phase5_mitigation"
+        print(f"✓ Flattened {len(flattened_group_thresholds)} group-specific thresholds for Phase 6")
 
 # Standard deployment config for Phase 6 (ALWAYS same format)
 deployment_config = {
@@ -275,7 +293,8 @@ deployment_config = {
     "threshold_configuration": {
         "type": "group_specific" if use_group_thresholds else "global",
         "source": threshold_source if use_group_thresholds else "phase4_roi_optimization",
-        "group_thresholds": group_thresholds if use_group_thresholds else None
+        "global_threshold": global_threshold,
+        "group_thresholds": flattened_group_thresholds if use_group_thresholds else {}
     },
     "fairness_status": {
         "bias_detected": fairness_report.get("bias_detected", False),
