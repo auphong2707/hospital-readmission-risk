@@ -1265,18 +1265,6 @@ async function loadPhase4ConfusionMatrices() {
                 font: { size: 16, color: '#333' },
                 xanchor: 'center'
             });
-            
-            // Add threshold only
-            annotations.push({
-                x: (domain_x_start + domain_x_end) / 2,
-                y: 1.05,
-                xref: 'paper',
-                yref: 'paper',
-                text: `Threshold: ${model.metrics.threshold.toFixed(3)}`,
-                showarrow: false,
-                font: { size: 11, color: '#666' },
-                xanchor: 'center'
-            });
         });
         
         // Add axis labels strategically

@@ -1,4 +1,23 @@
 {
-  "costs": [],
-  "benefits": []
+    "gradient_boosting": {
+        "threshold": 0.025,
+        "tp": 1659,
+        "tn": 4477,
+        "fp": 9084,
+        "fn": 45
+    },
+    "random_forest": {
+        "threshold": 0.01,
+        "tp": 1298,
+        "tn": 10572,
+        "fp": 2989,
+        "fn": 406
+    },
+    "logistic_regression": {
+        "threshold": 0.029,
+        "tp": 1678,
+        "tn": 2505,
+        "fp": 11056,
+        "fn": 26
+    }
 }
