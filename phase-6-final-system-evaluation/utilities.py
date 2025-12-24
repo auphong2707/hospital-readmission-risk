@@ -909,7 +909,7 @@ class ROICalculator:
             'benefit_per_tn': float(tn_benefit / tn if tn > 0 else 0),
             'cost_per_fp': float(fp_cost / fp if fp > 0 else 0),
             'cost_per_fn': float(fn_cost / fn if fn > 0 else 0),
-            'avg_expected_value_per_patient': float(expected_value / len(y_true)),
+            'avg_cost_per_patient': float(expected_value / len(y_true)),
             'total_intervention_cost': float(abs(fp_cost)),
             'total_missed_readmission_cost': float(abs(fn_cost))
         }
@@ -1338,7 +1338,7 @@ class DeploymentReportGenerator:
             'financial_impact': {
                 'roi_percentage': roi_metrics['roi_percentage'],
                 'cost_savings': roi_metrics['cost_savings'],
-                'avg_expected_value_per_patient': roi_metrics['avg_expected_value_per_patient']
+                'avg_cost_per_patient': roi_metrics['avg_cost_per_patient']
             },
             'risk_stratification': {
                 level: {
