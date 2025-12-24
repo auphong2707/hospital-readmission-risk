@@ -47,25 +47,37 @@ def get_savings_summary(method: str):
         fn = performance_metrics.get('false_negatives', 0)
         total_patients = tp + fp + tn + fn
         
-        # Get cost metrics directly from roi_metrics (from HuggingFace)
-        cost_savings = roi_metrics.get('cost_savings', 0)
-        total_cost = abs(roi_metrics.get('total_cost', 0))
-        baseline_cost = abs(roi_metrics.get('baseline_cost', 0))
+        # ============================================================================
+        # COST CALCULATION - Cost Comparison Framework
+        # ============================================================================
+        # Baseline (Do Nothing): All actual positives readmit at $15,000 each
+        # Model (AI-Driven): Intervene on predictions at $500, pay $15,000 for misses
+        # Savings = Baseline Cost - Model Cost
         
-        # Calculate individual cost components for display
-        tp_value = tp * 14500  # Value of prevented readmissions
+        readmission_cost = 15000
+        intervention_cost = 500
+        
+        # Baseline: No interventions, all positives (TP + FN) become readmissions
+        baseline_cost = (tp + fn) * readmission_cost
+        
+        # Model: Intervene on all predictions (TP + FP), pay for misses (FN)
+        model_cost = (tp + fp) * intervention_cost + fn * readmission_cost
+        
+        # Total savings from using the model
+        cost_savings = baseline_cost - model_cost
+        # Shortcut: cost_savings = tp * 14500 - fp * 500
+        
+        # Individual components for display
+        tp_value = tp * 14500  # Net value per prevented readmission ($15K - $500)
         fp_cost = fp * 500     # Cost of unnecessary interventions
         fn_cost = fn * 15000   # Cost of missed readmissions
-        
-        # Calculate net program value
-        net_program_value = tp_value - fp_cost - fn_cost
         
         # Build response with optional fields
         result = {
             "method": method,
             "cost_savings": round(cost_savings, 2),
-            "net_program_value": round(net_program_value, 2),
             "baseline_cost": round(baseline_cost, 2),
+            "model_cost": round(model_cost, 2),
             "tp": int(tp),
             "fp": int(fp),
             "tn": int(tn),
@@ -77,12 +89,11 @@ def get_savings_summary(method: str):
             "intervention_rate": round(((tp + fp) / total_patients * 100) if total_patients > 0 else 0, 1)
         }
         
-        # Only include intervention_costs and savings_ratio if intervention_cost exists in roi_metrics
-        if 'intervention_cost' in roi_metrics:
-            intervention_costs = abs(roi_metrics.get('intervention_cost', 0))
-            savings_ratio = (cost_savings / intervention_costs) if intervention_costs > 0 else 0
-            result["intervention_costs"] = round(intervention_costs, 2)
-            result["savings_ratio"] = round(savings_ratio, 2)
+        # Calculate intervention costs and savings ratio
+        intervention_costs = (tp + fp) * intervention_cost
+        savings_ratio = (cost_savings / intervention_costs) if intervention_costs > 0 else 0
+        result["intervention_costs"] = round(intervention_costs, 2)
+        result["savings_ratio"] = round(savings_ratio, 2)
         
         return result
         
@@ -197,8 +208,14 @@ def get_cost_breakdown(method: str):
         tn = performance_metrics.get('true_negatives', 0)
         fn = performance_metrics.get('false_negatives', 0)
         
+        # ============================================================================
+        # COST CALCULATION - Cost Comparison Framework
+        # ============================================================================
+        readmission_cost = 15000
+        intervention_cost = 500
+        
         # Cost Matrix (per patient)
-        tp_unit_value = 14500   # Prevented readmission net value
+        tp_unit_value = 14500   # Net value per prevented readmission ($15K - $500)
         fp_unit_cost = 500      # Unnecessary intervention cost
         tn_unit_value = 0       # No action needed
         fn_unit_cost = 15000    # Missed readmission cost
@@ -209,24 +226,25 @@ def get_cost_breakdown(method: str):
         tn_value = tn * tn_unit_value
         fn_cost = fn * fn_unit_cost
         
-        # Net Program Value
-        net_program_value = tp_value - fp_cost - fn_cost
+        # Baseline: No interventions, all positives (TP + FN) become readmissions
+        baseline_cost = (tp + fn) * readmission_cost
         
-        # Get cost metrics directly from roi_metrics (from HuggingFace)
-        cost_savings = roi_metrics.get('cost_savings', 0)
-        baseline_cost = abs(roi_metrics.get('baseline_cost', 0))
+        # Model: Intervene on all predictions (TP + FP), pay for misses (FN)
+        model_cost = (tp + fp) * intervention_cost + fn * readmission_cost
         
-        # Build summary with optional fields
+        # Total savings from using the model
+        cost_savings = baseline_cost - model_cost
+        
+        # Calculate intervention costs and savings ratio
+        intervention_costs = (tp + fp) * intervention_cost
+        savings_ratio = (cost_savings / intervention_costs) if intervention_costs > 0 else 0
+        
+        # Build summary
         summary = {
-            "cost_savings": round(cost_savings, 2)
+            "cost_savings": round(cost_savings, 2),
+            "intervention_costs": round(intervention_costs, 2),
+            "savings_ratio": round(savings_ratio, 2)
         }
-        
-        # Only include intervention_costs and savings_ratio if intervention_cost exists in roi_metrics
-        if 'intervention_cost' in roi_metrics:
-            intervention_costs = abs(roi_metrics.get('intervention_cost', 0))
-            savings_ratio = (cost_savings / intervention_costs) if intervention_costs > 0 else 0
-            summary["intervention_costs"] = round(intervention_costs, 2)
-            summary["savings_ratio"] = round(savings_ratio, 2)
         
         return {
             "method": method,
@@ -246,11 +264,11 @@ def get_cost_breakdown(method: str):
                 "tp_value": round(tp_value, 2),
                 "fp_cost": round(fp_cost, 2),
                 "tn_value": round(tn_value, 2),
-                "fn_cost": round(fn_cost, 2),
-                "net_program_value": round(net_program_value, 2)
+                "fn_cost": round(fn_cost, 2)
             },
             "baseline": {
                 "baseline_cost": round(baseline_cost, 2),
+                "model_cost": round(model_cost, 2),
                 "potential_readmissions": int(tp + fn)
             },
             "summary": summary
@@ -296,9 +314,18 @@ def get_models_comparison():
                 fn = performance_metrics.get('false_negatives', 0)
                 total = tp + fp + tn + fn
                 
-                # Get cost metrics directly from roi_metrics (from HuggingFace)
-                cost_savings = roi_metrics.get('cost_savings', 0)
+                # Calculate cost savings using cost comparison framework
+                readmission_cost = 15000
+                intervention_cost = 500
+                baseline_cost = (tp + fn) * readmission_cost
+                model_cost = (tp + fp) * intervention_cost + fn * readmission_cost
+                cost_savings = baseline_cost - model_cost
+                
                 intervention_rate = ((tp + fp) / total * 100) if total > 0 else 0
+                intervention_costs = (tp + fp) * intervention_cost
+                
+                # Calculate savings ratio
+                savings_ratio = (cost_savings / intervention_costs) if intervention_costs > 0 else 0
                 
                 model_data = {
                     "method": method,
@@ -307,18 +334,13 @@ def get_models_comparison():
                     "fn": int(fn),
                     "tn": int(tn),
                     "cost_savings": round(cost_savings, 2),
+                    "intervention_costs": round(intervention_costs, 2),
+                    "savings_ratio": round(savings_ratio, 2),
                     "roc_auc": round(performance_metrics.get('roc_auc', 0), 3),
                     "intervention_rate": round(intervention_rate, 1),
                     "readmissions_prevented": int(tp),
                     "threshold": round(threshold, 3)
                 }
-                
-                # Only include intervention_costs and savings_ratio if intervention_cost exists
-                if 'intervention_cost' in roi_metrics:
-                    intervention_costs = abs(roi_metrics.get('intervention_cost', 0))
-                    savings_ratio = (cost_savings / intervention_costs) if intervention_costs > 0 else 0
-                    model_data["intervention_costs"] = round(intervention_costs, 2)
-                    model_data["savings_ratio"] = round(savings_ratio, 2)
                 
                 comparison_data.append(model_data)
                 

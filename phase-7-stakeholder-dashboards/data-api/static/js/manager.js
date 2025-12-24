@@ -20,23 +20,28 @@ async function loadDashboardData() {
     try {
         console.log("Loading manager dashboard data...");
         
-        // Use Random Forest as the recommended model
-        const method = "random_forest";
+        // First, load comparison data to determine the best model
+        const comparison = await fetch(`/api/v1/manager/models/comparison`).then(r => r.json());
+        comparisonData = comparison;
         
-        // Load all data in parallel
-        const [savings, cost, comparison] = await Promise.all([
+        // Find the recommended model (highest cost savings)
+        const recommendedModel = comparison.comparison.find(model => model.recommended);
+        const method = recommendedModel ? recommendedModel.method : "random_forest";
+        
+        console.log(`Selected best model: ${method} with cost savings: $${recommendedModel.cost_savings.toLocaleString()}`);
+        
+        // Load data for the best model
+        const [savings, cost] = await Promise.all([
             fetch(`/api/v1/manager/models/${method}/savings-summary`).then(r => r.json()),
-            fetch(`/api/v1/manager/models/${method}/cost-breakdown`).then(r => r.json()),
-            fetch(`/api/v1/manager/models/comparison`).then(r => r.json())
+            fetch(`/api/v1/manager/models/${method}/cost-breakdown`).then(r => r.json())
         ]);
         
         savingsData = savings;
         costData = cost;
-        comparisonData = comparison;
         
         console.log("All data loaded successfully");
         console.log("Savings Data:", savingsData);
-        console.log("Resource Data:", resourceData);
+        console.log("Cost Data:", costData);
         
         // Render all sections
         renderExecutiveSummary();
@@ -74,6 +79,8 @@ function showError(message) {
 function renderExecutiveSummary() {
     const container = document.getElementById('executive-summary-card');
     
+    const modelName = formatModelName(savingsData.method);
+    
     let savingsRatioHtml = '';
     if (savingsData.savings_ratio !== undefined) {
         savingsRatioHtml = `
@@ -85,6 +92,11 @@ function renderExecutiveSummary() {
     
     const html = `
         <div class="executive-summary">
+            <div class="summary-header" style="background: #f0f9ff; padding: 0.75em 1em; margin: -1em -1em 1em -1em; border-bottom: 2px solid #3b82f6;">
+                <div style="font-size: 0.9em; color: #1e40af;">
+                    <i class="fas fa-award"></i> <strong>Recommended Model:</strong> ${modelName}
+                </div>
+            </div>
             <div class="summary-body">
                 <div class="summary-row">
                     <div class="summary-label">Cost Saving</div>
@@ -345,20 +357,21 @@ function renderWaterfallChart() {
     const baseline = costData.baseline;
     const summary = costData.summary;
     
-    // Waterfall data showing cost matrix calculation flow
+    // Waterfall data showing cost comparison framework
+    // Baseline Cost - Model Cost = Cost Savings
+    // Model Cost = Intervention Costs + Missed Readmission Costs
     const x = [
-        'Baseline Cost',
-        'Prevented Readmissions<br>Value',
-        'Unnecessary<br>Interventions Cost',
-        'Missed Readmissions<br>Cost',
-        'Cost Saving'
+        'Baseline Cost<br>(Do Nothing)',
+        'Intervention Costs<br>(TP + FP)',
+        'Missed Readmissions<br>Cost (FN)',
+        'Cost Savings'
     ];
     
-    const measure = ['absolute', 'relative', 'relative', 'relative', 'total'];
+    const measure = ['absolute', 'relative', 'relative', 'total'];
+    const intervention_costs = (costData.confusion_matrix.tp + costData.confusion_matrix.fp) * 500;
     const y = [
         baseline.baseline_cost,
-        breakdown.tp_value,
-        -breakdown.fp_cost,
+        -intervention_costs,
         -breakdown.fn_cost,
         summary.cost_savings
     ];
@@ -444,9 +457,7 @@ function renderCostComponents() {
         { label: 'Financial Breakdown', value: '', bold: true, header: true },
         { label: `Prevented Readmissions Value (${confusion.tp} × $${matrix.tp_unit_value.toLocaleString()})`, value: breakdown.tp_value },
         { label: `Unnecessary Interventions Cost (${confusion.fp} × $${matrix.fp_unit_cost.toLocaleString()})`, value: -breakdown.fp_cost, isNegative: true },
-        { label: `Missed Readmissions Cost (${confusion.fn} × $${matrix.fn_unit_cost.toLocaleString()})`, value: -breakdown.fn_cost, isNegative: true },
-        { separator: true },
-        { label: 'Net Program Value', value: breakdown.net_program_value, bold: true, isNegative: breakdown.net_program_value < 0 }
+        { label: `Missed Readmissions Cost (${confusion.fn} × $${matrix.fn_unit_cost.toLocaleString()})`, value: -breakdown.fn_cost, isNegative: true }
     ];
     
     let html = '<table class="data-table">';
