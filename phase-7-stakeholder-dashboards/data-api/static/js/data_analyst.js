@@ -71,7 +71,7 @@ async function loadRecommendedModel() {
                 color: getColorByThreshold(data.best_roi || 0, { green: 0.01, yellow: 0 })
             },
             {
-                label: 'Net Saving',
+                label: 'Cost Saving',
                 value: formatCurrency(data.best_annual_savings || 0),
                 color: 'green'
             },
@@ -1431,7 +1431,7 @@ async function loadFinalEvaluation() {
         
         // Define columns (removed Specificity)
         const columns = ['Model', 'ROC-AUC', 'PR-AUC', 'Brier', 'Accuracy', 'Sensitivity', 
-                        'Precision', 'ROI %', 'Readmissions', 'Net Savings', 'Status'];
+                        'Precision', 'ROI %', 'Readmissions', 'Cost Savings', 'Status'];
         
         // Build rows from API data
         const rows = data.models.map(model => [
@@ -1444,7 +1444,7 @@ async function loadFinalEvaluation() {
             model.precision.toFixed(3),
             model.roi_percentage.toFixed(1),
             `${model.readmissions_prevented}/${model.total_readmissions}`,
-            `$${Math.round(model.net_savings).toLocaleString()}`,
+            `$${Math.round(model.cost_savings).toLocaleString()}`,
             model.deployment_status
         ]);
         

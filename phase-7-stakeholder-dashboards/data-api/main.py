@@ -582,28 +582,15 @@ def get_quick_insights():
                     except:
                         pass
                 
-                # Get Phase 6 ROI and Net Savings data
+                # Get Phase 6 ROI and Cost Savings data
                 roi_percentage = 0
-                net_savings = 0
+                cost_savings = 0
                 if phase6_data and 'final_system_metrics' in phase6_data:
                     final_metrics = phase6_data['final_system_metrics']
                     roi_metrics = final_metrics.get('roi_metrics', {})
-                    perf = final_metrics.get('performance_metrics', {})
                     
                     roi_percentage = roi_metrics.get('roi_percentage', 0)
-                    
-                    # Calculate net savings
-                    tp = perf.get('true_positives', 0)
-                    fp = perf.get('false_positives', 0)
-                    fn = perf.get('false_negatives', 0)
-                    
-                    tp_value = tp * 14500
-                    fp_cost = fp * 500
-                    fn_cost = fn * 15000
-                    
-                    net_program_value = tp_value - fp_cost - fn_cost
-                    baseline_cost = (tp + fn) * 15000
-                    net_savings = baseline_cost - abs(net_program_value)
+                    cost_savings = roi_metrics.get('cost_savings', 0)
                 
                 all_metrics.append({
                     "method": method,
@@ -611,11 +598,11 @@ def get_quick_insights():
                     "roc_auc": metrics.get('roc_auc', 0),
                     "brier": brier_after,
                     "roi_percentage": roi_percentage,
-                    "net_savings": net_savings
+                    "cost_savings": cost_savings
                 })
         
-        # Find best model (by Net Savings - most important for deployment)
-        best_model = max(all_metrics, key=lambda x: x['net_savings'])
+        # Find best model (by Cost Savings - most important for deployment)
+        best_model = max(all_metrics, key=lambda x: x['cost_savings'])
         
         # Check fairness (simplified - assuming all pass)
         fairness_status = "PASS"
@@ -644,7 +631,7 @@ def get_quick_insights():
             "best_roc_auc": round(best_model['roc_auc'], 3),
             "best_brier_score": round(best_model['brier'], 4),
             "best_roi": round(best_model['roi_percentage'], 2),
-            "best_annual_savings": round(best_model['net_savings'], 2),
+            "best_annual_savings": round(best_model['cost_savings'], 2),
             "fairness_status": fairness_status,
             "max_disparity": max_disparity,
             "class_balance": [
@@ -917,14 +904,8 @@ def get_phase6_final_evaluation():
                 total_readmissions = tp + fn
                 readmissions_prevented = tp  # True positives are successfully prevented
                 
-                # Calculate Net Savings using cost matrix
-                tp_value = tp * 14500      # Value of prevented readmissions
-                fp_cost = fp * 500         # Cost of unnecessary interventions
-                fn_cost = fn * 15000       # Cost of missed readmissions
-                
-                net_program_value = tp_value - fp_cost - fn_cost
-                baseline_cost = (tp + fn) * 15000
-                net_savings = baseline_cost - abs(net_program_value)
+                # Get Cost Savings from Phase 6 roi_metrics
+                cost_savings = roi.get('cost_savings', 0)
                 
                 # Determine deployment status
                 roc_auc = perf.get('roc_auc', 0)
@@ -944,7 +925,7 @@ def get_phase6_final_evaluation():
                     'sensitivity': round(perf.get('sensitivity', 0), 3),
                     'specificity': round(perf.get('specificity', 0), 3),
                     'precision': round(perf.get('precision', 0), 3),
-                    'net_savings': round(net_savings, 0)
+                    'cost_savings': round(cost_savings, 0)
                 })
             else:
                 # Return placeholder if data not available
@@ -962,7 +943,7 @@ def get_phase6_final_evaluation():
                     'sensitivity': 0,
                     'specificity': 0,
                     'precision': 0,
-                    'net_savings': 0
+                    'cost_savings': 0
                 })
         
         return {"models": results}
