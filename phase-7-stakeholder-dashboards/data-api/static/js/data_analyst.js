@@ -1431,13 +1431,14 @@ async function loadFinalEvaluation() {
         }
         
         // Define columns (removed Specificity)
-        const columns = ['Model', 'ROC-AUC', 'Brier', 'Accuracy', 'Sensitivity', 
+        const columns = ['Model', 'ROC-AUC', 'PR-AUC', 'Brier', 'Accuracy', 'Sensitivity', 
                         'Precision', 'ROI %', 'Readmissions', 'Cost Savings', 'Status'];
         
         // Build rows from API data
         const rows = data.models.map(model => [
             model.model_name,
             model.roc_auc.toFixed(3),
+            model.pr_auc.toFixed(3),
             model.brier_score.toFixed(3),
             model.accuracy.toFixed(3),
             model.sensitivity.toFixed(3),
@@ -1465,19 +1466,19 @@ async function loadFinalEvaluation() {
         const trows = tbody.querySelectorAll('tr');
         
         // Find best values for each column
-        const numericColumns = [1, 2, 3, 4, 5, 6, 7, 8]; // All numeric columns including readmissions and cost
+        const numericColumns = [1, 2, 3, 4, 5, 6, 7, 8, 9]; // All numeric columns including PR-AUC
         const bestIndices = {};
         
         numericColumns.forEach(colIdx => {
-            if (colIdx === 2) { // Brier - lower is better
+            if (colIdx === 3) { // Brier - lower is better
                 const values = rows.map(row => parseFloat(row[colIdx]));
                 const minValue = Math.min(...values);
                 bestIndices[colIdx] = values.findIndex(v => v === minValue);
-            } else if (colIdx === 7) { // Readmissions prevented
+            } else if (colIdx === 8) { // Readmissions prevented
                 const values = rawData.map(d => d.readmissions_prevented);
                 const maxValue = Math.max(...values);
                 bestIndices[colIdx] = values.findIndex(v => v === maxValue);
-            } else if (colIdx === 8) { // Cost savings
+            } else if (colIdx === 9) { // Cost savings
                 const values = rawData.map(d => d.cost_savings);
                 const maxValue = Math.max(...values);
                 bestIndices[colIdx] = values.findIndex(v => v === maxValue);
@@ -1498,7 +1499,7 @@ async function loadFinalEvaluation() {
                     cell.style.whiteSpace = 'nowrap';
                 }
                 // Set narrower width for Readmissions column
-                if (colIdx === 7) {
+                if (colIdx === 8) {
                     cell.style.maxWidth = '100px';
                     cell.style.fontSize = '0.9em';
                 }
