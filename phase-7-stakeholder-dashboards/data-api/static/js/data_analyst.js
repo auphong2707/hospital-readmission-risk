@@ -71,7 +71,7 @@ async function loadRecommendedModel() {
                 color: getColorByThreshold(data.best_roi || 0, { green: 0.01, yellow: 0 })
             },
             {
-                label: 'Annual Savings',
+                label: 'Net Saving',
                 value: formatCurrency(data.best_annual_savings || 0),
                 color: 'green'
             },

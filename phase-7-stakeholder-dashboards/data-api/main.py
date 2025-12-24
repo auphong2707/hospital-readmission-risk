@@ -568,13 +568,28 @@ def get_quick_insights():
                     calibrated = phase3_data['calibration_metrics'].get('calibrated', {})
                     brier_after = calibrated.get('brier_score', 0)
                 
-                # Get Phase 6 ROI data
+                # Get Phase 6 ROI and Net Savings data
                 roi_percentage = 0
-                annual_savings = 0
+                net_savings = 0
                 if phase6_data and 'final_system_metrics' in phase6_data:
-                    roi_metrics = phase6_data['final_system_metrics'].get('roi_metrics', {})
+                    final_metrics = phase6_data['final_system_metrics']
+                    roi_metrics = final_metrics.get('roi_metrics', {})
+                    perf = final_metrics.get('performance_metrics', {})
+                    
                     roi_percentage = roi_metrics.get('roi_percentage', 0)
-                    annual_savings = abs(roi_metrics.get('cost_savings', 0))
+                    
+                    # Calculate net savings
+                    tp = perf.get('true_positives', 0)
+                    fp = perf.get('false_positives', 0)
+                    fn = perf.get('false_negatives', 0)
+                    
+                    tp_value = tp * 14500
+                    fp_cost = fp * 500
+                    fn_cost = fn * 15000
+                    
+                    net_program_value = tp_value - fp_cost - fn_cost
+                    baseline_cost = (tp + fn) * 15000
+                    net_savings = baseline_cost - abs(net_program_value)
                 
                 all_metrics.append({
                     "method": method,
@@ -582,7 +597,7 @@ def get_quick_insights():
                     "roc_auc": metrics.get('roc_auc', 0),
                     "brier": brier_after,
                     "roi_percentage": roi_percentage,
-                    "annual_savings": annual_savings
+                    "net_savings": net_savings
                 })
         
         # Find best model (by ROC-AUC)
@@ -614,7 +629,7 @@ def get_quick_insights():
             "best_model_name": best_model['name'],
             "best_roc_auc": round(best_model['roc_auc'], 3),
             "best_roi": round(best_model['roi_percentage'], 2),
-            "best_annual_savings": round(best_model['annual_savings'], 2),
+            "best_annual_savings": round(best_model['net_savings'], 2),
             "fairness_status": fairness_status,
             "max_disparity": max_disparity,
             "class_balance": [
