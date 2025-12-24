@@ -926,15 +926,14 @@ async function loadModelComparison() {
 }
 
 /**
- * Panels 12, 13, 14: Calibration Diagrams
+ * Panels 12, 13: Calibration Diagrams
  */
 async function loadCalibrationDiagrams() {
-    const models = ['gradient_boosting', 'random_forest', 'logistic_regression'];
-    const divIds = ['plot-calibration-gb', 'plot-calibration-rf', 'plot-calibration-lr'];
+    const models = ['gradient_boosting', 'random_forest'];
+    const divIds = ['plot-calibration-gb', 'plot-calibration-rf'];
     const colors = {
         'gradient_boosting': '#2E7D32',
-        'random_forest': '#1565C0',
-        'logistic_regression': '#C62828'
+        'random_forest': '#1565C0'
     };
     
     for (let i = 0; i < models.length; i++) {
