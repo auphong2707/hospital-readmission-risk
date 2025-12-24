@@ -133,14 +133,72 @@ Nine comprehensive plots covering all aspects of system performance:
 - **TPR Ratio**: Ratio of min to max TPR (closer to 1.0 is better)
 - **FPR Ratio**: Ratio of min to max FPR (closer to 1.0 is better)
 
-### ROI Metrics
-- **Total Cost**: Cost of system with model
-- **Baseline Cost**: Cost without model (predict all negative)
-- **Cost Savings**: Baseline cost - Total cost
-- **ROI Percentage**: (Savings / Baseline) × 100%
-- **Avg Cost per Patient**: Total cost / Number of patients
-- **Intervention Costs**: Cost of preventive interventions
-- **Missed Intervention Costs**: Cost of missed readmissions
+### ROI Metrics (Cost Comparison Framework)
+
+All ROI calculations use the **Cost Comparison Framework** that compares two scenarios:
+
+#### Core ROI Formulas
+
+1. **Baseline Cost** (Do Nothing Scenario)
+   ```
+   Baseline Cost = (TP + FN) × $15,000
+   ```
+   - **Meaning**: Total cost if we never intervene and all actual positives become readmissions
+   - **Used for**: Establishing the comparison baseline
+
+2. **Model Cost** (AI-Driven Intervention Scenario)
+   ```
+   Model Cost = (TP + FP) × $500 + (FN) × $15,000
+   ```
+   - **Meaning**: Total cost when using the model to guide interventions
+   - **Components**: Intervention costs + Missed readmission costs
+
+3. **Cost Savings**
+   ```
+   Cost Savings = Baseline Cost - Model Cost
+   ```
+   **Simplified Formula:**
+   ```
+   Cost Savings = (TP × $14,500) - (FP × $500)
+   ```
+   - **Meaning**: Net financial benefit of using the model vs doing nothing
+   - **Interpretation**: Each TP saves $14,500; each FP costs $500
+
+4. **Intervention Costs**
+   ```
+   Intervention Costs = (TP + FP) × $500
+   ```
+   - **Meaning**: Total spent on preventive interventions
+   - **Used for**: Budget planning and ROI calculation
+
+5. **Savings per $1 Spent** (Savings Ratio)
+   ```
+   Savings Ratio = Cost Savings ÷ Intervention Costs
+   ```
+   - **Meaning**: Return on investment for each dollar spent
+   - **Example**: $24 means every $1 spent saves $24
+   - **Interpretation**: Higher is better
+
+6. **Intervention Rate**
+   ```
+   Intervention Rate = (TP + FP) ÷ Total Patients × 100%
+   ```
+   - **Meaning**: Percentage of patients flagged for intervention
+   - **Used for**: Resource planning and capacity estimation
+
+7. **ROI Percentage**
+   ```
+   ROI Percentage = (Cost Savings ÷ Baseline Cost) × 100%
+   ```
+   - **Meaning**: Percentage of baseline cost saved by using the model
+   - **Interpretation**: Higher percentage indicates more efficient intervention
+
+8. **Average Cost per Patient**
+   ```
+   Avg Cost per Patient = Model Cost ÷ Total Patients
+   ```
+   - **Meaning**: Average cost per patient when using the model
+   - **Used for**: Per-patient budget planning
 
 ### Risk Stratification
 - **Patient Distribution**: Count and percentage in each risk category
@@ -189,19 +247,38 @@ python final_evaluation_logistic_regression.py
 
 ## Cost Parameters
 
-The evaluation uses the same cost matrix as Phase 4:
+The evaluation uses the **Cost Comparison Framework** from Phase 4:
 
-| Outcome | Description | Cost |
-|---------|-------------|------|
-| **TP** | Prevented readmission (successful intervention) | +$14,500 |
-| **TN** | Correct negative prediction (no action needed) | $0 |
-| **FP** | Unnecessary intervention | -$500 |
-| **FN** | Missed readmission (no intervention) | -$15,000 |
+### Cost Matrix (Per Patient)
 
-**Assumptions**:
-- Average readmission cost: $15,000
-- Preventive intervention cost: $500
-- Net benefit of preventing readmission: $14,500
+| Outcome | Clinical Meaning | Financial Impact | Formula |
+|---------|------------------|------------------|---------|
+| **TP** | Prevented readmission (successful intervention) | **+$14,500** | Saved $15K - Paid $500 |
+| **TN** | Correct negative prediction (no action needed) | **$0** | No cost, no benefit |
+| **FP** | Unnecessary intervention | **-$500** | Wasted intervention cost |
+| **FN** | Missed readmission (no intervention) | **-$15,000** | Failed to prevent readmission |
+
+### Unit Costs
+
+- **Readmission Cost**: $15,000 per readmission
+- **Intervention Cost**: $500 per preventive intervention
+- **Net Benefit per TP**: $14,500 (saved readmission minus intervention)
+
+### Cost Comparison Framework
+
+**Baseline Scenario (Do Nothing)**:
+- No interventions performed
+- All actual positives (TP + FN) become readmissions
+- Cost = (TP + FN) × $15,000
+
+**Model Scenario (AI-Driven)**:
+- Intervene on all predicted positives (TP + FP)
+- Miss some patients (FN) who still readmit
+- Cost = (TP + FP) × $500 + (FN) × $15,000
+
+**Cost Savings**:
+- Savings = Baseline Cost - Model Cost
+- Simplified: (TP × $14,500) - (FP × $500)
 
 You can customize these with command-line arguments:
 ```bash
@@ -276,17 +353,50 @@ The system assesses deployment readiness based on:
 
 ### Understanding ROI
 
-**Positive ROI**:
-- ✅ Model saves money compared to no model
+**Positive Cost Savings**:
+- ✅ Model saves money compared to doing nothing
 - ✅ Business case for deployment
+- **Formula**: Cost Savings = Baseline Cost - Model Cost
+
+**High Savings Ratio** (> $10 per $1 spent):
+- ✅ Strong return on investment
+- ✅ Each dollar spent on interventions saves $10+ in avoided readmissions
+- **Formula**: Savings Ratio = Cost Savings ÷ Intervention Costs
 
 **ROI > 10%**:
-- ✅ Strong financial benefit
+- ✅ Strong financial benefit (saving > 10% of baseline cost)
 - ✅ Clear value proposition
+- **Formula**: ROI % = (Cost Savings ÷ Baseline Cost) × 100%
 
-**Negative ROI**:
-- ❌ Model costs more than baseline
-- ❌ May need threshold adjustment or model improvement
+**Negative Cost Savings**:
+- ❌ Model costs more than doing nothing
+- ❌ Too many false positives (FP) or not enough true positives (TP)
+- **Action**: Adjust threshold or improve model
+
+**Intervention Rate Considerations**:
+- < 20%: Manageable intervention volume, sustainable
+- 20-40%: Moderate volume, requires adequate staffing
+- \> 40%: High volume, may strain resources
+- **Formula**: Intervention Rate = (TP + FP) ÷ Total Patients × 100%
+
+**Example Calculation**:
+```
+Given: TP=1,000, FP=200, FN=100, Total=9,300
+
+Baseline Cost = (1,000 + 100) × $15,000 = $16,500,000
+Model Cost = (1,000 + 200) × $500 + 100 × $15,000 = $2,100,000
+Cost Savings = $16,500,000 - $2,100,000 = $14,400,000
+Intervention Costs = 1,200 × $500 = $600,000
+Savings Ratio = $14,400,000 ÷ $600,000 = $24.00
+ROI % = ($14,400,000 ÷ $16,500,000) × 100 = 87.3%
+Intervention Rate = (1,200 ÷ 9,300) × 100 = 12.9%
+
+Interpretation:
+- Saves $14.4M compared to doing nothing
+- Returns $24 for every $1 spent on interventions
+- Saves 87.3% of baseline costs
+- Requires intervening on 12.9% of patients
+```
 
 ### Understanding Risk Stratification
 

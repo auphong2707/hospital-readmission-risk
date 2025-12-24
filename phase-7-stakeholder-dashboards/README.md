@@ -97,6 +97,122 @@ python main.py
 ### Parameters
 - `method`: One of `gradient_boosting`, `random_forest`, `logistic_regression`
 
+## ROI Calculation Formulas (Phase 6)
+
+All dashboards use the **Cost Comparison Framework** for ROI calculations:
+
+### Core Metrics
+
+#### 1. **Baseline Cost** (Do Nothing Scenario)
+```
+Baseline Cost = (TP + FN) × $15,000
+```
+- **Meaning**: Total cost if we never intervene and all actual positives become readmissions
+- **Components**: All patients who would be readmitted (both caught and missed)
+- **Unit Cost**: $15,000 per readmission
+
+#### 2. **Model Cost** (AI-Driven Intervention Scenario)
+```
+Model Cost = (TP + FP) × $500 + (FN) × $15,000
+```
+- **Meaning**: Total cost when using the AI model to guide interventions
+- **Components**:
+  - **(TP + FP) × $500**: Cost of interventions on all flagged patients (both correct and incorrect flags)
+  - **(FN) × $15,000**: Cost of readmissions we missed
+- **Unit Costs**: $500 per intervention, $15,000 per readmission
+
+#### 3. **Cost Savings**
+```
+Cost Savings = Baseline Cost - Model Cost
+```
+**Simplified Formula:**
+```
+Cost Savings = (TP × $14,500) - (FP × $500)
+```
+- **Meaning**: Net financial benefit of using the AI model vs doing nothing
+- **Interpretation**: 
+  - Each **True Positive (TP)** saves $14,500 (avoided $15K readmission - paid $500 intervention)
+  - Each **False Positive (FP)** costs $500 (unnecessary intervention)
+
+#### 4. **Intervention Costs**
+```
+Intervention Costs = (TP + FP) × $500
+```
+- **Meaning**: Total amount spent on preventive interventions
+- **Components**: All patients flagged by the model (both successful and unnecessary)
+- **Use**: Budget planning for intervention programs
+
+#### 5. **Savings per $1 Spent** (Savings Ratio / ROI)
+```
+Savings Ratio = Cost Savings ÷ Intervention Costs
+```
+- **Meaning**: Return on investment for every dollar spent on interventions
+- **Example**: Savings Ratio of $24 means every $1 spent on interventions saves $24 in avoided readmissions
+- **Interpretation**: Higher is better; measures intervention efficiency
+
+#### 6. **Intervention Rate**
+```
+Intervention Rate = (TP + FP) ÷ Total Patients × 100%
+```
+- **Meaning**: Percentage of patients flagged for intervention
+- **Use**: Resource planning (staffing, capacity, workload estimation)
+- **Example**: 12.9% means ~13 out of every 100 patients need intervention
+
+#### 7. **Prevented Readmissions Value**
+```
+TP Value = TP × $14,500
+```
+- **Meaning**: Gross value generated from successfully preventing readmissions
+- **Note**: Net value per prevented readmission (saved $15K - paid $500)
+
+#### 8. **Unnecessary Interventions Cost**
+```
+FP Cost = FP × $500
+```
+- **Meaning**: Money spent on patients who wouldn't have been readmitted anyway
+- **Interpretation**: Model precision affects this cost
+
+#### 9. **Missed Readmissions Cost**
+```
+FN Cost = FN × $15,000
+```
+- **Meaning**: Cost of readmissions the model failed to prevent
+- **Interpretation**: Model recall affects this cost
+
+### Cost Matrix (Per Patient)
+
+| Outcome | Clinical Meaning | Financial Impact |
+|---------|-----------------|------------------|
+| **TP** (True Positive) | Correctly flagged, prevented readmission | **+$14,500** (saved $15K - paid $500) |
+| **FP** (False Positive) | Incorrectly flagged, unnecessary intervention | **-$500** (wasted intervention) |
+| **TN** (True Negative) | Correctly not flagged, no action needed | **$0** (no cost, no benefit) |
+| **FN** (False Negative) | Missed readmission, patient readmitted | **-$15,000** (failed to prevent) |
+
+### Example Calculation
+
+Given a model with:
+- TP = 1,000
+- FP = 200
+- TN = 8,000
+- FN = 100
+- Total Patients = 9,300
+
+**Calculations:**
+```
+Baseline Cost = (1,000 + 100) × $15,000 = $16,500,000
+Model Cost = (1,000 + 200) × $500 + (100 × $15,000) = $600,000 + $1,500,000 = $2,100,000
+Cost Savings = $16,500,000 - $2,100,000 = $14,400,000
+Intervention Costs = (1,000 + 200) × $500 = $600,000
+Savings Ratio = $14,400,000 ÷ $600,000 = $24.00
+Intervention Rate = (1,000 + 200) ÷ 9,300 × 100 = 12.9%
+```
+
+**Interpretation:** 
+- This model saves **$14.4 million** compared to doing nothing
+- For every **$1 spent** on interventions, it saves **$24** in avoided readmissions
+- It requires intervening on **12.9%** of all patients
+- It successfully prevents **1,000** readmissions but misses **100**
+
 ## Development
 
 ### Local Development (without Docker)
