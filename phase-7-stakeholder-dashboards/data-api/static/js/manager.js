@@ -74,6 +74,15 @@ function showError(message) {
 function renderExecutiveSummary() {
     const container = document.getElementById('executive-summary-card');
     
+    let savingsRatioHtml = '';
+    if (savingsData.savings_ratio !== undefined) {
+        savingsRatioHtml = `
+                <div class="summary-row">
+                    <div class="summary-label">Savings per $1 Spent</div>
+                    <div class="summary-value" style="font-size: 2em; font-weight: 700; color: #2563eb;">$${savingsData.savings_ratio.toFixed(2)}</div>
+                </div>`;
+    }
+    
     const html = `
         <div class="executive-summary">
             <div class="summary-body">
@@ -81,10 +90,7 @@ function renderExecutiveSummary() {
                     <div class="summary-label">Cost Saving</div>
                     <div class="summary-value" style="font-size: 2em; font-weight: 700; color: #10b981;">${formatCurrency(savingsData.cost_savings)}</div>
                 </div>
-                <div class="summary-row">
-                    <div class="summary-label">Savings per $1 Spent</div>
-                    <div class="summary-value" style="font-size: 2em; font-weight: 700; color: #2563eb;">$${savingsData.savings_ratio.toFixed(2)}</div>
-                </div>
+                ${savingsRatioHtml}
                 <hr class="summary-divider">
                 <div class="summary-row" style="margin-top: 1em;">
                     <div class="summary-label" style="font-size: 0.9em; opacity: 0.8;">Model Performance (${savingsData.total_patients.toLocaleString()} patients)</div>
@@ -128,10 +134,11 @@ function renderExecutiveSummary() {
                     <div class="summary-label">Baseline Cost (do nothing)</div>
                     <div class="summary-value">${formatCurrency(savingsData.baseline_cost)}</div>
                 </div>
+                ${savingsData.intervention_costs !== undefined ? `
                 <div class="summary-row">
                     <div class="summary-label">Intervention Costs</div>
                     <div class="summary-value">${formatCurrency(savingsData.intervention_costs)}</div>
-                </div>
+                </div>` : ''}
             </div>
         </div>
     `;
@@ -153,18 +160,22 @@ function renderSavingsMetrics() {
             color: 'success'
         },
         {
-            icon: 'fas fa-chart-line',
-            label: 'Savings per $1',
-            value: `$${savingsData.savings_ratio.toFixed(2)}`,
-            color: 'success'
-        },
-        {
             icon: 'fas fa-percentage',
             label: 'Intervention Rate',
             value: `${savingsData.intervention_rate.toFixed(1)}%`,
             color: 'info'
         }
     ];
+    
+    // Only add savings ratio if it exists
+    if (savingsData.savings_ratio !== undefined) {
+        stats.splice(1, 0, {
+            icon: 'fas fa-chart-line',
+            label: 'Savings per $1',
+            value: `$${savingsData.savings_ratio.toFixed(2)}`,
+            color: 'success'
+        });
+    }
     
     container.innerHTML = createStatsGrid(stats);
 }
@@ -187,14 +198,18 @@ function renderImpactMetrics() {
             label: 'Readmissions Missed',
             value: savingsData.fn.toLocaleString(),
             color: 'warning'
-        },
-        {
+        }
+    ];
+    
+    // Only add intervention costs if it exists
+    if (savingsData.intervention_costs !== undefined) {
+        stats.push({
             icon: 'fas fa-money-bill-wave',
             label: 'Intervention Costs',
             value: formatCurrency(savingsData.intervention_costs),
             color: 'info'
-        }
-    ];
+        });
+    }
     
     container.innerHTML = createStatsGrid(stats);
 }
@@ -492,11 +507,20 @@ function renderBenefitComponents() {
         { label: 'Readmissions Prevented (TP)', value: confusion.tp, isCount: true },
         { label: 'Readmissions Missed (FN)', value: confusion.fn, isCount: true },
         { separator: true },
-        { label: 'Financial Summary', value: '', bold: true, header: true },
-        { label: 'Intervention Costs', value: summary.intervention_costs },
-        { label: 'Cost Saving', value: summary.cost_savings, bold: true, highlight: true },
-        { label: 'Savings per $1 Spent', value: `${summary.savings_ratio.toFixed(2)}`, bold: true, isRatio: true }
+        { label: 'Financial Summary', value: '', bold: true, header: true }
     ];
+    
+    // Only add intervention costs if it exists
+    if (summary.intervention_costs !== undefined) {
+        rows.push({ label: 'Intervention Costs', value: summary.intervention_costs });
+    }
+    
+    rows.push({ label: 'Cost Saving', value: summary.cost_savings, bold: true, highlight: true });
+    
+    // Only add savings ratio if it exists
+    if (summary.savings_ratio !== undefined) {
+        rows.push({ label: 'Savings per $1 Spent', value: `${summary.savings_ratio.toFixed(2)}`, bold: true, isRatio: true });
+    }
     
     let html = '<table class="data-table">';
     
@@ -535,6 +559,9 @@ function renderModelComparisonTable() {
     
     const comparison = comparisonData.comparison;
     
+    // Check if any model has savings_ratio
+    const hasSavingsRatio = comparison.some(model => model.savings_ratio !== undefined);
+    
     let html = `
         <table class="data-table">
             <thead>
@@ -544,7 +571,7 @@ function renderModelComparisonTable() {
                     <th class="text-right">FP</th>
                     <th class="text-right">FN</th>
                     <th class="text-right">Cost Saving</th>
-                    <th class="text-right">Savings per $1</th>
+                    ${hasSavingsRatio ? '<th class="text-right">Savings per $1</th>' : ''}
                     <th class="text-right">Intervention Rate</th>
                     <th class="text-right">ROC-AUC</th>
                     <th class="text-center">Recommended</th>
@@ -565,7 +592,7 @@ function renderModelComparisonTable() {
                 <td class="text-right">${model.fp.toLocaleString()}</td>
                 <td class="text-right">${model.fn.toLocaleString()}</td>
                 <td class="text-right">${formatCurrency(model.cost_savings)}</td>
-                <td class="text-right">$${model.savings_ratio.toFixed(2)}</td>
+                ${hasSavingsRatio ? `<td class="text-right">${model.savings_ratio !== undefined ? '$' + model.savings_ratio.toFixed(2) : 'N/A'}</td>` : ''}
                 <td class="text-right">${model.intervention_rate.toFixed(1)}%</td>
                 <td class="text-right">${model.roc_auc.toFixed(3)}</td>
                 <td class="text-center">${badge}</td>

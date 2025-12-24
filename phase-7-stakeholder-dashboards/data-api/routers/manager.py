@@ -49,7 +49,6 @@ def get_savings_summary(method: str):
         
         # Get cost metrics directly from roi_metrics (from HuggingFace)
         cost_savings = roi_metrics.get('cost_savings', 0)
-        intervention_costs = abs(roi_metrics.get('intervention_cost', 0))
         total_cost = abs(roi_metrics.get('total_cost', 0))
         baseline_cost = abs(roi_metrics.get('baseline_cost', 0))
         
@@ -61,16 +60,12 @@ def get_savings_summary(method: str):
         # Calculate net program value
         net_program_value = tp_value - fp_cost - fn_cost
         
-        # Savings Ratio (dollars saved per dollar spent on interventions)
-        savings_ratio = (cost_savings / intervention_costs) if intervention_costs > 0 else 0
-        
-        return {
+        # Build response with optional fields
+        result = {
             "method": method,
             "cost_savings": round(cost_savings, 2),
-            "savings_ratio": round(savings_ratio, 2),
             "net_program_value": round(net_program_value, 2),
             "baseline_cost": round(baseline_cost, 2),
-            "intervention_costs": round(intervention_costs, 2),
             "tp": int(tp),
             "fp": int(fp),
             "tn": int(tn),
@@ -81,6 +76,15 @@ def get_savings_summary(method: str):
             "fn_cost": round(fn_cost, 2),
             "intervention_rate": round(((tp + fp) / total_patients * 100) if total_patients > 0 else 0, 1)
         }
+        
+        # Only include intervention_costs and savings_ratio if intervention_cost exists in roi_metrics
+        if 'intervention_cost' in roi_metrics:
+            intervention_costs = abs(roi_metrics.get('intervention_cost', 0))
+            savings_ratio = (cost_savings / intervention_costs) if intervention_costs > 0 else 0
+            result["intervention_costs"] = round(intervention_costs, 2)
+            result["savings_ratio"] = round(savings_ratio, 2)
+        
+        return result
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -211,10 +215,18 @@ def get_cost_breakdown(method: str):
         # Get cost metrics directly from roi_metrics (from HuggingFace)
         cost_savings = roi_metrics.get('cost_savings', 0)
         baseline_cost = abs(roi_metrics.get('baseline_cost', 0))
-        intervention_costs = abs(roi_metrics.get('intervention_cost', 0))
         
-        # Savings Ratio
-        savings_ratio = (cost_savings / intervention_costs) if intervention_costs > 0 else 0
+        # Build summary with optional fields
+        summary = {
+            "cost_savings": round(cost_savings, 2)
+        }
+        
+        # Only include intervention_costs and savings_ratio if intervention_cost exists in roi_metrics
+        if 'intervention_cost' in roi_metrics:
+            intervention_costs = abs(roi_metrics.get('intervention_cost', 0))
+            savings_ratio = (cost_savings / intervention_costs) if intervention_costs > 0 else 0
+            summary["intervention_costs"] = round(intervention_costs, 2)
+            summary["savings_ratio"] = round(savings_ratio, 2)
         
         return {
             "method": method,
@@ -241,11 +253,7 @@ def get_cost_breakdown(method: str):
                 "baseline_cost": round(baseline_cost, 2),
                 "potential_readmissions": int(tp + fn)
             },
-            "summary": {
-                "cost_savings": round(cost_savings, 2),
-                "intervention_costs": round(intervention_costs, 2),
-                "savings_ratio": round(savings_ratio, 2)
-            }
+            "summary": summary
         }
         
     except Exception as e:
@@ -290,24 +298,29 @@ def get_models_comparison():
                 
                 # Get cost metrics directly from roi_metrics (from HuggingFace)
                 cost_savings = roi_metrics.get('cost_savings', 0)
-                intervention_costs = abs(roi_metrics.get('intervention_cost', 0))
-                savings_ratio = (cost_savings / intervention_costs) if intervention_costs > 0 else 0
                 intervention_rate = ((tp + fp) / total * 100) if total > 0 else 0
                 
-                comparison_data.append({
+                model_data = {
                     "method": method,
                     "tp": int(tp),
                     "fp": int(fp),
                     "fn": int(fn),
                     "tn": int(tn),
                     "cost_savings": round(cost_savings, 2),
-                    "savings_ratio": round(savings_ratio, 2),
-                    "intervention_costs": round(intervention_costs, 2),
                     "roc_auc": round(performance_metrics.get('roc_auc', 0), 3),
                     "intervention_rate": round(intervention_rate, 1),
                     "readmissions_prevented": int(tp),
                     "threshold": round(threshold, 3)
-                })
+                }
+                
+                # Only include intervention_costs and savings_ratio if intervention_cost exists
+                if 'intervention_cost' in roi_metrics:
+                    intervention_costs = abs(roi_metrics.get('intervention_cost', 0))
+                    savings_ratio = (cost_savings / intervention_costs) if intervention_costs > 0 else 0
+                    model_data["intervention_costs"] = round(intervention_costs, 2)
+                    model_data["savings_ratio"] = round(savings_ratio, 2)
+                
+                comparison_data.append(model_data)
                 
             except Exception as e:
                 print(f"Error loading {method}: {e}")
