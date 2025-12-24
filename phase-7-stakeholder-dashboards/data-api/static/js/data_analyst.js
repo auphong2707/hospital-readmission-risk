@@ -1432,7 +1432,7 @@ async function loadFinalEvaluation() {
         
         // Define columns (removed Specificity)
         const columns = ['Model', 'ROC-AUC', 'PR-AUC', 'Brier', 'Accuracy', 'Sensitivity', 
-                        'Precision', 'ROI %', 'Readmissions', 'Cost Savings', 'Status'];
+                        'Precision', 'ROI %', 'Readmissions', 'Net Savings', 'Status'];
         
         // Build rows from API data
         const rows = data.models.map(model => [
@@ -1445,7 +1445,7 @@ async function loadFinalEvaluation() {
             model.precision.toFixed(3),
             model.roi_percentage.toFixed(1),
             `${model.readmissions_prevented}/${model.total_readmissions}`,
-            `$${(model.cost_savings / 1000).toFixed(0)}K`,
+            `$${Math.round(model.net_savings).toLocaleString()}`,
             model.deployment_status
         ]);
         

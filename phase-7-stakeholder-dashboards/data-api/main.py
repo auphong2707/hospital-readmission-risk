@@ -881,9 +881,20 @@ def get_phase6_final_evaluation():
                 
                 # Calculate readmissions prevented from confusion matrix
                 tp = perf.get('true_positives', 0)
+                fp = perf.get('false_positives', 0)
                 fn = perf.get('false_negatives', 0)
+                tn = perf.get('true_negatives', 0)
                 total_readmissions = tp + fn
                 readmissions_prevented = tp  # True positives are successfully prevented
+                
+                # Calculate Net Savings using cost matrix
+                tp_value = tp * 14500      # Value of prevented readmissions
+                fp_cost = fp * 500         # Cost of unnecessary interventions
+                fn_cost = fn * 15000       # Cost of missed readmissions
+                
+                net_program_value = tp_value - fp_cost - fn_cost
+                baseline_cost = (tp + fn) * 15000
+                net_savings = baseline_cost - abs(net_program_value)
                 
                 # Determine deployment status
                 roc_auc = perf.get('roc_auc', 0)
@@ -903,7 +914,7 @@ def get_phase6_final_evaluation():
                     'sensitivity': round(perf.get('sensitivity', 0), 3),
                     'specificity': round(perf.get('specificity', 0), 3),
                     'precision': round(perf.get('precision', 0), 3),
-                    'cost_savings': round(roi.get('cost_savings', 0), 0)
+                    'net_savings': round(net_savings, 0)
                 })
             else:
                 # Return placeholder if data not available
@@ -921,7 +932,7 @@ def get_phase6_final_evaluation():
                     'sensitivity': 0,
                     'specificity': 0,
                     'precision': 0,
-                    'cost_savings': 0
+                    'net_savings': 0
                 })
         
         return {"models": results}
