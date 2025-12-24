@@ -963,6 +963,10 @@ class ROICalculator:
         prevented_readmissions = int(tp)
         prevented_readmission_savings = prevented_readmissions * readmission_cost_per_patient
         
+        # Baseline expected value (for compatibility with existing reports)
+        # In the new cost comparison framework, this equals baseline_cost
+        baseline_expected_value = baseline_cost
+        
         # ROI percentage: How much value we generate per dollar spent on interventions
         roi_percentage = (total_savings / intervention_cost_total * 100) if intervention_cost_total > 0 else 0
         
@@ -986,6 +990,7 @@ class ROICalculator:
             
             # Expected value metrics
             'expected_value': float(expected_value),
+            'baseline_expected_value': float(baseline_expected_value),
             'cost_savings': float(cost_savings),
             
             # ROI metrics
