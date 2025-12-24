@@ -562,11 +562,22 @@ def get_quick_insights():
             if phase2_data and 'metrics' in phase2_data:
                 metrics = phase2_data['metrics']
                 
-                # Get calibration data
+                # Get calibration data - try both phase3_data and direct JSON fallback
                 brier_after = 0
                 if phase3_data and 'calibration_metrics' in phase3_data:
                     calibrated = phase3_data['calibration_metrics'].get('calibrated', {})
                     brier_after = calibrated.get('brier_score', 0)
+                
+                # Fallback: read from local calibration JSON if not found
+                if brier_after == 0:
+                    try:
+                        calibration_file = Path(__file__).parent / f"phase3_calibration_curves/{method}_calibration.json"
+                        if calibration_file.exists():
+                            with open(calibration_file, 'r') as f:
+                                calib_data = json.load(f)
+                                brier_after = calib_data.get('calibrated', {}).get('brier_score', 0)
+                    except:
+                        pass
                 
                 # Get Phase 6 ROI and Net Savings data
                 roi_percentage = 0
@@ -628,6 +639,7 @@ def get_quick_insights():
             "best_model": best_model['method'],
             "best_model_name": best_model['name'],
             "best_roc_auc": round(best_model['roc_auc'], 3),
+            "best_brier_score": round(best_model['brier'], 4),
             "best_roi": round(best_model['roi_percentage'], 2),
             "best_annual_savings": round(best_model['net_savings'], 2),
             "fairness_status": fairness_status,
