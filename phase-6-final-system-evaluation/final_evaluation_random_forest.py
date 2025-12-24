@@ -107,7 +107,7 @@ def main():
     
     # Define cost matrix
     cost_matrix = {
-        'TP': args.intervention_cost - args.readmission_cost,  # +$14,500 (saved readmission)
+        'TP': args.readmission_cost - args.intervention_cost,  # +$14,500 (saved readmission)
         'TN': 0,  # No cost
         'FP': -args.intervention_cost,  # -$500 (unnecessary intervention)
         'FN': -args.readmission_cost  # -$15,000 (missed readmission)
