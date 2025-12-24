@@ -600,8 +600,8 @@ def get_quick_insights():
                     "net_savings": net_savings
                 })
         
-        # Find best model (by ROC-AUC)
-        best_model = max(all_metrics, key=lambda x: x['roc_auc'])
+        # Find best model (by Net Savings - most important for deployment)
+        best_model = max(all_metrics, key=lambda x: x['net_savings'])
         
         # Check fairness (simplified - assuming all pass)
         fairness_status = "PASS"
