@@ -1524,7 +1524,7 @@ async function loadFinalEvaluation() {
 function updatePhase5RiskDistribution() {
     const select = document.getElementById('demographic-select');
     const demographic = select.value;
-    loadPhase5RiskDistribution(demographic);
+    // Only load fairness gaps - risk distribution function doesn't exist
     loadPhase5FairnessGaps(demographic);
 }
 
