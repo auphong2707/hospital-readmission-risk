@@ -1422,7 +1422,7 @@ def get_phase4_benefits_data():
 def get_phase4_confusion_matrices():
     """
     Get confusion matrices for all 3 models at their optimal threshold.
-    Returns actual confusion matrix data from Phase 4 threshold optimization.
+    Returns actual confusion matrix data from Phase 6 final evaluation files.
     """
     try:
         method_names = {
@@ -1431,66 +1431,56 @@ def get_phase4_confusion_matrices():
             "logistic_regression": "Logistic Regression"
         }
         
-        # Actual confusion matrix values from Phase 4 optimal threshold analysis
-        actual_matrices = {
-            "gradient_boosting": {
-                "TP": 1678,
-                "TN": 2505,
-                "FP": 11056,
-                "FN": 26,
-                "threshold": 0.324,
-                "precision": 0.131,
-                "recall": 0.985
-            },
-            "random_forest": {
-                "TP": 1659,
-                "TN": 4477,
-                "FP": 9084,
-                "FN": 45,
-                "threshold": 0.298,
-                "precision": 0.154,
-                "recall": 0.973
-            },
-            "logistic_regression": {
-                "TP": 1298,
-                "TN": 10572,
-                "FP": 2989,
-                "FN": 406,
-                "threshold": 0.356,
-                "precision": 0.303,
-                "recall": 0.761
-            }
-        }
-        
+        methods = ["gradient_boosting", "random_forest", "logistic_regression"]
         confusion_matrices = []
         
-        for method, data in actual_matrices.items():
-            # Calculate precision and recall if not provided
-            tp = data["TP"]
-            tn = data["TN"]
-            fp = data["FP"]
-            fn = data["FN"]
-            
-            precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-            recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-            f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
-            
-            confusion_matrices.append({
-                "method": method,
-                "name": method_names[method],
-                "matrix": {
-                    "TP": tp,
-                    "TN": tn,
-                    "FP": fp,
-                    "FN": fn
-                },
-                "metrics": {
-                    "precision": round(precision, 3),
-                    "recall": round(recall, 3),
-                    "f1": round(f1, 3),
-                    "threshold": data["threshold"]
-                }
-            })
+        for method in methods:
+            try:
+                aggregator = DashboardDataAggregator(method)
+                phase6_data = aggregator.load_phase6_final()
+                
+                if not phase6_data or 'final_system_metrics' not in phase6_data:
+                    continue
+                
+                final_metrics = phase6_data['final_system_metrics']
+                performance_metrics = final_metrics.get('performance_metrics', {})
+                deployment_config = final_metrics.get('deployment_configuration', {})
+                
+                # Get confusion matrix values from Phase 6
+                tp = performance_metrics.get('true_positives', 0)
+                tn = performance_metrics.get('true_negatives', 0)
+                fp = performance_metrics.get('false_positives', 0)
+                fn = performance_metrics.get('false_negatives', 0)
+                
+                # Get threshold
+                threshold_summary = deployment_config.get('threshold_summary', {})
+                threshold = threshold_summary.get('threshold', 0.5)
+                
+                # Calculate metrics
+                precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+                recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+                f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+                
+                confusion_matrices.append({
+                    "method": method,
+                    "name": method_names[method],
+                    "matrix": {
+                        "TP": int(tp),
+                        "TN": int(tn),
+                        "FP": int(fp),
+                        "FN": int(fn)
+                    },
+                    "metrics": {
+                        "precision": round(precision, 3),
+                        "recall": round(recall, 3),
+                        "f1": round(f1, 3),
+                        "threshold": round(threshold, 3)
+                    }
+                })
+                
+            except Exception as e:
+                print(f"Error loading confusion matrix for {method}: {e}")
+                continue
         
         return {"confusion_matrices": confusion_matrices}
     
