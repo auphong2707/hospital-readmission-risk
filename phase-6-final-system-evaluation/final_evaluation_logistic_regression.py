@@ -105,9 +105,9 @@ def main():
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
     
-    # Define cost matrix (using Phase 4 convention: negative values for benefits/costs)
+    # Define cost matrix
     cost_matrix = {
-        'TP': -(args.readmission_cost - args.intervention_cost),  # -$14,500 (net benefit from preventing readmission)
+        'TP': args.readmission_cost - args.intervention_cost,  # +$14,500 (saved readmission)
         'TN': 0,  # No cost
         'FP': -args.intervention_cost,  # -$500 (unnecessary intervention)
         'FN': -args.readmission_cost  # -$15,000 (missed readmission)
