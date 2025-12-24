@@ -469,13 +469,26 @@ def bucket_age(age_val):
 weight_to_bmi = {
     '[0-25)': 18, '[25-50)': 20, ..., '>200': 35
 }
-data['estimated_bmi'] = data['weight'].map(weight_to_bmi)
+data['estimated_bmi'] = data['weight'].map(weight_to_bmi).fillna(25)
 
 data['bmi_underweight'] = (data['estimated_bmi'] < 18.5).astype(int)
 data['bmi_normal'] = ((data['estimated_bmi'] >= 18.5) & (data['estimated_bmi'] < 25)).astype(int)
 data['bmi_overweight'] = ((data['estimated_bmi'] >= 25) & (data['estimated_bmi'] < 30)).astype(int)
 data['bmi_obese'] = (data['estimated_bmi'] >= 30).astype(int)
 ```
+
+**Prerequisite:** 
+- This step occurs **AFTER** missing value handling (Step 2)
+- By this point, `weight` has already been imputed using mode imputation
+- Missing weight values were filled with the most common weight range (typically `[75-100)`)
+
+**What if weight was missing originally?**
+1. **Step 2** created `weight_is_missing` indicator (preserves missingness information)
+2. **Step 2** filled `weight` with mode value (e.g., `[75-100)`)
+3. **Step 6** maps the imputed weight to BMI (e.g., `[75-100)` → BMI 24)
+4. The model can still learn from `weight_is_missing=1` that original weight was unknown
+
+**Fallback:** `.fillna(25)` provides a default BMI of 25 (boundary between normal/overweight) for any unmapped values
 
 **Motivation:**
 - Weight alone insufficient (doesn't account for height)
@@ -484,9 +497,19 @@ data['bmi_obese'] = (data['estimated_bmi'] >= 30).astype(int)
   - Normal (18.5-25): Lowest risk
   - Overweight (25-30): Moderate risk
   - Obese (30+): High cardiovascular risk
-- Critical for diabetic patients
+- Critical for diabetic patients (obesity is a major risk factor)
 
-**Limitation:** Rough estimation (assumes average height)
+**Limitation:** Rough estimation (assumes average height of ~5'7"/170cm)
+
+**Results:**
+- Binary features for each BMI category
+- Example: Obese patient (BMI 35) → `bmi_obese = 1`, others = 0
+- Enables model to learn category-specific effects
+- Example with originally missing weight:
+  - Original: `weight = NaN`
+  - After Step 2: `weight = '[75-100)'` (imputed), `weight_is_missing = 1`
+  - After Step 6: `estimated_bmi = 24`, `bmi_normal = 1`, `weight_is_missing = 1`
+  - Model sees: normal BMI but knows weight was originally missing
 
 **Results:**
 - Binary features for each BMI category
