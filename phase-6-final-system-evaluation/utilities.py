@@ -986,7 +986,6 @@ class ROICalculator:
             
             # Expected value metrics
             'expected_value': float(expected_value),
-            'baseline_expected_value': float(baseline_expected_value),
             'cost_savings': float(cost_savings),
             
             # ROI metrics
