@@ -1441,78 +1441,55 @@ def get_phase4_confusion_matrices():
     Returns actual confusion matrix data from Phase 4 threshold optimization.
     """
     try:
-        methods = ["gradient_boosting", "random_forest", "logistic_regression"]
         method_names = {
             "gradient_boosting": "Gradient Boosting",
             "random_forest": "Random Forest",
             "logistic_regression": "Logistic Regression"
         }
         
-        # Use model-specific realistic values based on typical performance
-        # These differ meaningfully across models
-        model_specs = {
+        # Actual confusion matrix values from Phase 4 optimal threshold analysis
+        actual_matrices = {
             "gradient_boosting": {
-                "precision": 0.278,
-                "recall": 0.641,
-                "threshold": 0.324
+                "TP": 1678,
+                "TN": 2505,
+                "FP": 11056,
+                "FN": 26,
+                "threshold": 0.324,
+                "precision": 0.131,
+                "recall": 0.985
             },
             "random_forest": {
-                "precision": 0.261,
-                "recall": 0.623,
-                "threshold": 0.298
+                "TP": 1659,
+                "TN": 4477,
+                "FP": 9084,
+                "FN": 45,
+                "threshold": 0.298,
+                "precision": 0.154,
+                "recall": 0.973
             },
             "logistic_regression": {
-                "precision": 0.245,
-                "recall": 0.598,
-                "threshold": 0.356
+                "TP": 1298,
+                "TN": 10572,
+                "FP": 2989,
+                "FN": 406,
+                "threshold": 0.356,
+                "precision": 0.303,
+                "recall": 0.761
             }
         }
         
         confusion_matrices = []
-        test_size = 15265
-        positive_rate = 0.1116
-        actual_positives = int(test_size * positive_rate)  # ~1703 positives
         
-        for method in methods:
-            # Try to load real data first
-            try:
-                aggregator = DashboardDataAggregator(method)
-                phase4_data = aggregator.load_phase4_roi()
-                
-                if phase4_data and 'thresholds' in phase4_data:
-                    thresholds_data = phase4_data['thresholds']
-                    
-                    # Extract real confusion matrix if available
-                    if 'confusion_matrix' in thresholds_data:
-                        cm = thresholds_data['confusion_matrix']
-                        if all(k in cm for k in ['tn', 'fp', 'fn', 'tp']):
-                            # Use real data
-                            confusion_matrices.append({
-                                "method": method,
-                                "name": method_names[method],
-                                "matrix": {
-                                    "TP": int(cm['tp']),
-                                    "TN": int(cm['tn']),
-                                    "FP": int(cm['fp']),
-                                    "FN": int(cm['fn'])
-                                },
-                                "metrics": {
-                                    "precision": thresholds_data.get('precision', 0),
-                                    "recall": thresholds_data.get('recall', 0),
-                                    "f1": thresholds_data.get('f1_score', thresholds_data.get('f1', 0)),
-                                    "threshold": thresholds_data.get('optimal_threshold', 0.5)
-                                }
-                            })
-                            continue
-            except Exception as e:
-                print(f"Could not load real data for {method}: {e}")
+        for method, data in actual_matrices.items():
+            # Calculate precision and recall if not provided
+            tp = data["TP"]
+            tn = data["TN"]
+            fp = data["FP"]
+            fn = data["FN"]
             
-            # Fallback: Use model-specific realistic values
-            specs = model_specs[method]
-            tp = int(actual_positives * specs["recall"])
-            fn = actual_positives - tp
-            fp = int(tp / specs["precision"] - tp) if specs["precision"] > 0 else 0
-            tn = test_size - tp - fn - fp
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+            recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+            f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
             
             confusion_matrices.append({
                 "method": method,
@@ -1524,10 +1501,10 @@ def get_phase4_confusion_matrices():
                     "FN": fn
                 },
                 "metrics": {
-                    "precision": specs["precision"],
-                    "recall": specs["recall"],
-                    "f1": 2 * specs["precision"] * specs["recall"] / (specs["precision"] + specs["recall"]),
-                    "threshold": specs["threshold"]
+                    "precision": round(precision, 3),
+                    "recall": round(recall, 3),
+                    "f1": round(f1, 3),
+                    "threshold": data["threshold"]
                 }
             })
         
